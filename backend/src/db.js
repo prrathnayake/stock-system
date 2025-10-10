@@ -82,8 +82,12 @@ function applyOrganizationScope(model) {
 export const Organization = sequelize.define('organization', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   name: { type: DataTypes.STRING(191), allowNull: false },
-  slug: { type: DataTypes.STRING(64), allowNull: false, unique: true },
+  slug: { type: DataTypes.STRING(64), allowNull: false },
   timezone: { type: DataTypes.STRING(64), allowNull: true }
+}, {
+  indexes: [
+    { unique: true, fields: ['slug'], name: 'organizations_slug_unique' }
+  ]
 });
 
 Organization.addHook('beforeValidate', (org) => {
