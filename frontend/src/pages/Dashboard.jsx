@@ -1,52 +1,157 @@
-import React, { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import React, { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { io } from 'socket.io-client'
 
-const socket = io(import.meta.env.VITE_SOCKET_URL)
+const socket = io(import.meta.env.VITE_SOCKET_URL, { autoConnect: false })
+const reasonLabels = {
+  receive: 'Received',
+  adjust: 'Adjusted',
+  pick: 'Picked',
+  return: 'Returned',
+  transfer: 'Transferred'
+}
 
 export default function Dashboard() {
-  const [sku, setSku] = useState('')
-  const query = useQuery({
-    queryKey: ['stock', sku],
+  const queryClient = useQueryClient()
+
+  const { data: overview } = useQuery({
+    queryKey: ['stock-overview'],
     queryFn: async () => {
-      const { data } = await api.get('/stock', { params: { sku: sku || undefined } })
+      const { data } = await api.get('/stock/overview')
       return data
-    }
+    },
+    refetchInterval: 60_000
+  })
+
+  const { data: stock = [] } = useQuery({
+    queryKey: ['stock-dashboard'],
+    queryFn: async () => {
+      const { data } = await api.get('/stock')
+      return data
+    },
+    refetchInterval: 60_000
   })
 
   useEffect(() => {
-    const handler = () => query.refetch()
+    if (!socket.connected) socket.connect()
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['stock-dashboard'] })
+    }
     socket.on('stock:update', handler)
-    return () => socket.off('stock:update', handler)
-  }, [query])
+    return () => {
+      socket.off('stock:update', handler)
+    }
+  }, [queryClient])
+
+  const lowStock = stock.filter((item) => item.available <= item.reorder_point)
+  const topBins = stock
+    .flatMap((item) => item.bins.map((bin) => ({
+      product: item.name,
+      sku: item.sku,
+      ...bin
+    })))
+    .sort((a, b) => b.on_hand - a.on_hand)
+    .slice(0, 5)
 
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Stock Dashboard</h2>
-        <div className="grid">
-          <div>
-            <label>Filter by SKU</label>
-            <input placeholder="BATT-IPHONE" value={sku} onChange={e=>setSku(e.target.value)} />
+    <div className="page">
+      <div className="grid stats">
+        <div className="card stat-card">
+          <p className="muted">Active products</p>
+          <h2>{overview?.productCount ?? '—'}</h2>
+          <p className="stat-card__hint">Tracked items currently in circulation.</p>
+        </div>
+        <div className="card stat-card">
+          <p className="muted">Low stock items</p>
+          <h2>{overview?.lowStockCount ?? '—'}</h2>
+          <p className="stat-card__hint">Below reorder point across all locations.</p>
+        </div>
+        <div className="card stat-card">
+          <p className="muted">Reserved units</p>
+          <h2>{overview?.reservedCount ?? '—'}</h2>
+          <p className="stat-card__hint">Allocated to work orders and repairs.</p>
+        </div>
+      </div>
+
+      <div className="grid two-columns">
+        <div className="card">
+          <div className="card__header">
+            <div>
+              <h3>Low stock watchlist</h3>
+              <p className="muted">Prioritise replenishment for these parts.</p>
+            </div>
           </div>
-          <div><label>&nbsp;</label><button onClick={()=>query.refetch()}>Refresh</button></div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Product</th>
+                <th>Available</th>
+                <th>Reorder point</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lowStock.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="muted">No items require attention right now.</td>
+                </tr>
+              )}
+              {lowStock.map((item) => (
+                <tr key={item.id}>
+                  <td><span className="badge">{item.sku}</span></td>
+                  <td>{item.name}</td>
+                  <td>{item.available}</td>
+                  <td>{item.reorder_point}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="card">
+          <div className="card__header">
+            <div>
+              <h3>Recent activity</h3>
+              <p className="muted">Stock movements in the last operations cycle.</p>
+            </div>
+          </div>
+          <ul className="timeline">
+            {(overview?.recentActivity?.length ?? 0) === 0 && <li className="muted">Awaiting first transactions.</li>}
+            {overview?.recentActivity?.map((event) => (
+              <li key={event.id}>
+                <div className="timeline__title">{reasonLabels[event.reason] || event.reason} · {event.sku}</div>
+                <div className="timeline__meta">{event.qty} units · {new Date(event.occurredAt).toLocaleString()}</div>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
       <div className="card">
+        <h3>Top stocked bins</h3>
+        <p className="muted">Understand where inventory is concentrated across your network.</p>
         <table className="table">
           <thead>
-            <tr><th>SKU</th><th>Name</th><th>On Hand</th><th>Reserved</th><th>Available</th></tr>
+            <tr>
+              <th>Bin</th>
+              <th>Location</th>
+              <th>SKU</th>
+              <th>Product</th>
+              <th>On hand</th>
+              <th>Reserved</th>
+            </tr>
           </thead>
           <tbody>
-            {query.data?.map(row => (
-              <tr key={row.id}>
-                <td><span className="badge">{row.sku}</span></td>
-                <td>{row.name}</td>
-                <td>{row.on_hand}</td>
-                <td>{row.reserved}</td>
-                <td><b>{row.available}</b></td>
+            {topBins.map((bin) => (
+              <tr key={`${bin.bin_id}-${bin.sku}`}>
+                <td>{bin.bin_code}</td>
+                <td>{bin.location || '—'}</td>
+                <td><span className="badge">{bin.sku}</span></td>
+                <td>{bin.product}</td>
+                <td>{bin.on_hand}</td>
+                <td>{bin.reserved}</td>
               </tr>
             ))}
           </tbody>

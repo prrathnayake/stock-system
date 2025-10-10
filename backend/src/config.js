@@ -18,3 +18,13 @@ export const config = {
   },
   corsOrigin: process.env.CORS_ORIGIN || '*'
 };
+
+if (config.env === 'production') {
+  const insecureSecrets = ['dev', 'devrefresh'];
+  if (!process.env.JWT_SECRET || insecureSecrets.includes(config.auth.jwtSecret)) {
+    throw new Error('JWT_SECRET must be provided in production');
+  }
+  if (!process.env.REFRESH_SECRET || insecureSecrets.includes(config.auth.refreshSecret)) {
+    throw new Error('REFRESH_SECRET must be provided in production');
+  }
+}

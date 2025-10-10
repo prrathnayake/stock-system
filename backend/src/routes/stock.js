@@ -1,16 +1,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Op } from 'sequelize';
 import { Product, Bin, Location, StockLevel, StockMove } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
+import { HttpError } from '../utils/httpError.js';
 
 export default function createStockRoutes(io) {
   const router = Router();
 
   // Summaries per product (joins bins)
-  router.get('/', requireAuth(), async (req, res) => {
+  router.get('/', requireAuth(), asyncHandler(async (req, res) => {
     const sku = req.query.sku;
-    const where = {};
-    if (sku) where.sku = sku;
+    const where = { active: true };
+    if (sku) {
+      where[Op.or] = [
+        { sku },
+        { name: { [Op.like]: `%${sku}%` } }
+      ];
+    }
     const products = await Product.findAll({
       where,
       include: [{
@@ -34,10 +42,65 @@ export default function createStockRoutes(io) {
           reserved: lvl.reserved
         });
       });
-      return { id: p.id, sku: p.sku, name: p.name, on_hand, reserved, available: on_hand - reserved, bins };
+      return {
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        reorder_point: p.reorder_point,
+        lead_time_days: p.lead_time_days,
+        on_hand,
+        reserved,
+        available: on_hand - reserved,
+        bins
+      };
     });
     res.json(data);
-  });
+  }));
+
+  router.get('/overview', requireAuth(), asyncHandler(async (_req, res) => {
+    const products = await Product.findAll({
+      where: { active: true },
+      include: [{
+        model: Bin,
+        through: { model: StockLevel }
+      }]
+    });
+
+    let reservedCount = 0;
+    let lowStockCount = 0;
+
+    products.forEach((product) => {
+      let onHand = 0;
+      let reserved = 0;
+      product.bins.forEach((bin) => {
+        onHand += bin.stock_level.on_hand;
+        reserved += bin.stock_level.reserved;
+      });
+      reservedCount += reserved;
+      if (onHand - reserved <= product.reorder_point) {
+        lowStockCount += 1;
+      }
+    });
+
+    const latestMoves = await StockMove.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 5,
+      include: [Product]
+    });
+
+    res.json({
+      productCount: products.length,
+      lowStockCount,
+      reservedCount,
+      recentActivity: latestMoves.map(move => ({
+        id: move.id,
+        sku: move.product?.sku,
+        qty: move.qty,
+        reason: move.reason,
+        occurredAt: move.createdAt
+      }))
+    });
+  }));
 
   const MoveSchema = z.object({
     product_id: z.number().int().positive(),
@@ -47,17 +110,33 @@ export default function createStockRoutes(io) {
     reason: z.enum(['receive','adjust','pick','return','transfer'])
   });
 
-  router.post('/move', requireAuth(['inventory','admin','tech']), async (req, res) => {
+  router.post('/move', requireAuth(['inventory','admin','tech']), asyncHandler(async (req, res) => {
     const parsed = MoveSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    if (!parsed.success) {
+      throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
+    }
     const { product_id, qty, from_bin_id, to_bin_id, reason } = parsed.data;
 
     // Load current levels
     const product = await Product.findByPk(product_id);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (!product) {
+      throw new HttpError(404, 'Product not found');
+    }
 
     const fromBin = from_bin_id ? await Bin.findByPk(from_bin_id) : null;
     const toBin = to_bin_id ? await Bin.findByPk(to_bin_id) : null;
+    if (from_bin_id && !fromBin) {
+      throw new HttpError(404, 'Source bin not found');
+    }
+    if (to_bin_id && !toBin) {
+      throw new HttpError(404, 'Destination bin not found');
+    }
+    if (!fromBin && !toBin) {
+      throw new HttpError(400, 'A move requires at least one bin');
+    }
+    if (fromBin && toBin && fromBin.id === toBin.id) {
+      throw new HttpError(400, 'Source and destination bins cannot match');
+    }
 
     // Helper to get or create stock_level row
     const ensureLevel = async (prodId, binId, t) => {
@@ -70,7 +149,7 @@ export default function createStockRoutes(io) {
     const result = await StockLevel.sequelize.transaction(async (t) => {
       if (fromBin) {
         const fromLevel = await ensureLevel(product_id, fromBin.id, t);
-        if (fromLevel.on_hand < qty) throw new Error('Insufficient stock in source bin');
+        if (fromLevel.on_hand < qty) throw new HttpError(400, 'Insufficient stock in source bin');
         fromLevel.on_hand -= qty;
         await fromLevel.save({ transaction: t });
       }
@@ -94,7 +173,7 @@ export default function createStockRoutes(io) {
     // Broadcast update
     io.emit('stock:update', { product_id, hint: 'move' });
     res.status(201).json({ ok: true, move: result });
-  });
+  }));
 
   return router;
 }
