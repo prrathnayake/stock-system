@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { User } from '../db.js';
-import { config } from '../config.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/tokenService.js';
 
 const router = Router();
 
@@ -39,8 +38,8 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     throw new HttpError(401, 'Invalid credentials');
   }
 
-  const access = jwt.sign({ id: user.id, role: user.role, name: user.full_name }, config.auth.jwtSecret, { expiresIn: config.auth.jwtExpires });
-  const refresh = jwt.sign({ id: user.id }, config.auth.refreshSecret, { expiresIn: config.auth.refreshExpires });
+  const access = signAccessToken(user);
+  const refresh = signRefreshToken(user.id);
   res.json({ access, refresh, user: { id: user.id, name: user.full_name, role: user.role, email: user.email } });
 }));
 
@@ -50,12 +49,12 @@ router.post('/refresh', asyncHandler(async (req, res) => {
     throw new HttpError(400, 'Missing refresh token');
   }
   try {
-    const payload = jwt.verify(refresh, config.auth.refreshSecret);
+    const payload = verifyRefreshToken(refresh);
     const user = await User.findByPk(payload.id);
     if (!user) {
       throw new HttpError(401, 'Invalid refresh token');
     }
-    const access = jwt.sign({ id: user.id, role: user.role, name: user.full_name }, config.auth.jwtSecret, { expiresIn: config.auth.jwtExpires });
+    const access = signAccessToken(user);
     res.json({ access });
   } catch (e) {
     throw new HttpError(401, 'Invalid refresh token');

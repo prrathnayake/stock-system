@@ -20,6 +20,9 @@
     "bullmq": "^4.13.0",
     "ioredis": "^5.4.1",
     "mysql2": "^3.11.0",
+    "mysqldump": "^3.2.0",
+    "node-cache": "^5.1.2",
+    "node-cron": "^4.2.1",
     "sequelize": "^6.37.3",
     "socket.io": "^4.8.1",
     "zod": "^3.23.8"

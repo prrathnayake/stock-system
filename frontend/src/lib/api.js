@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './auth'
+import { enqueueRequest, flushQueue, setQueueClient } from './offlineQueue'
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -15,6 +16,14 @@ const refreshClient = axios.create({
 
 let refreshPromise = null
 
+setQueueClient(api)
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    flushQueue().catch(() => {})
+  })
+}
+
 api.interceptors.request.use(config => {
   const token = getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
@@ -22,10 +31,34 @@ api.interceptors.request.use(config => {
 })
 
 api.interceptors.response.use(
-  response => response,
+  response => {
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      flushQueue().catch(() => {})
+    }
+    return response
+  },
   async error => {
     const originalRequest = error.config
     if (!originalRequest) throw error
+
+    const method = (originalRequest.method || '').toLowerCase()
+    if (!error.response && ['post','put','patch','delete'].includes(method)) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await enqueueRequest({
+          method: originalRequest.method,
+          url: originalRequest.url,
+          data: originalRequest.data,
+          headers: originalRequest.headers
+        })
+        return {
+          data: { queued: true, offline: true },
+          status: 202,
+          statusText: 'Accepted (queued offline)',
+          headers: {},
+          config: originalRequest
+        }
+      }
+    }
 
     const status = error.response?.status
     if (status === 401 && !originalRequest._retry) {

@@ -9,6 +9,10 @@ import productRoutes from './routes/products.js';
 import userRoutes from './routes/users.js';
 import createStockRoutes from './routes/stock.js';
 import createWorkOrderRoutes from './routes/workorders.js';
+import createSerialRoutes from './routes/serials.js';
+import createPurchasingRoutes from './routes/purchasing.js';
+import createRmaRoutes from './routes/rma.js';
+import settingsRoutes from './routes/settings.js';
 import { config } from './config.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
@@ -37,6 +41,10 @@ export function registerRoutes(app, io) {
   app.use('/products', productRoutes);
   app.use('/stock', createStockRoutes(io));
   app.use('/work-orders', createWorkOrderRoutes(io));
+  app.use('/serials', createSerialRoutes(io));
+  app.use('/purchasing', createPurchasingRoutes(io));
+  app.use('/rma', createRmaRoutes(io));
+  app.use('/settings', settingsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
