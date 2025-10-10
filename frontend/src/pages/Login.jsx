@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
 
 export default function Login() {
+  const [organization, setOrganization] = useState('default')
   const [email, setEmail] = useState('admin@example.com')
   const [password, setPassword] = useState('admin123')
   const [error, setError] = useState('')
@@ -16,7 +17,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const loggedIn = await login(email, password)
+      const loggedIn = await login(organization, email, password)
       if (loggedIn?.must_change_password) {
         navigate('/first-login')
       } else {
@@ -38,6 +39,15 @@ export default function Login() {
           <p>Authenticate to access the unified inventory dashboard.</p>
         </div>
         <form className="login__form" onSubmit={submit}>
+          <label className="field">
+            <span>Organization</span>
+            <input
+              type="text"
+              value={organization}
+              onChange={e => setOrganization(e.target.value)}
+              required
+            />
+          </label>
           <label className="field">
             <span>Email</span>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required />

@@ -3,20 +3,25 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { getAllSettings, upsertSettings } from '../services/settings.js';
+import { scheduleBackups, getBackupOptions } from '../services/backup.js';
 import { HttpError } from '../utils/httpError.js';
 
 const UpdateSchema = z.object({
   low_stock_alerts_enabled: z.boolean().optional(),
   default_sla_hours: z.number().int().nonnegative().optional(),
-  notification_emails: z.array(z.string().email()).optional()
+  notification_emails: z.array(z.string().email()).optional(),
+  backup_enabled: z.boolean().optional(),
+  backup_schedule: z.string().min(1).optional(),
+  backup_retain_days: z.number().int().nonnegative().optional()
 });
 
 const router = Router();
 
-router.get('/', requireAuth(['admin']), asyncHandler(async (_req, res) => {
-  const entries = await getAllSettings();
+router.get('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+  const entries = await getAllSettings(false, req.user.organization_id);
   const payload = Object.fromEntries(entries.entries());
-  res.json(payload);
+  const backup = getBackupOptions();
+  res.json({ ...payload, backup_enabled: backup.enabled, backup_schedule: backup.schedule, backup_retain_days: backup.retainDays });
 }));
 
 router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
@@ -29,9 +34,22 @@ router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   if (payload.notification_emails === undefined) {
     payload.notification_emails = [];
   }
-  await upsertSettings(payload);
-  const entries = await getAllSettings(true);
-  res.json(Object.fromEntries(entries.entries()));
+  await upsertSettings(payload, req.user.organization_id);
+  if (payload.backup_enabled !== undefined || payload.backup_schedule || payload.backup_retain_days !== undefined) {
+    try {
+      scheduleBackups({
+        enabled: payload.backup_enabled,
+        schedule: payload.backup_schedule,
+        retainDays: payload.backup_retain_days
+      });
+    } catch (err) {
+      throw new HttpError(400, err.message || 'Invalid backup configuration');
+    }
+  }
+  const entries = await getAllSettings(true, req.user.organization_id);
+  const merged = Object.fromEntries(entries.entries());
+  const backup = getBackupOptions();
+  res.json({ ...merged, backup_enabled: backup.enabled, backup_schedule: backup.schedule, backup_retain_days: backup.retainDays });
 }));
 
 export default router;

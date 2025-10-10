@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
-import { User } from '../db.js';
+import { Organization, User } from '../db.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { HttpError } from '../utils/httpError.js';
@@ -12,6 +12,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../servic
 const router = Router();
 
 const LoginSchema = z.object({
+  organization: z.string().min(1, 'Organization is required'),
   email: z.string().email(),
   password: z.string().min(6)
 });
@@ -28,9 +29,20 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   if (!parse.success) {
     throw new HttpError(400, 'Invalid request payload', parse.error.flatten());
   }
-  const { email, password } = parse.data;
+  const { organization: orgSlug, email, password } = parse.data;
+  const slug = orgSlug.trim().toLowerCase();
+  const organization = await Organization.findOne({
+    where: { slug },
+    skipOrganizationScope: true
+  });
+  if (!organization) {
+    throw new HttpError(401, 'Invalid credentials');
+  }
   const normalizedEmail = normalizeEmail(email);
-  const user = await User.findOne({ where: { email: normalizedEmail } });
+  const user = await User.findOne({
+    where: { email: normalizedEmail, organizationId: organization.id },
+    skipOrganizationScope: true
+  });
   if (!user) {
     throw new HttpError(401, 'Invalid credentials');
   }
@@ -50,7 +62,12 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
       full_name: user.full_name,
       role: user.role,
       email: user.email,
-      must_change_password: user.must_change_password
+      must_change_password: user.must_change_password,
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug
+      }
     }
   });
 }));
@@ -62,7 +79,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   }
   try {
     const payload = verifyRefreshToken(refresh);
-    const user = await User.findByPk(payload.id);
+    const user = await User.findByPk(payload.id, { skipOrganizationScope: true });
     if (!user) {
       throw new HttpError(401, 'Invalid refresh token');
     }
@@ -113,6 +130,8 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
     must_change_password: false
   });
 
+  const organization = await Organization.findByPk(user.organizationId, { skipOrganizationScope: true });
+
   const access = signAccessToken(user);
   const refresh = signRefreshToken(user.id);
 
@@ -125,7 +144,12 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
       full_name: user.full_name,
       role: user.role,
       email: user.email,
-      must_change_password: user.must_change_password
+      must_change_password: user.must_change_password,
+      organization: organization ? {
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug
+      } : null
     }
   });
 }));

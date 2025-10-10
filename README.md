@@ -22,16 +22,18 @@ A full-stack inventory and work-order management platform for device repair cent
 
 ### Backend (Node.js / Express)
 - Secure Express application configured with Helmet, CORS, rate limiting, compression and structured error handling to keep APIs production-ready out of the box.
+- Tenant-aware data model and request scoping provide isolation for multiple organizations sharing the same deployment.
 - JWT-based authentication with rotating secrets, refresh token support, and role-aware route protection.
 - Socket.IO server broadcasts live stock and work-order updates, while the API emits low-stock alerts from asynchronous queue workers.
 - Redis-backed caching and BullMQ queue infrastructure drive fast dashboard responses and scheduled low-stock scans.
-- Automated MySQL backups with configurable schedules and retention policies ensure disaster recovery coverage.
+- Automated MySQL backups with configurable schedules and retention policies ensure disaster recovery coverage, with runtime controls exposed to administrators.
 
 ### Frontend (React + Vite)
 - React 18 app bootstrapped with Vite and React Router, with React Query powering data fetching and caching.
 - Auth provider and Axios interceptors coordinate token refresh, while failed mutations are queued offline in IndexedDB until connectivity is restored.
 - Progressive Web App enhancements via a service worker deliver shell caching, API response caching, and background queue flushing on reconnect.
 - Built-in QR/Barcode scanning workflow lets technicians scan parts directly from the browser.
+- Admin console exposes organization-scoped settings, backup schedules and user management.
 
 ### Infrastructure & Operations
 - `docker-compose.yml` provisions MySQL, Redis, backend, and frontend services with shared environment files and live-reload volume mounts for development.
@@ -113,7 +115,7 @@ Production deployments must supply non-default JWT and refresh secrets. TLS and 
 ## Operational Workflows
 - **Real-time dashboard updates**: Stock and work-order routes emit Socket.IO events that keep dashboards synchronised without manual refresh.
 - **Low-stock monitoring**: The BullMQ worker performs recurring stock scans and emits alerts when thresholds are breached.
-- **Disaster recovery**: Scheduled MySQL dumps create rolling backups with automatic pruning based on retention rules.
+- **Disaster recovery**: Scheduled MySQL dumps create rolling backups with automatic pruning based on retention rules. Backup cadence and retention can be tuned from the admin console without redeploying.
 - **Offline-ready field operations**: Service worker caching and the offline request queue allow technicians to continue scanning and recording work even when connectivity is intermittent.
 
 ## Quality Checks

@@ -59,7 +59,7 @@ export default function createSerialRoutes(io) {
       throw new HttpError(409, 'Serial number already exists');
     }
 
-    io.emit('serials:update', { serial_id: serial.id, action: 'created' });
+    io.emit('serials:update', { serial_id: serial.id, action: 'created', organization_id: req.user.organization_id });
     res.status(201).json(serial);
   }));
 
@@ -106,7 +106,7 @@ export default function createSerialRoutes(io) {
       });
     }
 
-    io.emit('serials:update', { serial_id: serial.id, action: 'updated' });
+    io.emit('serials:update', { serial_id: serial.id, action: 'updated', organization_id: req.user.organization_id });
     res.json(serial);
   }));
 

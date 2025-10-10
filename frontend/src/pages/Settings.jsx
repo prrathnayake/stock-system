@@ -27,10 +27,22 @@ export default function Settings() {
     enabled: isAdmin
   })
 
+  const { data: backups = [] } = useQuery({
+    queryKey: ['backups'],
+    queryFn: async () => {
+      const { data } = await api.get('/backups')
+      return data?.backups || []
+    },
+    enabled: isAdmin
+  })
+
   const [formState, setFormState] = useState({
     low_stock_alerts_enabled: true,
     default_sla_hours: 24,
-    notification_emails: ''
+    notification_emails: '',
+    backup_enabled: false,
+    backup_schedule: '0 3 * * *',
+    backup_retain_days: 14
   })
   const [banner, setBanner] = useState(null)
   const [userBanner, setUserBanner] = useState(null)
@@ -57,7 +69,10 @@ export default function Settings() {
         default_sla_hours: settingsData.default_sla_hours ?? 24,
         notification_emails: Array.isArray(settingsData.notification_emails)
           ? settingsData.notification_emails.join(', ')
-          : ''
+          : '',
+        backup_enabled: settingsData.backup_enabled !== false,
+        backup_schedule: settingsData.backup_schedule || '0 3 * * *',
+        backup_retain_days: settingsData.backup_retain_days ?? 14
       })
     }
   }, [settingsData])
@@ -152,6 +167,19 @@ export default function Settings() {
     }
   })
 
+  const runBackupMutation = useMutation({
+    mutationFn: async () => {
+      await api.post('/backups/run')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['backups'] })
+      setBanner('Backup started successfully. Refresh in a moment to see the new snapshot.')
+    },
+    onError: (error) => {
+      setBanner(error.response?.data?.error || 'Unable to trigger backup right now.')
+    }
+  })
+
   const handleSubmit = (event) => {
     event.preventDefault()
     const payload = {
@@ -160,7 +188,10 @@ export default function Settings() {
       notification_emails: formState.notification_emails
         .split(',')
         .map((email) => email.trim())
-        .filter(Boolean)
+        .filter(Boolean),
+      backup_enabled: Boolean(formState.backup_enabled),
+      backup_schedule: formState.backup_schedule.trim(),
+      backup_retain_days: Number(formState.backup_retain_days) || 0
     }
     settingsMutation.mutate(payload)
   }
@@ -248,6 +279,10 @@ export default function Settings() {
           <div>
             <span className="muted">Role</span>
             <p className="badge badge--muted">{user?.role || 'team member'}</p>
+          </div>
+          <div>
+            <span className="muted">Organization</span>
+            <p>{user?.organization?.name || '—'}</p>
           </div>
         </div>
       </div>
@@ -496,12 +531,92 @@ export default function Settings() {
                 />
                 <p className="muted">Comma-separated list of recipients notified for SLA breaches.</p>
               </label>
+              <label className="field">
+                <span>Automatic backups</span>
+                <select
+                  value={formState.backup_enabled ? 'enabled' : 'disabled'}
+                  onChange={(e) => setFormState((prev) => ({
+                    ...prev,
+                    backup_enabled: e.target.value === 'enabled'
+                  }))}
+                >
+                  <option value="enabled">Enabled</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Backup schedule (cron)</span>
+                <input
+                  type="text"
+                  value={formState.backup_schedule}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, backup_schedule: e.target.value }))}
+                  placeholder="0 3 * * *"
+                  required={formState.backup_enabled}
+                />
+                <p className="muted">Use cron syntax to control when automatic backups run.</p>
+              </label>
+              <label className="field">
+                <span>Retention window (days)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={formState.backup_retain_days}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, backup_retain_days: e.target.value }))}
+                />
+                <p className="muted">Older backups beyond this window are pruned automatically.</p>
+              </label>
               <div className="form-actions">
                 <button className="button" type="submit" disabled={settingsMutation.isLoading}>
                   {settingsMutation.isLoading ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             </form>
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <h2>Database backups</h2>
+                <p className="muted">Review automated snapshots and trigger an on-demand backup if required.</p>
+              </div>
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => runBackupMutation.mutate()}
+                disabled={runBackupMutation.isLoading}
+              >
+                {runBackupMutation.isLoading ? 'Starting…' : 'Run backup now'}
+              </button>
+            </div>
+            <table className="table table--compact">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Created</th>
+                  <th>Size</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {backups.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="muted">No backups generated yet.</td>
+                  </tr>
+                )}
+                {backups.map((backup) => (
+                  <tr key={backup.file}>
+                    <td>{backup.file}</td>
+                    <td>{backup.createdAt ? new Date(backup.createdAt).toLocaleString() : '—'}</td>
+                    <td>{(backup.size / 1024 / 1024).toFixed(2)} MB</td>
+                    <td>
+                      <a className="button button--ghost button--small" href={`${api.defaults.baseURL}/backups/${backup.file}`}>
+                        Download
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}

@@ -1,17 +1,28 @@
 import { redis } from '../redis/client.js';
 import { config } from '../config.js';
+import { getOrganizationId } from './requestContext.js';
 
 const STOCK_OVERVIEW_CACHE_KEY = 'cache:stock:overview:v1';
 
-export async function getCachedStockOverview() {
+function overviewCacheKey(organizationId) {
+  return `${STOCK_OVERVIEW_CACHE_KEY}:${organizationId}`;
+}
+
+function resolveOrganizationId(organizationId) {
+  return organizationId ?? getOrganizationId();
+}
+
+export async function getCachedStockOverview(organizationId) {
+  const orgId = resolveOrganizationId(organizationId);
+  if (!orgId) return null;
   try {
-    const payload = await redis.get(STOCK_OVERVIEW_CACHE_KEY);
+    const payload = await redis.get(overviewCacheKey(orgId));
     if (!payload) return null;
     try {
       return JSON.parse(payload);
     } catch (err) {
       console.warn('[cache] failed to parse stock overview cache, clearing', err);
-      await redis.del(STOCK_OVERVIEW_CACHE_KEY);
+      await redis.del(overviewCacheKey(orgId));
       return null;
     }
   } catch (err) {
@@ -20,18 +31,22 @@ export async function getCachedStockOverview() {
   }
 }
 
-export async function cacheStockOverview(data) {
+export async function cacheStockOverview(data, organizationId) {
+  const orgId = resolveOrganizationId(organizationId);
+  if (!orgId) return;
   try {
     const ttl = Math.max(5, config.cache.stockOverviewTtl || 0);
-    await redis.set(STOCK_OVERVIEW_CACHE_KEY, JSON.stringify(data), 'EX', ttl);
+    await redis.set(overviewCacheKey(orgId), JSON.stringify(data), 'EX', ttl);
   } catch (err) {
     console.error('[cache] unable to store stock overview cache', err);
   }
 }
 
-export async function invalidateStockOverviewCache() {
+export async function invalidateStockOverviewCache(organizationId) {
+  const orgId = resolveOrganizationId(organizationId);
+  if (!orgId) return;
   try {
-    await redis.del(STOCK_OVERVIEW_CACHE_KEY);
+    await redis.del(overviewCacheKey(orgId));
   } catch (err) {
     console.error('[cache] unable to invalidate stock overview cache', err);
   }

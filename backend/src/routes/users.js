@@ -36,6 +36,7 @@ function presentUser(user) {
     email: user.email,
     role: user.role,
     must_change_password: user.must_change_password,
+    organization_id: user.organizationId,
     created_at: user.createdAt,
     updated_at: user.updatedAt
   };

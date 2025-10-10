@@ -128,7 +128,9 @@ export default function createPurchasingRoutes(io) {
           for (const serialValue of serials) {
             const [serial, created] = await SerialNumber.findOrCreate({
               where: { serial: serialValue },
-              defaults: { productId: product.id, binId: bin.id }
+              defaults: { productId: product.id, binId: bin.id },
+              transaction: t,
+              lock: t.LOCK.UPDATE
             });
             if (!created) {
               if (serial.productId !== product.id) {
@@ -174,9 +176,9 @@ export default function createPurchasingRoutes(io) {
       await po.save({ transaction: t });
     });
 
-    io.emit('stock:update', { hint: 'purchase-order-receive', purchase_order_id: po.id });
-    await invalidateStockOverviewCache();
-    enqueueLowStockScan({ delay: 250 }).catch(() => {});
+    io.emit('stock:update', { hint: 'purchase-order-receive', purchase_order_id: po.id, organization_id: req.user.organization_id });
+    await invalidateStockOverviewCache(req.user.organization_id);
+    enqueueLowStockScan({ delay: 250, organizationId: req.user.organization_id }).catch(() => {});
 
     res.json({ ok: true });
   }));

@@ -59,8 +59,9 @@ export default function createStockRoutes(io) {
     res.json(data);
   }));
 
-  router.get('/overview', requireAuth(), asyncHandler(async (_req, res) => {
-    const cached = await getCachedStockOverview();
+  router.get('/overview', requireAuth(), asyncHandler(async (req, res) => {
+    const organizationId = req.user.organization_id;
+    const cached = await getCachedStockOverview(organizationId);
     if (cached) {
       return res.json(cached);
     }
@@ -108,7 +109,7 @@ export default function createStockRoutes(io) {
       }))
     };
 
-    await cacheStockOverview(payload);
+    await cacheStockOverview(payload, organizationId);
     res.json(payload);
   }));
 
@@ -182,9 +183,9 @@ export default function createStockRoutes(io) {
     });
 
     // Broadcast update
-    io.emit('stock:update', { product_id, hint: 'move' });
-    await invalidateStockOverviewCache();
-    enqueueLowStockScan({ delay: 500 }).catch(err => {
+    io.emit('stock:update', { product_id, hint: 'move', organization_id: req.user.organization_id });
+    await invalidateStockOverviewCache(req.user.organization_id);
+    enqueueLowStockScan({ delay: 500, organizationId: req.user.organization_id }).catch(err => {
       console.error('[queue] failed to enqueue low stock scan', err);
     });
     res.status(201).json({ ok: true, move: result });

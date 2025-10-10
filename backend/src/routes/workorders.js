@@ -67,7 +67,7 @@ export default function createWorkOrderRoutes(io) {
       warranty_provider: parsed.data.warranty_provider || null,
       warranty_expires_at: parsed.data.warranty_expires_at ? new Date(parsed.data.warranty_expires_at) : null,
       sla_due_at: await (async () => {
-        const defaultHours = await getSetting('default_sla_hours', 24);
+        const defaultHours = await getSetting('default_sla_hours', 24, req.user.organization_id);
         const due = new Date();
         due.setHours(due.getHours() + Number(defaultHours || 0));
         return due;
@@ -85,7 +85,7 @@ export default function createWorkOrderRoutes(io) {
     for (const p of parsed.data.parts) {
       await WorkOrderPart.create({ workOrderId: wo.id, productId: p.product_id, qty_needed: p.qty });
     }
-    io.emit('workorders:update', { work_order_id: wo.id, action: 'created' });
+    io.emit('workorders:update', { work_order_id: wo.id, action: 'created', organization_id: req.user.organization_id });
     res.status(201).json(wo);
   }));
 
@@ -138,7 +138,7 @@ export default function createWorkOrderRoutes(io) {
       });
     }
 
-    io.emit('workorders:update', { work_order_id: wo.id, status: wo.status, action: 'updated' });
+    io.emit('workorders:update', { work_order_id: wo.id, status: wo.status, action: 'updated', organization_id: req.user.organization_id });
     res.json(wo);
   }));
 
@@ -257,9 +257,9 @@ export default function createWorkOrderRoutes(io) {
       }
     });
 
-    io.emit('stock:update', { work_order_id: Number(id), hint: 'reserve' });
-    await invalidateStockOverviewCache();
-    enqueueLowStockScan({ delay: 500 }).catch(err => {
+    io.emit('stock:update', { work_order_id: Number(id), hint: 'reserve', organization_id: req.user.organization_id });
+    await invalidateStockOverviewCache(req.user.organization_id);
+    enqueueLowStockScan({ delay: 500, organizationId: req.user.organization_id }).catch(err => {
       console.error('[queue] failed to enqueue low stock scan', err);
     });
     res.json({ ok: true });
@@ -375,9 +375,9 @@ export default function createWorkOrderRoutes(io) {
       await part.save({ transaction: t });
     });
 
-    io.emit('stock:update', { work_order_id: Number(id), hint: 'pick' });
-    await invalidateStockOverviewCache();
-    enqueueLowStockScan({ delay: 500 }).catch(err => {
+    io.emit('stock:update', { work_order_id: Number(id), hint: 'pick', organization_id: req.user.organization_id });
+    await invalidateStockOverviewCache(req.user.organization_id);
+    enqueueLowStockScan({ delay: 500, organizationId: req.user.organization_id }).catch(err => {
       console.error('[queue] failed to enqueue low stock scan', err);
     });
     res.json({ ok: true });
@@ -552,9 +552,9 @@ export default function createWorkOrderRoutes(io) {
       await part.save({ transaction: t });
     });
 
-    io.emit('stock:update', { work_order_id: Number(id), hint: 'return' });
-    await invalidateStockOverviewCache();
-    enqueueLowStockScan({ delay: 500 }).catch(err => {
+    io.emit('stock:update', { work_order_id: Number(id), hint: 'return', organization_id: req.user.organization_id });
+    await invalidateStockOverviewCache(req.user.organization_id);
+    enqueueLowStockScan({ delay: 500, organizationId: req.user.organization_id }).catch(err => {
       console.error('[queue] failed to enqueue low stock scan', err);
     });
     res.json({ ok: true });

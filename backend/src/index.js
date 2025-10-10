@@ -7,7 +7,6 @@ import { createApp, registerRoutes } from './app.js';
 import { initialiseDatabase } from './startup/bootstrap.js';
 import { initLowStockQueue } from './queues/lowStock.js';
 import { scheduleBackups } from './services/backup.js';
-import backupsRoutes from './routes/backups.js';
 
 const app = createApp();
 const server = config.tls.enabled
@@ -31,7 +30,6 @@ const io = new IOServer(server, {
 });
 
 registerRoutes(app, io);
-app.use('/backups', backupsRoutes);
 
 (async () => {
   await initialiseDatabase();
