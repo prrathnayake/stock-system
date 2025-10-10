@@ -1,17 +1,17 @@
-import { Queue, QueueScheduler, Worker } from 'bullmq';
+import BullMQ from 'bullmq';
 import { createRedisConnection } from '../redis/client.js';
 import { Product, Bin, StockLevel } from '../db.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
 import { getSetting } from '../services/settings.js';
 
+const { Queue, Worker } = BullMQ;
+
 const QUEUE_NAME = 'low-stock';
 
 const queueConnection = createRedisConnection();
 const workerConnection = createRedisConnection();
-const schedulerConnection = createRedisConnection();
 
 const queue = new Queue(QUEUE_NAME, { connection: queueConnection });
-const scheduler = new QueueScheduler(QUEUE_NAME, { connection: schedulerConnection });
 
 let worker;
 let ioRef = null;
@@ -70,7 +70,7 @@ export async function initLowStockQueue(io) {
   }
 
   ioRef = io;
-  await scheduler.waitUntilReady();
+  await queue.waitUntilReady();
 
   worker = new Worker(QUEUE_NAME, async () => {
     const snapshot = await calculateLowStockSnapshot();
@@ -110,11 +110,9 @@ export async function enqueueLowStockScan({ delay = 0 } = {}) {
 async function shutdownQueues() {
   await Promise.allSettled([
     queue.close(),
-    scheduler.close(),
     worker?.close(),
     queueConnection.quit(),
-    workerConnection.quit(),
-    schedulerConnection.quit()
+    workerConnection.quit()
   ]);
 }
 
