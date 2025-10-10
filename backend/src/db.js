@@ -2,13 +2,22 @@ import { Sequelize, DataTypes } from 'sequelize';
 import { config } from './config.js';
 import { getOrganizationId } from './services/requestContext.js';
 
-export const sequelize = new Sequelize(config.db.name, config.db.user, config.db.pass, {
-  host: config.db.host,
-  port: config.db.port,
-  dialect: 'mysql',
-  logging: false,
-  define: { underscored: true }
-});
+const dialect = config.db.dialect || 'mysql';
+
+export const sequelize = dialect === 'sqlite'
+  ? new Sequelize({
+    dialect: 'sqlite',
+    storage: config.db.storage || ':memory:',
+    logging: false,
+    define: { underscored: true }
+  })
+  : new Sequelize(config.db.name, config.db.user, config.db.pass, {
+    host: config.db.host,
+    port: config.db.port,
+    dialect,
+    logging: false,
+    define: { underscored: true }
+  });
 
 function hasOrganizationAttribute(model) {
   return Object.prototype.hasOwnProperty.call(model.getAttributes(), 'organizationId');
