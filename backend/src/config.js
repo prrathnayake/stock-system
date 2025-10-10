@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const parseSecrets = (value, fallback) => {
   const secrets = value
@@ -34,6 +38,14 @@ const refreshSecrets = parseSecrets(process.env.REFRESH_SECRETS, [process.env.RE
 const jwtKeyIds = buildKeyIds(process.env.JWT_SECRET_IDS, jwtSecrets);
 const refreshKeyIds = buildKeyIds(process.env.REFRESH_SECRET_IDS, refreshSecrets);
 const corsOrigins = parseOrigins(process.env.CORS_ORIGIN);
+
+const resolveFrontendPath = () => {
+  const configured = process.env.FRONTEND_DIST_PATH;
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.resolve(__dirname, '../../frontend/dist');
+};
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
@@ -80,6 +92,10 @@ export const config = {
     schedule: process.env.BACKUP_SCHEDULE || '0 3 * * *',
     directory: process.env.BACKUP_DIRECTORY || 'backups',
     retainDays: Number(process.env.BACKUP_RETAIN_DAYS || 14)
+  },
+  frontend: {
+    serve: process.env.SERVE_FRONTEND !== 'false',
+    distPath: resolveFrontendPath()
   }
 };
 

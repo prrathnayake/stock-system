@@ -103,6 +103,8 @@ Development credentials (for seed data): `admin@example.com / admin123`.
 | `STOCK_OVERVIEW_CACHE_TTL` | Cache duration (seconds) for stock overview API | `30` |
 | `TLS_ENABLED` / `TLS_KEY_PATH` / `TLS_CERT_PATH` / `TLS_CA_PATH` | Optional HTTPS configuration | Disabled by default |
 | `BACKUP_ENABLED` / `BACKUP_SCHEDULE` / `BACKUP_DIRECTORY` / `BACKUP_RETAIN_DAYS` | Automated backup toggle, cron schedule, storage directory, retention window | Disabled / `0 3 * * *` / `backups` / `14` |
+| `SERVE_FRONTEND` | When not set to `false`, the API will serve the compiled frontend if the assets exist | `true` |
+| `FRONTEND_DIST_PATH` | Override path to the compiled frontend assets served by the API | `../frontend/dist` |
 
 Production deployments must supply non-default JWT and refresh secrets. TLS and backup settings are validated when `NODE_ENV=production`.
 

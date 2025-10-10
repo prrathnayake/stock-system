@@ -4,6 +4,8 @@ import cors from 'cors';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
+import path from 'path';
+import { existsSync } from 'fs';
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
 import userRoutes from './routes/users.js';
@@ -56,6 +58,22 @@ export function registerRoutes(app, io) {
   app.use('/rma', createRmaRoutes(io));
   app.use('/settings', settingsRoutes);
   app.use('/backups', backupsRoutes);
+
+  if (config.frontend.serve) {
+    const distPath = config.frontend.distPath;
+    if (distPath && existsSync(distPath)) {
+      app.use(express.static(distPath, { index: false }));
+      app.get('*', (req, res, next) => {
+        if (req.method !== 'GET') return next();
+        const acceptHeader = req.headers.accept || '';
+        const acceptsHtml = acceptHeader.includes('text/html') || acceptHeader === '*/*';
+        if (!acceptsHtml) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    } else {
+      console.warn(`Frontend dist path "${distPath}" not found; SPA assets will not be served.`);
+    }
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);
