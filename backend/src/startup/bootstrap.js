@@ -178,10 +178,81 @@ async function ensureLegacyUsersHaveOrganization() {
   }
 }
 
+async function ensureLegacyLocationsHaveOrganization() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tables = await queryInterface.showAllTables();
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('locations')) {
+    return;
+  }
+
+  let columns;
+  try {
+    columns = await queryInterface.describeTable('locations');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  if (columns.organization_id || columns.organizationId) {
+    return;
+  }
+
+  if (!normalizedTables.includes('organizations')) {
+    await Organization.sync();
+  }
+
+  const transaction = await sequelize.transaction();
+  try {
+    const organization = await ensureDefaultOrganization(transaction);
+
+    await queryInterface.addColumn('locations', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    await sequelize.query(
+      'UPDATE `locations` SET `organization_id` = :organizationId WHERE `organization_id` IS NULL OR `organization_id` = 0',
+      {
+        replacements: { organizationId: organization.id },
+        transaction
+      }
+    );
+
+    await queryInterface.changeColumn('locations', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
 export async function initialiseDatabase() {
   await waitForDatabaseConnection();
   await ensureLegacyProductsHaveOrganization();
   await ensureLegacyUsersHaveOrganization();
+  await ensureLegacyLocationsHaveOrganization();
   await sequelize.sync({ alter: true });
 
   const [organization] = await Organization.findOrCreate({
