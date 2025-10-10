@@ -1,4 +1,5 @@
 import { verifyAccessToken } from '../services/tokenService.js';
+import { runWithRequestContext } from '../services/requestContext.js';
 
 export function requireAuth(roles = [], options = {}) {
   const { allowIfMustChangePassword = false } = options;
@@ -13,8 +14,11 @@ export function requireAuth(roles = [], options = {}) {
         return res.status(403).json({ error: 'Password change required' });
       }
       if (roles.length && !roles.includes(payload.role)) return res.status(403).json({ error: 'Forbidden' });
-      req.user = payload;
-      next();
+      const organizationId = payload.organization_id ?? payload.organizationId ?? null;
+      runWithRequestContext({ userId: payload.id, organizationId }, () => {
+        req.user = { ...payload, organization_id: organizationId };
+        next();
+      });
     } catch (e) {
       return res.status(401).json({ error: 'Invalid token' });
     }

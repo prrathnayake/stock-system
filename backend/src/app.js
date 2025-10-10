@@ -13,6 +13,7 @@ import createSerialRoutes from './routes/serials.js';
 import createPurchasingRoutes from './routes/purchasing.js';
 import createRmaRoutes from './routes/rma.js';
 import settingsRoutes from './routes/settings.js';
+import backupsRoutes from './routes/backups.js';
 import { config } from './config.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
@@ -54,6 +55,7 @@ export function registerRoutes(app, io) {
   app.use('/purchasing', createPurchasingRoutes(io));
   app.use('/rma', createRmaRoutes(io));
   app.use('/settings', settingsRoutes);
+  app.use('/backups', backupsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

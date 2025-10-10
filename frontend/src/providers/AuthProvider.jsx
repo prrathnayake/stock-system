@@ -17,8 +17,8 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
+  const login = async (organization, email, password) => {
+    const { data } = await api.post('/auth/login', { organization, email, password });
     setTokens(data.access, data.refresh);
     setUserProfile(data.user);
     setUser(data.user);
@@ -32,6 +32,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     user,
+    organization: user?.organization || null,
     isAuthenticated: Boolean(user && getAccessToken()),
     loading,
     login,

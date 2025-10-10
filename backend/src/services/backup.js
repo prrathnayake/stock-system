@@ -6,6 +6,26 @@ import { config } from '../config.js';
 
 const RESOLVED_DIR = path.resolve(process.cwd(), config.backup.directory);
 
+let runtimeOptions = {
+  enabled: config.backup.enabled,
+  schedule: config.backup.schedule,
+  retainDays: config.backup.retainDays
+};
+
+let scheduledTask = null;
+
+function normaliseOptions(options = {}) {
+  const next = { ...runtimeOptions };
+  if (options.enabled !== undefined) next.enabled = options.enabled;
+  if (options.schedule) next.schedule = options.schedule;
+  if (options.retainDays !== undefined) next.retainDays = options.retainDays;
+  return next;
+}
+
+export function getBackupOptions() {
+  return { ...runtimeOptions };
+}
+
 export async function ensureBackupDir() {
   await fs.mkdir(RESOLVED_DIR, { recursive: true });
   return RESOLVED_DIR;
@@ -48,9 +68,9 @@ export async function listBackups() {
 }
 
 export async function purgeExpiredBackups() {
-  if (!config.backup.retainDays || config.backup.retainDays <= 0) return;
+  if (!runtimeOptions.retainDays || runtimeOptions.retainDays <= 0) return;
   await ensureBackupDir();
-  const cutoff = Date.now() - config.backup.retainDays * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - runtimeOptions.retainDays * 24 * 60 * 60 * 1000;
   const entries = await fs.readdir(RESOLVED_DIR);
   await Promise.all(entries.map(async entry => {
     if (!entry.endsWith('.sql')) return;
@@ -62,11 +82,24 @@ export async function purgeExpiredBackups() {
   }));
 }
 
-export function scheduleBackups() {
-  if (!config.backup.enabled) {
+export function scheduleBackups(options = {}) {
+  runtimeOptions = normaliseOptions(options);
+
+  if (scheduledTask) {
+    scheduledTask.stop();
+    scheduledTask = null;
+  }
+
+  if (!runtimeOptions.enabled) {
+    console.log('Automated backups disabled');
     return null;
   }
-  const task = cron.schedule(config.backup.schedule, async () => {
+
+  if (!cron.validate(runtimeOptions.schedule)) {
+    throw new Error('Invalid backup schedule expression');
+  }
+
+  scheduledTask = cron.schedule(runtimeOptions.schedule, async () => {
     try {
       await runBackup();
       console.log('Database backup completed');
@@ -74,6 +107,6 @@ export function scheduleBackups() {
       console.error('Database backup failed', err);
     }
   });
-  console.log(`Automated backups enabled using schedule "${config.backup.schedule}" -> ${RESOLVED_DIR}`);
-  return task;
+  console.log(`Automated backups enabled using schedule "${runtimeOptions.schedule}" -> ${RESOLVED_DIR}`);
+  return scheduledTask;
 }

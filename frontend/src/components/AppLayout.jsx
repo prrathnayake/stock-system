@@ -12,7 +12,7 @@ const navItems = [
 ]
 
 export default function AppLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, organization } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const location = useLocation()
 
@@ -53,7 +53,7 @@ export default function AppLayout() {
         <header className="topbar">
           <div>
             <h1 className="topbar__title">{pageTitle}</h1>
-            <p className="topbar__subtitle">Operational insights and control center</p>
+            <p className="topbar__subtitle">{organization?.name || user?.organization?.name || 'Operational insights and control center'}</p>
           </div>
           <div className="topbar__actions">
             <button className="button button--ghost" type="button" onClick={toggleTheme}>

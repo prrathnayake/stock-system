@@ -20,7 +20,13 @@ function buildSecretRotationList(token, secrets, keyIds) {
 
 export function signAccessToken(user) {
   return jwt.sign(
-    { id: user.id, role: user.role, name: user.full_name, must_change_password: user.must_change_password },
+    {
+      id: user.id,
+      role: user.role,
+      name: user.full_name,
+      must_change_password: user.must_change_password,
+      organization_id: user.organizationId
+    },
     config.auth.jwtSecret,
     {
       expiresIn: config.auth.jwtExpires,

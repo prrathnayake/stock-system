@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { io } from 'socket.io-client'
+import { useAuth } from '../providers/AuthProvider.jsx'
 
 const socket = io(import.meta.env.VITE_SOCKET_URL, { autoConnect: false })
 const reasonLabels = {
@@ -16,6 +17,8 @@ const reasonLabels = {
 
 export default function Dashboard() {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const organizationId = user?.organization?.id
 
   const { data: overview } = useQuery({
     queryKey: ['stock-overview'],
@@ -37,7 +40,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!socket.connected) socket.connect()
-    const handler = () => {
+    const handler = (payload = {}) => {
+      if (payload.organization_id && organizationId && payload.organization_id !== organizationId) {
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['stock-overview'] })
       queryClient.invalidateQueries({ queryKey: ['stock-dashboard'] })
     }
@@ -47,7 +53,7 @@ export default function Dashboard() {
       socket.off('stock:update', handler)
       socket.off('alerts:low-stock', handler)
     }
-  }, [queryClient])
+  }, [queryClient, organizationId])
 
   const lowStock = stock.filter((item) => item.available <= item.reorder_point)
   const topBins = stock

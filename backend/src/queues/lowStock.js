@@ -1,8 +1,9 @@
 import BullMQ from 'bullmq';
 import { createRedisConnection } from '../redis/client.js';
-import { Product, Bin, StockLevel } from '../db.js';
+import { Organization, Product, Bin, StockLevel } from '../db.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
 import { getSetting } from '../services/settings.js';
+import { runAsOrganization } from '../services/requestContext.js';
 
 const { Queue, Worker } = BullMQ;
 
@@ -72,14 +73,25 @@ export async function initLowStockQueue(io) {
   ioRef = io;
   await queue.waitUntilReady();
 
-  worker = new Worker(QUEUE_NAME, async () => {
-    const snapshot = await calculateLowStockSnapshot();
-    const alertsEnabled = await getSetting('low_stock_alerts_enabled', true);
-    if (snapshot.length > 0 && ioRef && alertsEnabled !== false) {
-      ioRef.emit('alerts:low-stock', snapshot);
+  worker = new Worker(QUEUE_NAME, async (job) => {
+    const orgIds = job.data?.organizationId
+      ? [job.data.organizationId]
+      : (await Organization.findAll({ attributes: ['id'], skipOrganizationScope: true })).map(org => org.id);
+
+    let totalCount = 0;
+    for (const orgId of orgIds) {
+      const count = await runAsOrganization(orgId, async () => {
+        const snapshot = await calculateLowStockSnapshot();
+        const alertsEnabled = await getSetting('low_stock_alerts_enabled', true, orgId);
+        if (snapshot.length > 0 && ioRef && alertsEnabled !== false) {
+          ioRef.emit('alerts:low-stock', { organization_id: orgId, snapshot });
+        }
+        await invalidateStockOverviewCache(orgId);
+        return snapshot.length;
+      });
+      totalCount += count;
     }
-    await invalidateStockOverviewCache();
-    return { count: snapshot.length };
+    return { count: totalCount };
   }, { connection: workerConnection });
 
   worker.on('failed', (job, err) => {
@@ -91,10 +103,11 @@ export async function initLowStockQueue(io) {
   return { queue, worker };
 }
 
-export async function enqueueLowStockScan({ delay = 0 } = {}) {
+export async function enqueueLowStockScan({ delay = 0, organizationId = null } = {}) {
   try {
-    await queue.add('scan', {}, {
-      jobId: ON_DEMAND_JOB_ID,
+    const jobId = organizationId ? `${ON_DEMAND_JOB_ID}:${organizationId}` : ON_DEMAND_JOB_ID;
+    await queue.add('scan', { organizationId }, {
+      jobId,
       removeOnComplete: true,
       removeOnFail: true,
       delay

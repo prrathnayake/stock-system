@@ -1,5 +1,6 @@
 import { Sequelize, DataTypes } from 'sequelize';
 import { config } from './config.js';
+import { getOrganizationId } from './services/requestContext.js';
 
 export const sequelize = new Sequelize(config.db.name, config.db.user, config.db.pass, {
   host: config.db.host,
@@ -9,29 +10,115 @@ export const sequelize = new Sequelize(config.db.name, config.db.user, config.db
   define: { underscored: true }
 });
 
+function hasOrganizationAttribute(model) {
+  return Object.prototype.hasOwnProperty.call(model.getAttributes(), 'organizationId');
+}
+
+function ensureOrganizationWhere(options = {}) {
+  const organizationId = getOrganizationId();
+  if (!organizationId || options?.skipOrganizationScope) return;
+
+  const hasOrgFilter = (where) => (
+    where && (
+      Object.prototype.hasOwnProperty.call(where, 'organizationId') ||
+      Object.prototype.hasOwnProperty.call(where, 'organization_id')
+    )
+  );
+
+  if (!hasOrgFilter(options.where)) {
+    options.where = options.where ? { ...options.where, organizationId } : { organizationId };
+  }
+
+  const processInclude = (include) => {
+    if (!include) return;
+    const model = include.model ?? include;
+    if (model && hasOrganizationAttribute(model) && !hasOrgFilter(include.where)) {
+      include.where = include.where ? { ...include.where, organizationId } : { organizationId };
+    }
+    if (Array.isArray(include.include)) {
+      include.include.forEach(processInclude);
+    }
+  };
+
+  if (Array.isArray(options.include)) {
+    options.include.forEach(processInclude);
+  }
+}
+
+function assignOrganization(instance) {
+  const organizationId = getOrganizationId();
+  if (!organizationId || !instance || instance.organizationId) return;
+  instance.organizationId = organizationId;
+}
+
+function applyOrganizationScope(model) {
+  if (!hasOrganizationAttribute(model)) return;
+
+  model.addHook('beforeValidate', assignOrganization);
+  model.addHook('beforeCreate', assignOrganization);
+  model.addHook('beforeBulkCreate', instances => instances.forEach(assignOrganization));
+  model.addHook('beforeFind', ensureOrganizationWhere);
+  model.addHook('beforeCount', ensureOrganizationWhere);
+  model.addHook('beforeDestroy', (_instance, options) => {
+    if (options) ensureOrganizationWhere(options);
+  });
+  model.addHook('beforeBulkDestroy', ensureOrganizationWhere);
+  model.addHook('beforeUpdate', (_instance, options) => {
+    if (options) ensureOrganizationWhere(options);
+  });
+  model.addHook('beforeBulkUpdate', ensureOrganizationWhere);
+}
+
 // Models
+export const Organization = sequelize.define('organization', {
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  name: { type: DataTypes.STRING(191), allowNull: false },
+  slug: { type: DataTypes.STRING(64), allowNull: false, unique: true },
+  timezone: { type: DataTypes.STRING(64), allowNull: true }
+});
+
+Organization.addHook('beforeValidate', (org) => {
+  if (org.slug) {
+    org.slug = org.slug.toLowerCase().trim();
+  }
+  if (org.name) {
+    org.name = org.name.trim();
+  }
+});
+
 export const User = sequelize.define('user', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   full_name: { type: DataTypes.STRING, allowNull: false },
-  email: { type: DataTypes.STRING(191), unique: true, allowNull: false },
+  email: { type: DataTypes.STRING(191), allowNull: false },
   password_hash: { type: DataTypes.STRING, allowNull: false },
   role: { type: DataTypes.ENUM('admin', 'user'), defaultValue: 'user' },
   must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'email'] }
+  ]
 });
 
 export const Product = sequelize.define('product', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
-  sku: { type: DataTypes.STRING(64), unique: true, allowNull: false },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  sku: { type: DataTypes.STRING(64), allowNull: false },
   name: { type: DataTypes.STRING, allowNull: false },
   uom: { type: DataTypes.STRING, defaultValue: 'ea' },
   track_serial: { type: DataTypes.BOOLEAN, defaultValue: false },
   reorder_point: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
   lead_time_days: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
   active: { type: DataTypes.BOOLEAN, defaultValue: true }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'sku'] }
+  ]
 });
 
 export const Location = sequelize.define('location', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   site: { type: DataTypes.STRING, allowNull: false },
   room: { type: DataTypes.STRING },
   notes: { type: DataTypes.TEXT }
@@ -39,33 +126,48 @@ export const Location = sequelize.define('location', {
 
 export const Bin = sequelize.define('bin', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   code: { type: DataTypes.STRING, allowNull: false }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'code'] }
+  ]
 });
 
 export const StockLevel = sequelize.define('stock_level', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   on_hand: { type: DataTypes.INTEGER, defaultValue: 0 },
   reserved: { type: DataTypes.INTEGER, defaultValue: 0 }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'product_id', 'bin_id'] }
+  ]
 });
 
 export const StockMove = sequelize.define('stock_move', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty: { type: DataTypes.INTEGER, allowNull: false },
-  reason: { type: DataTypes.ENUM(
-    'receive',
-    'adjust',
-    'pick',
-    'return',
-    'transfer',
-    'reserve',
-    'release',
-    'receive_po',
-    'rma_out',
-    'rma_return'
-  ), allowNull: false },
+  reason: {
+    type: DataTypes.ENUM(
+      'receive',
+      'adjust',
+      'pick',
+      'return',
+      'transfer',
+      'reserve',
+      'release',
+      'receive_po',
+      'rma_out',
+      'rma_return'
+    ),
+    allowNull: false
+  },
   performed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true }
 });
 
 export const WorkOrder = sequelize.define('work_order', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   customer_name: { type: DataTypes.STRING, allowNull: false },
   device_info: { type: DataTypes.STRING, allowNull: false },
   device_serial: { type: DataTypes.STRING },
@@ -79,12 +181,14 @@ export const WorkOrder = sequelize.define('work_order', {
 });
 
 export const WorkOrderPart = sequelize.define('work_order_part', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty_needed: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 1 },
   qty_reserved: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
   qty_picked: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 }
 });
 
 export const WorkOrderStatusHistory = sequelize.define('work_order_status_history', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   from_status: { type: DataTypes.STRING },
   to_status: { type: DataTypes.STRING, allowNull: false },
   note: { type: DataTypes.TEXT },
@@ -92,13 +196,19 @@ export const WorkOrderStatusHistory = sequelize.define('work_order_status_histor
 });
 
 export const SerialNumber = sequelize.define('serial_number', {
-  serial: { type: DataTypes.STRING(191), unique: true, allowNull: false },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  serial: { type: DataTypes.STRING(191), allowNull: false },
   status: { type: DataTypes.ENUM('available','reserved','assigned','returned','faulty'), defaultValue: 'available' },
   metadata: { type: DataTypes.JSON },
   last_seen_at: { type: DataTypes.DATE }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'serial'] }
+  ]
 });
 
 export const SerialAssignment = sequelize.define('serial_assignment', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   status: { type: DataTypes.ENUM('reserved','picked','returned','released','faulty'), defaultValue: 'reserved' },
   reserved_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   picked_at: { type: DataTypes.DATE },
@@ -108,6 +218,8 @@ export const SerialAssignment = sequelize.define('serial_assignment', {
 });
 
 export const Supplier = sequelize.define('supplier', {
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   name: { type: DataTypes.STRING, allowNull: false },
   contact_name: { type: DataTypes.STRING },
   contact_email: { type: DataTypes.STRING },
@@ -116,39 +228,128 @@ export const Supplier = sequelize.define('supplier', {
 });
 
 export const PurchaseOrder = sequelize.define('purchase_order', {
-  reference: { type: DataTypes.STRING(64), unique: true, allowNull: false },
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  reference: { type: DataTypes.STRING(64), allowNull: false },
   status: { type: DataTypes.ENUM('draft','ordered','partially_received','received','closed'), defaultValue: 'draft' },
   expected_at: { type: DataTypes.DATE },
   total_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'reference'] }
+  ]
 });
 
 export const PurchaseOrderLine = sequelize.define('purchase_order_line', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty_ordered: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty_received: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
   unit_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 }
 });
 
 export const RmaCase = sequelize.define('rma_case', {
-  reference: { type: DataTypes.STRING(64), unique: true, allowNull: false },
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  reference: { type: DataTypes.STRING(64), allowNull: false },
   status: { type: DataTypes.ENUM('draft','submitted','in_review','credited','closed'), defaultValue: 'draft' },
   reason: { type: DataTypes.STRING },
   notes: { type: DataTypes.TEXT },
   credit_amount: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'reference'] }
+  ]
 });
 
 export const RmaItem = sequelize.define('rma_item', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 1 },
   disposition: { type: DataTypes.ENUM('pending','approved','rejected'), defaultValue: 'pending' },
   credit_amount: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 }
 });
 
 export const Setting = sequelize.define('setting', {
-  key: { type: DataTypes.STRING(128), unique: true, allowNull: false },
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  key: { type: DataTypes.STRING(128), allowNull: false },
   value: { type: DataTypes.TEXT, allowNull: false },
   type: { type: DataTypes.ENUM('string','number','boolean','json'), defaultValue: 'string' }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'key'] }
+  ]
 });
 
+applyOrganizationScope(User);
+applyOrganizationScope(Product);
+applyOrganizationScope(Location);
+applyOrganizationScope(Bin);
+applyOrganizationScope(StockLevel);
+applyOrganizationScope(StockMove);
+applyOrganizationScope(WorkOrder);
+applyOrganizationScope(WorkOrderPart);
+applyOrganizationScope(WorkOrderStatusHistory);
+applyOrganizationScope(SerialNumber);
+applyOrganizationScope(SerialAssignment);
+applyOrganizationScope(Supplier);
+applyOrganizationScope(PurchaseOrder);
+applyOrganizationScope(PurchaseOrderLine);
+applyOrganizationScope(RmaCase);
+applyOrganizationScope(RmaItem);
+applyOrganizationScope(Setting);
+
 // Relations
+Organization.hasMany(User, { foreignKey: { allowNull: false } });
+User.belongsTo(Organization);
+
+Organization.hasMany(Product, { foreignKey: { allowNull: false } });
+Product.belongsTo(Organization);
+
+Organization.hasMany(Location, { foreignKey: { allowNull: false } });
+Location.belongsTo(Organization);
+
+Organization.hasMany(Bin, { foreignKey: { allowNull: false } });
+Bin.belongsTo(Organization);
+
+Organization.hasMany(StockLevel, { foreignKey: { allowNull: false } });
+StockLevel.belongsTo(Organization);
+
+Organization.hasMany(StockMove, { foreignKey: { allowNull: false } });
+StockMove.belongsTo(Organization);
+
+Organization.hasMany(WorkOrder, { foreignKey: { allowNull: false } });
+WorkOrder.belongsTo(Organization);
+
+Organization.hasMany(WorkOrderPart, { foreignKey: { allowNull: false } });
+WorkOrderPart.belongsTo(Organization);
+
+Organization.hasMany(WorkOrderStatusHistory, { foreignKey: { allowNull: false } });
+WorkOrderStatusHistory.belongsTo(Organization);
+
+Organization.hasMany(SerialNumber, { foreignKey: { allowNull: false } });
+SerialNumber.belongsTo(Organization);
+
+Organization.hasMany(SerialAssignment, { foreignKey: { allowNull: false } });
+SerialAssignment.belongsTo(Organization);
+
+Organization.hasMany(Supplier, { foreignKey: { allowNull: false } });
+Supplier.belongsTo(Organization);
+
+Organization.hasMany(PurchaseOrder, { foreignKey: { allowNull: false } });
+PurchaseOrder.belongsTo(Organization);
+
+Organization.hasMany(PurchaseOrderLine, { foreignKey: { allowNull: false } });
+PurchaseOrderLine.belongsTo(Organization);
+
+Organization.hasMany(RmaCase, { foreignKey: { allowNull: false } });
+RmaCase.belongsTo(Organization);
+
+Organization.hasMany(RmaItem, { foreignKey: { allowNull: false } });
+RmaItem.belongsTo(Organization);
+
+Organization.hasMany(Setting, { foreignKey: { allowNull: false } });
+Setting.belongsTo(Organization);
+
 Location.hasMany(Bin, { onDelete: 'CASCADE' });
 Bin.belongsTo(Location);
 

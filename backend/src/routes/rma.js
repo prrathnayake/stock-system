@@ -10,7 +10,7 @@ const STATUS_FLOW = ['draft','submitted','in_review','credited','closed'];
 export default function createRmaRoutes(io) {
   const router = Router();
 
-router.get('/', requireAuth(['admin','user']), asyncHandler(async (_req, res) => {
+  router.get('/', requireAuth(['admin','user']), asyncHandler(async (_req, res) => {
     const cases = await RmaCase.findAll({
       include: [Supplier, WorkOrder, { model: RmaItem, as: 'items', include: [Product, SerialNumber] }],
       order: [['createdAt', 'DESC']]
@@ -26,7 +26,7 @@ router.get('/', requireAuth(['admin','user']), asyncHandler(async (_req, res) =>
     notes: z.string().optional()
   });
 
-router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = CreateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -60,7 +60,7 @@ router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) =>
     credit_amount: z.number().nonnegative().optional()
   });
 
-router.post('/:id/items', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+  router.post('/:id/items', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = AddItemSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -93,7 +93,7 @@ router.post('/:id/items', requireAuth(['admin','user']), asyncHandler(async (req
       credit_amount: parsed.data.credit_amount || 0
     });
 
-    io.emit('rma:update', { rma_id: rma.id, action: 'item-added' });
+    io.emit('rma:update', { rma_id: rma.id, action: 'item-added', organization_id: req.user.organization_id });
     res.status(201).json(item);
   }));
 
@@ -103,7 +103,7 @@ router.post('/:id/items', requireAuth(['admin','user']), asyncHandler(async (req
     credit_amount: z.number().nonnegative().optional()
   });
 
-router.patch('/:id/status', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+  router.patch('/:id/status', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = StatusSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -127,7 +127,7 @@ router.patch('/:id/status', requireAuth(['admin','user']), asyncHandler(async (r
     }
     await rma.save();
 
-    io.emit('rma:update', { rma_id: rma.id, status: rma.status });
+    io.emit('rma:update', { rma_id: rma.id, status: rma.status, organization_id: req.user.organization_id });
     res.json(rma);
   }));
 
