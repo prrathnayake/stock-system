@@ -1,93 +1,128 @@
 # Repair Center Stock System
 
-A production-ready inventory and work-order management platform designed for repair centers. It ships with hardened APIs, a professional multi-page dashboard, live stock telemetry and scanning workflows.
+A full-stack inventory and work-order management platform for device repair centers. The solution pairs a hardened Express API with a real-time, offline-capable React dashboard and can be deployed locally or in containers.
 
-## Architecture
+## Table of Contents
+- [Architecture at a Glance](#architecture-at-a-glance)
+  - [Backend (Node.js / Express)](#backend-nodejs--express)
+  - [Frontend (React + Vite)](#frontend-react--vite)
+  - [Infrastructure & Operations](#infrastructure--operations)
+  - [Documentation](#documentation)
+- [Getting Started](#getting-started)
+  - [Quick Start with Docker](#quick-start-with-docker)
+  - [Local Development](#local-development)
+- [Environment Configuration](#environment-configuration)
+  - [Backend `.env`](#backend-env)
+  - [Frontend `.env`](#frontend-env)
+- [Operational Workflows](#operational-workflows)
+- [Quality Checks](#quality-checks)
+- [Next Steps](#next-steps)
 
-- **Backend**: Node.js (Express + Sequelize + MySQL), JWT auth, Socket.IO, Zod validation, structured error handling.
-- **Frontend**: React (Vite) with React Router, React Query, Axios interceptors, QR/Barcode scanning.
-- **DevOps**: Docker Compose services, `.env` driven configuration, centralised logging.
+## Architecture at a Glance
+
+### Backend (Node.js / Express)
+- Secure Express application configured with Helmet, CORS, rate limiting, compression and structured error handling to keep APIs production-ready out of the box.
+- JWT-based authentication with rotating secrets, refresh token support, and role-aware route protection.
+- Socket.IO server broadcasts live stock and work-order updates, while the API emits low-stock alerts from asynchronous queue workers.
+- Redis-backed caching and BullMQ queue infrastructure drive fast dashboard responses and scheduled low-stock scans.
+- Automated MySQL backups with configurable schedules and retention policies ensure disaster recovery coverage.
+
+### Frontend (React + Vite)
+- React 18 app bootstrapped with Vite and React Router, with React Query powering data fetching and caching.
+- Auth provider and Axios interceptors coordinate token refresh, while failed mutations are queued offline in IndexedDB until connectivity is restored.
+- Progressive Web App enhancements via a service worker deliver shell caching, API response caching, and background queue flushing on reconnect.
+- Built-in QR/Barcode scanning workflow lets technicians scan parts directly from the browser.
+
+### Infrastructure & Operations
+- `docker-compose.yml` provisions MySQL, Redis, backend, and frontend services with shared environment files and live-reload volume mounts for development.
+- Backend and frontend images are also individually buildable through their respective `Dockerfile`s for production pipelines.
+
+### Documentation
+- `docs/FEATURE_AUDIT.md` summarises shipped capabilities and areas for future investment.
+- `docs/LEGAL-REQUIREMENTS.md` is a placeholder for jurisdiction-specific compliance and customer-facing policies.
 
 ## Getting Started
 
-### With Docker
-
-```bash
-docker compose up -d --build
-```
-
-Services:
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8080/health
-- MySQL: localhost:3307 (root/rootpassword)
+### Quick Start with Docker
+1. Create `backend/.env` and `frontend/.env` using the values in [Environment Configuration](#environment-configuration).
+2. Build and start the full stack:
+   ```bash
+   docker compose up -d --build
+   ```
+3. Access the services:
+   - Frontend: http://localhost:5173
+   - Backend health check: http://localhost:8080/health
+   - MySQL: `localhost:3307` (root/rootpassword)
+   - Redis: `localhost:6379`
 
 ### Local Development
 
-1. Provision a MySQL database (default schema `repair_center`).
-2. Configure environment variables (see below) in `backend/.env` and `frontend/.env`.
-3. Start the backend:
+#### Backend
+1. Install dependencies:
    ```bash
    cd backend
    npm install
+   ```
+2. Run database migrations/seed data if required:
+   ```bash
+   npm run seed
+   ```
+3. Start the development server:
+   ```bash
    npm run dev
    ```
-4. Start the frontend:
+
+#### Frontend
+1. Install dependencies:
    ```bash
    cd frontend
    npm install
+   ```
+2. Launch the Vite dev server:
+   ```bash
    npm run dev
    ```
+3. The dashboard runs at http://localhost:5173 with automatic token refresh and live updates when the backend is online.
 
-Login with the seeded credentials (development only): **admin@example.com / admin123**.
+Development credentials (for seed data): `admin@example.com / admin123`.
 
-## Environment Variables
+## Environment Configuration
 
-Create a `.env` file in `backend/` with:
+### Backend `.env`
+| Variable | Description | Default |
+| --- | --- | --- |
+| `PORT` | API port | `8080` |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASS` | MySQL connection settings | `127.0.0.1` / `3306` / `repair_center` / `appuser` / `appsecret` |
+| `JWT_SECRETS` / `JWT_SECRET_IDS` | Comma-separated secrets & key IDs for signing access tokens | Falls back to `JWT_SECRET` or `dev` |
+| `REFRESH_SECRETS` / `REFRESH_SECRET_IDS` | Secrets & key IDs for refresh token rotation | Falls back to `REFRESH_SECRET` or `devrefresh` |
+| `JWT_EXPIRES` / `REFRESH_EXPIRES` | Token lifetimes | `15m` / `7d` |
+| `CORS_ORIGIN` | Allowed frontend origin(s) | `http://localhost:5173` |
+| `REDIS_URL` | Redis connection string | `redis://127.0.0.1:6379` |
+| `STOCK_OVERVIEW_CACHE_TTL` | Cache duration (seconds) for stock overview API | `30` |
+| `TLS_ENABLED` / `TLS_KEY_PATH` / `TLS_CERT_PATH` / `TLS_CA_PATH` | Optional HTTPS configuration | Disabled by default |
+| `BACKUP_ENABLED` / `BACKUP_SCHEDULE` / `BACKUP_DIRECTORY` / `BACKUP_RETAIN_DAYS` | Automated backup toggle, cron schedule, storage directory, retention window | Disabled / `0 3 * * *` / `backups` / `14` |
 
-```
-PORT=8080
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_NAME=repair_center
-DB_USER=appuser
-DB_PASS=appsecret
-JWT_SECRET=<change-me>
-REFRESH_SECRET=<change-me-too>
-CORS_ORIGIN=http://localhost:5173
-```
+Production deployments must supply non-default JWT and refresh secrets. TLS and backup settings are validated when `NODE_ENV=production`.
 
-In production you **must** set unique `JWT_SECRET` and `REFRESH_SECRET`; the server refuses to boot otherwise.
+### Frontend `.env`
+| Variable | Description | Example |
+| --- | --- | --- |
+| `VITE_API_URL` | Base URL for API requests | `http://localhost:8080` |
+| `VITE_SOCKET_URL` | Socket.IO endpoint | `http://localhost:8080` |
 
-Frontend `.env`:
+## Operational Workflows
+- **Real-time dashboard updates**: Stock and work-order routes emit Socket.IO events that keep dashboards synchronised without manual refresh.
+- **Low-stock monitoring**: The BullMQ worker performs recurring stock scans and emits alerts when thresholds are breached.
+- **Disaster recovery**: Scheduled MySQL dumps create rolling backups with automatic pruning based on retention rules.
+- **Offline-ready field operations**: Service worker caching and the offline request queue allow technicians to continue scanning and recording work even when connectivity is intermittent.
 
-```
-VITE_API_URL=http://localhost:8080
-VITE_SOCKET_URL=http://localhost:8080
-```
+## Quality Checks
+- Backend scripts: `npm run dev`, `npm start`, `npm run seed`
+- Frontend scripts: `npm run dev`, `npm run build`, `npm run preview`
 
-## Key Features
+Run `npm run build` in both `backend/` and `frontend/` before deploying to verify production builds succeed.
 
-- Centralised Express app with rate limiting, Helmet, compression and structured error responses.
-- Sequelize models with transactional stock movements and work-order part reservation workflows.
-- Auth routes secured with JWTs, refresh token rotation and login throttling.
-- `/stock/overview` endpoint powering dashboard KPIs, including recent activity feed.
-- Responsive React UI with sidebar navigation, analytics dashboard, inventory explorer, Kanban-style work orders and scanning guide.
-- Axios interceptor automatically refreshes access tokens when the refresh token is valid.
-- `docs/LEGAL-REQUIREMENTS.md` placeholder for jurisdiction-specific legal documents.
-
-## Testing & Quality
-
-- Run `npm run build` in both `backend/` and `frontend/` to ensure production builds succeed.
-- API input is validated with Zod schemas; unexpected errors bubble to a JSON error handler.
-- Socket.IO broadcasts keep the dashboard in sync with stock changes.
-
-## Deployment Checklist
-
-- Replace all default secrets and database credentials.
-- Configure HTTPS termination (e.g. via reverse proxy).
-- Populate the legal/compliance documents inside the `docs/` directory.
-- Add production-grade logging/monitoring (e.g. CloudWatch, ELK).
-
-## Legal Notice
-
-This repository ships with scaffolding only. Add your Terms of Service, Privacy Policy and any required consent forms before onboarding real customers.
+## Next Steps
+- Extend observability with structured logging, metrics, and alerting.
+- Complete the legal and compliance documents in `docs/` before onboarding customers.
+- Integrate notification channels (email/SMS/Slack) using the existing settings and queue infrastructure.
