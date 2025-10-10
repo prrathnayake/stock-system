@@ -313,11 +313,101 @@ async function ensureLegacyLocationsHaveOrganization() {
   }
 }
 
+async function ensureLegacyBinsHaveOrganization() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tables = await queryInterface.showAllTables();
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('bins')) {
+    return;
+  }
+
+  let columns;
+  try {
+    columns = await queryInterface.describeTable('bins');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  if (columns.organization_id || columns.organizationId) {
+    return;
+  }
+
+  if (!normalizedTables.includes('organizations')) {
+    await Organization.sync();
+  }
+
+  const transaction = await sequelize.transaction();
+  try {
+    const organization = await ensureDefaultOrganization(transaction);
+
+    await queryInterface.addColumn('bins', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    const hasLocationsTable = normalizedTables.includes('locations');
+    let locationColumns;
+    if (hasLocationsTable) {
+      try {
+        locationColumns = await queryInterface.describeTable('locations');
+      } catch (error) {
+        if (error?.original?.code !== 'ER_NO_SUCH_TABLE') {
+          throw error;
+        }
+      }
+    }
+
+    if (locationColumns?.organization_id || locationColumns?.organizationId) {
+      await sequelize.query(
+        'UPDATE `bins` SET `organization_id` = (SELECT `organization_id` FROM `locations` WHERE `locations`.`id` = `bins`.`location_id`) WHERE (`organization_id` IS NULL OR `organization_id` = 0) AND `location_id` IS NOT NULL',
+        { transaction }
+      );
+    }
+
+    await sequelize.query(
+      'UPDATE `bins` SET `organization_id` = :organizationId WHERE `organization_id` IS NULL OR `organization_id` = 0',
+      {
+        replacements: { organizationId: organization.id },
+        transaction
+      }
+    );
+
+    await queryInterface.changeColumn('bins', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
 export async function initialiseDatabase() {
   await waitForDatabaseConnection();
   await ensureLegacyProductsHaveOrganization();
   await ensureLegacyUsersHaveOrganization();
   await ensureLegacyLocationsHaveOrganization();
+  await ensureLegacyBinsHaveOrganization();
   await cleanupDuplicateOrganizationSlugIndexes();
   await sequelize.sync({ alter: true });
 
