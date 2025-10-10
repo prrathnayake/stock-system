@@ -1,12 +1,45 @@
-import { openDB } from 'idb';
-
-const DB_NAME = 'rc-offline';
-const STORE_NAME = 'requests';
+const STORAGE_KEY = 'rc-offline-queue';
 
 let apiClient = null;
+let inMemoryQueue = [];
+let storageAvailable = null;
 
-export function setQueueClient(client) {
-  apiClient = client;
+function supportsStorage() {
+  if (storageAvailable !== null) return storageAvailable;
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      storageAvailable = false;
+    } else {
+      const testKey = '__rc_queue_test__';
+      window.localStorage.setItem(testKey, '1');
+      window.localStorage.removeItem(testKey);
+      storageAvailable = true;
+    }
+  } catch (err) {
+    storageAvailable = false;
+  }
+  return storageAvailable;
+}
+
+function loadQueue() {
+  if (!supportsStorage()) return inMemoryQueue;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    inMemoryQueue = raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    inMemoryQueue = [];
+  }
+  return inMemoryQueue;
+}
+
+function saveQueue() {
+  if (!supportsStorage()) return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(inMemoryQueue));
+  } catch (err) {
+    // storage might be full or unavailable, fallback to in-memory
+    storageAvailable = false;
+  }
 }
 
 function serialiseHeaders(headers) {
@@ -17,38 +50,38 @@ function serialiseHeaders(headers) {
   return { ...headers };
 }
 
-async function getDb() {
-  return openDB(DB_NAME, 1, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
-      }
-    }
-  });
+function ensureQueueLoaded() {
+  if (inMemoryQueue.length === 0 && supportsStorage()) {
+    loadQueue();
+  }
+}
+
+export function setQueueClient(client) {
+  apiClient = client;
 }
 
 export async function enqueueRequest(config) {
-  const db = await getDb();
+  ensureQueueLoaded();
   const entry = {
+    id: Date.now() + Math.random(),
     method: config.method,
     url: config.url,
     data: config.data,
     headers: serialiseHeaders(config.headers),
     createdAt: Date.now()
   };
-  await db.add(STORE_NAME, entry);
+  inMemoryQueue.push(entry);
+  saveQueue();
   return entry;
 }
 
 export async function flushQueue() {
   if (!apiClient) return [];
-  const db = await getDb();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.store;
-  let cursor = await store.openCursor();
+  ensureQueueLoaded();
   const results = [];
-  while (cursor) {
-    const entry = cursor.value;
+
+  while (inMemoryQueue.length > 0) {
+    const entry = inMemoryQueue[0];
     try {
       await apiClient({
         method: entry.method,
@@ -56,26 +89,23 @@ export async function flushQueue() {
         data: entry.data,
         headers: entry.headers
       });
-      await cursor.delete();
-      results.push({ id: cursor.key, ok: true });
+      results.push({ id: entry.id, ok: true });
+      inMemoryQueue.shift();
+      saveQueue();
     } catch (err) {
-      if (!navigator.onLine) {
-        // stop processing when offline again
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         break;
       }
-      results.push({ id: cursor.key, ok: false, error: err });
-      await cursor.delete();
+      results.push({ id: entry.id, ok: false, error: err });
+      inMemoryQueue.shift();
+      saveQueue();
     }
-    cursor = await cursor.continue();
   }
-  await tx.done;
+
   return results;
 }
 
 export async function getQueuedCount() {
-  const db = await getDb();
-  const tx = db.transaction(STORE_NAME, 'readonly');
-  const count = await tx.store.count();
-  await tx.done;
-  return count;
+  ensureQueueLoaded();
+  return inMemoryQueue.length;
 }
