@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { WorkOrder, WorkOrderPart, Product, StockLevel } from '../db.js';
+import { WorkOrder, WorkOrderPart, Product, StockLevel, StockMove } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
+import { invalidateStockOverviewCache } from '../services/cache.js';
+import { enqueueLowStockScan } from '../queues/lowStock.js';
 
 export default function createWorkOrderRoutes(io) {
   const router = Router();
@@ -63,7 +65,7 @@ export default function createWorkOrderRoutes(io) {
 
     await StockLevel.sequelize.transaction(async (t) => {
       for (const item of parsed.data.items) {
-        const part = await WorkOrderPart.findByPk(item.part_id);
+        const part = await WorkOrderPart.findByPk(item.part_id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!part) throw new HttpError(404, 'Part not found');
         if (part.workOrderId !== wo.id) {
           throw new HttpError(400, 'Part does not belong to this work order');
@@ -79,6 +81,17 @@ export default function createWorkOrderRoutes(io) {
           const take = Math.min(avail, remaining);
           lvl.reserved += take;
           await lvl.save({ transaction: t });
+          if (take > 0) {
+            await StockMove.create({
+              productId: part.productId,
+              qty: take,
+              from_bin_id: lvl.binId,
+              reason: 'reserve',
+              workOrderId: wo.id,
+              workOrderPartId: part.id,
+              performed_by: req.user?.id ?? null
+            }, { transaction: t });
+          }
           remaining -= take;
           if (remaining === 0) break;
         }
@@ -88,6 +101,10 @@ export default function createWorkOrderRoutes(io) {
     });
 
     io.emit('stock:update', { work_order_id: Number(id), hint: 'reserve' });
+    await invalidateStockOverviewCache();
+    enqueueLowStockScan({ delay: 500 }).catch(err => {
+      console.error('[queue] failed to enqueue low stock scan', err);
+    });
     res.json({ ok: true });
   }));
 
@@ -128,9 +145,99 @@ export default function createWorkOrderRoutes(io) {
       part.qty_picked += parsed.data.qty;
       part.qty_reserved -= parsed.data.qty;
       await part.save({ transaction: t });
+
+      await StockMove.create({
+        productId: part.productId,
+        qty: parsed.data.qty,
+        from_bin_id: parsed.data.bin_id,
+        reason: 'pick',
+        workOrderId: wo.id,
+        workOrderPartId: part.id,
+        performed_by: req.user?.id ?? null
+      }, { transaction: t });
     });
 
     io.emit('stock:update', { work_order_id: Number(id), hint: 'pick' });
+    await invalidateStockOverviewCache();
+    enqueueLowStockScan({ delay: 500 }).catch(err => {
+      console.error('[queue] failed to enqueue low stock scan', err);
+    });
+    res.json({ ok: true });
+  }));
+
+  const ReturnSchema = z.object({
+    part_id: z.number().int().positive(),
+    bin_id: z.number().int().positive(),
+    qty: z.number().int().positive(),
+    source: z.enum(['picked', 'reserved']).default('picked')
+  });
+
+  router.post('/:id/return', requireAuth(['inventory','admin','tech']), asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const parsed = ReturnSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
+    }
+
+    const wo = await WorkOrder.findByPk(id);
+    if (!wo) {
+      throw new HttpError(404, 'Work order not found');
+    }
+
+    await StockLevel.sequelize.transaction(async (t) => {
+      const part = await WorkOrderPart.findByPk(parsed.data.part_id, { transaction: t, lock: t.LOCK.UPDATE });
+      if (!part) throw new HttpError(404, 'Part not found');
+      if (part.workOrderId !== wo.id) {
+        throw new HttpError(400, 'Part does not belong to this work order');
+      }
+
+      const lvl = await StockLevel.findOne({ where: { productId: part.productId, binId: parsed.data.bin_id }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!lvl) throw new HttpError(400, 'Bin does not track this product');
+
+      if (parsed.data.source === 'picked') {
+        if (part.qty_picked < parsed.data.qty) {
+          throw new HttpError(400, 'Cannot return more than picked quantity');
+        }
+        part.qty_picked -= parsed.data.qty;
+        lvl.on_hand += parsed.data.qty;
+        await StockMove.create({
+          productId: part.productId,
+          qty: parsed.data.qty,
+          to_bin_id: parsed.data.bin_id,
+          reason: 'return',
+          workOrderId: wo.id,
+          workOrderPartId: part.id,
+          performed_by: req.user?.id ?? null
+        }, { transaction: t });
+      } else {
+        if (part.qty_reserved < parsed.data.qty) {
+          throw new HttpError(400, 'Cannot release more than reserved quantity');
+        }
+        if (lvl.reserved < parsed.data.qty) {
+          throw new HttpError(400, 'Reserved quantity in bin too low');
+        }
+        part.qty_reserved -= parsed.data.qty;
+        lvl.reserved -= parsed.data.qty;
+        await StockMove.create({
+          productId: part.productId,
+          qty: parsed.data.qty,
+          from_bin_id: parsed.data.bin_id,
+          reason: 'release',
+          workOrderId: wo.id,
+          workOrderPartId: part.id,
+          performed_by: req.user?.id ?? null
+        }, { transaction: t });
+      }
+
+      await lvl.save({ transaction: t });
+      await part.save({ transaction: t });
+    });
+
+    io.emit('stock:update', { work_order_id: Number(id), hint: 'return' });
+    await invalidateStockOverviewCache();
+    enqueueLowStockScan({ delay: 500 }).catch(err => {
+      console.error('[queue] failed to enqueue low stock scan', err);
+    });
     res.json({ ok: true });
   }));
 

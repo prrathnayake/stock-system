@@ -5,6 +5,8 @@ import { Product, Bin, Location, StockLevel, StockMove } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
+import { getCachedStockOverview, cacheStockOverview, invalidateStockOverviewCache } from '../services/cache.js';
+import { enqueueLowStockScan } from '../queues/lowStock.js';
 
 export default function createStockRoutes(io) {
   const router = Router();
@@ -58,6 +60,11 @@ export default function createStockRoutes(io) {
   }));
 
   router.get('/overview', requireAuth(), asyncHandler(async (_req, res) => {
+    const cached = await getCachedStockOverview();
+    if (cached) {
+      return res.json(cached);
+    }
+
     const products = await Product.findAll({
       where: { active: true },
       include: [{
@@ -88,7 +95,7 @@ export default function createStockRoutes(io) {
       include: [Product]
     });
 
-    res.json({
+    const payload = {
       productCount: products.length,
       lowStockCount,
       reservedCount,
@@ -99,12 +106,15 @@ export default function createStockRoutes(io) {
         reason: move.reason,
         occurredAt: move.createdAt
       }))
-    });
+    };
+
+    await cacheStockOverview(payload);
+    res.json(payload);
   }));
 
   const MoveSchema = z.object({
     product_id: z.number().int().positive(),
-    qty: z.number().int().nonnegative(),
+    qty: z.number().int().positive(),
     from_bin_id: z.number().int().positive().nullable(),
     to_bin_id: z.number().int().positive().nullable(),
     reason: z.enum(['receive','adjust','pick','return','transfer'])
@@ -164,7 +174,8 @@ export default function createStockRoutes(io) {
         qty,
         from_bin_id,
         to_bin_id,
-        reason
+        reason,
+        performed_by: req.user?.id ?? null
       }, { transaction: t });
 
       return move;
@@ -172,6 +183,10 @@ export default function createStockRoutes(io) {
 
     // Broadcast update
     io.emit('stock:update', { product_id, hint: 'move' });
+    await invalidateStockOverviewCache();
+    enqueueLowStockScan({ delay: 500 }).catch(err => {
+      console.error('[queue] failed to enqueue low stock scan', err);
+    });
     res.status(201).json({ ok: true, move: result });
   }));
 

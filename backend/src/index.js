@@ -3,6 +3,7 @@ import { Server as IOServer } from 'socket.io';
 import { config } from './config.js';
 import { createApp, registerRoutes } from './app.js';
 import { initialiseDatabase } from './startup/bootstrap.js';
+import { initLowStockQueue } from './queues/lowStock.js';
 
 const app = createApp();
 const server = createServer(app);
@@ -14,6 +15,7 @@ registerRoutes(app, io);
 
 (async () => {
   await initialiseDatabase();
+  await initLowStockQueue(io);
   server.listen(config.port, () => console.log(`API listening on :${config.port}`));
 })().catch(err => {
   console.error(err);

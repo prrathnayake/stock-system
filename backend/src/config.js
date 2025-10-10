@@ -16,7 +16,13 @@ export const config = {
     refreshSecret: process.env.REFRESH_SECRET || 'devrefresh',
     refreshExpires: process.env.REFRESH_EXPIRES || '7d'
   },
-  corsOrigin: process.env.CORS_ORIGIN || '*'
+  corsOrigin: process.env.CORS_ORIGIN || '*',
+  redis: {
+    url: process.env.REDIS_URL || 'redis://127.0.0.1:6379'
+  },
+  cache: {
+    stockOverviewTtl: Number(process.env.STOCK_OVERVIEW_CACHE_TTL || 30)
+  }
 };
 
 if (config.env === 'production') {

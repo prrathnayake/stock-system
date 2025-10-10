@@ -48,7 +48,8 @@ export const StockLevel = sequelize.define('stock_level', {
 
 export const StockMove = sequelize.define('stock_move', {
   qty: { type: DataTypes.INTEGER, allowNull: false },
-  reason: { type: DataTypes.ENUM('receive','adjust','pick','return','transfer'), allowNull: false }
+  reason: { type: DataTypes.ENUM('receive','adjust','pick','return','transfer','reserve','release'), allowNull: false },
+  performed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true }
 });
 
 export const WorkOrder = sequelize.define('work_order', {
@@ -80,6 +81,13 @@ WorkOrder.hasMany(WorkOrderPart);
 WorkOrderPart.belongsTo(WorkOrder);
 Product.hasMany(WorkOrderPart);
 WorkOrderPart.belongsTo(Product);
+
+User.hasMany(StockMove, { foreignKey: 'performed_by' });
+StockMove.belongsTo(User, { as: 'performedBy', foreignKey: 'performed_by' });
+WorkOrder.hasMany(StockMove);
+StockMove.belongsTo(WorkOrder);
+WorkOrderPart.hasMany(StockMove);
+StockMove.belongsTo(WorkOrderPart);
 
 // Utility
 export async function withTransaction(cb) {

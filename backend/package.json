@@ -17,6 +17,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "bullmq": "^4.13.0",
+    "ioredis": "^5.4.1",
     "mysql2": "^3.11.0",
     "sequelize": "^6.37.3",
     "socket.io": "^4.8.1",
