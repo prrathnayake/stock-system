@@ -76,7 +76,10 @@ export default function AppRouter() {
         >
           <Route index element={<Dashboard />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="work-orders" element={<WorkOrders />} />
+          <Route
+            path="work-orders"
+            element={<RoleRoute roles={['admin']}><WorkOrders /></RoleRoute>}
+          />
           <Route path="scan" element={<Scan />} />
           <Route
             path="settings"

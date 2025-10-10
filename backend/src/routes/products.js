@@ -22,7 +22,7 @@ router.get('/', requireAuth(), asyncHandler(async (_req, res) => {
   res.json(products);
 }));
 
-router.post('/', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
   const parse = ProductSchema.safeParse(req.body);
   if (!parse.success) {
     throw new HttpError(400, 'Invalid request payload', parse.error.flatten());

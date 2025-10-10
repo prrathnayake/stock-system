@@ -9,20 +9,22 @@ import { normalizeEmail } from '../utils/normalizeEmail.js';
 
 const router = Router();
 
-const RolesEnum = z.enum(['tech', 'inventory', 'desk', 'admin']);
+const RolesEnum = z.enum(['admin', 'user']);
 
 const CreateUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required'),
   email: z.string().email('Valid email is required'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
-  role: RolesEnum.default('tech')
+  role: RolesEnum.default('user'),
+  must_change_password: z.boolean().optional()
 });
 
 const UpdateUserSchema = z.object({
   full_name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   password: z.string().min(8).optional(),
-  role: RolesEnum.optional()
+  role: RolesEnum.optional(),
+  must_change_password: z.boolean().optional()
 }).refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field must be provided'
 });
@@ -49,14 +51,20 @@ router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
   }
-  const { full_name, email, password, role } = parsed.data;
+  const { full_name, email, password, role, must_change_password } = parsed.data;
   const normalizedEmail = normalizeEmail(email);
   const existing = await User.findOne({ where: { email: normalizedEmail } });
   if (existing) {
     throw new HttpError(409, 'A user with that email already exists');
   }
   const password_hash = await bcrypt.hash(password, 12);
-  const created = await User.create({ full_name, email: normalizedEmail, password_hash, role });
+  const created = await User.create({
+    full_name,
+    email: normalizedEmail,
+    password_hash,
+    role,
+    must_change_password: must_change_password ?? false
+  });
   res.status(201).json(presentUser(created));
 }));
 
