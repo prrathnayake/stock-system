@@ -185,7 +185,19 @@ export const WorkOrder = sequelize.define('work_order', {
   device_info: { type: DataTypes.STRING, allowNull: false },
   device_serial: { type: DataTypes.STRING },
   priority: { type: DataTypes.ENUM('low','normal','high','urgent'), defaultValue: 'normal' },
-  status: { type: DataTypes.ENUM('intake','diagnostics','awaiting_approval','approved','in_progress','awaiting_parts','completed','canceled'), defaultValue: 'intake' },
+  status: {
+    type: DataTypes.ENUM(
+      'intake',
+      'diagnostics',
+      'awaiting_approval',
+      'approved',
+      'in_progress',
+      'awaiting_parts',
+      'completed',
+      'canceled'
+    ),
+    defaultValue: 'intake'
+  },
   intake_notes: { type: DataTypes.TEXT },
   diagnostic_findings: { type: DataTypes.TEXT },
   sla_due_at: { type: DataTypes.DATE },
@@ -368,11 +380,17 @@ Bin.belongsTo(Location);
 
 Product.belongsToMany(Bin, { through: StockLevel });
 Bin.belongsToMany(Product, { through: StockLevel });
+StockLevel.belongsTo(Product, { foreignKey: { allowNull: false } });
+StockLevel.belongsTo(Bin, { foreignKey: { allowNull: false } });
+Product.hasMany(StockLevel, { foreignKey: { allowNull: false } });
+Bin.hasMany(StockLevel, { foreignKey: { allowNull: false } });
 
 Product.hasMany(StockMove);
 StockMove.belongsTo(Product);
-Bin.hasMany(StockMove, { as: 'fromBin', foreignKey: 'from_bin_id' });
-Bin.hasMany(StockMove, { as: 'toBin', foreignKey: 'to_bin_id' });
+Bin.hasMany(StockMove, { as: 'fromBin', foreignKey: { name: 'from_bin_id', allowNull: true } });
+Bin.hasMany(StockMove, { as: 'toBin', foreignKey: { name: 'to_bin_id', allowNull: true } });
+StockMove.belongsTo(Bin, { as: 'fromBin', foreignKey: { name: 'from_bin_id', allowNull: true } });
+StockMove.belongsTo(Bin, { as: 'toBin', foreignKey: { name: 'to_bin_id', allowNull: true } });
 
 WorkOrder.hasMany(WorkOrderPart);
 WorkOrderPart.belongsTo(WorkOrder);
