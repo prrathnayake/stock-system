@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
+import userRoutes from './routes/users.js';
 import createStockRoutes from './routes/stock.js';
 import createWorkOrderRoutes from './routes/workorders.js';
 import { config } from './config.js';
@@ -32,6 +33,7 @@ export function createApp() {
 
 export function registerRoutes(app, io) {
   app.use('/auth', authRoutes);
+  app.use('/users', userRoutes);
   app.use('/products', productRoutes);
   app.use('/stock', createStockRoutes(io));
   app.use('/work-orders', createWorkOrderRoutes(io));

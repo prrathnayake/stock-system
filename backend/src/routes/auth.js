@@ -7,6 +7,7 @@ import { User } from '../db.js';
 import { config } from '../config.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
 
 const router = Router();
 
@@ -28,7 +29,8 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     throw new HttpError(400, 'Invalid request payload', parse.error.flatten());
   }
   const { email, password } = parse.data;
-  const user = await User.findOne({ where: { email } });
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
     throw new HttpError(401, 'Invalid credentials');
   }
