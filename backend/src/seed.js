@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 (async () => {
   await sequelize.sync({ force: true });
   const hash = await bcrypt.hash('admin123', 10);
-  await User.create({ full_name: 'Admin', email: 'admin@example.com', password_hash: hash, role: 'admin' });
+  await User.create({ full_name: 'Admin', email: 'admin@example.com', password_hash: hash, role: 'admin', must_change_password: true });
   const loc = await Location.create({ site: 'Main', room: 'Store' });
   const binA = await Bin.create({ code: 'A-01', locationId: loc.id });
   const binB = await Bin.create({ code: 'B-01', locationId: loc.id });

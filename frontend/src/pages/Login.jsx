@@ -16,8 +16,12 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(email, password)
-      navigate('/')
+      const loggedIn = await login(email, password)
+      if (loggedIn?.must_change_password) {
+        navigate('/first-login')
+      } else {
+        navigate('/')
+      }
     } catch (e) {
       setError(e.response?.data?.error || 'Login failed')
     } finally {

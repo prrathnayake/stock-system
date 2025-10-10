@@ -1,12 +1,17 @@
 import { verifyAccessToken } from '../services/tokenService.js';
 
-export function requireAuth(roles = []) {
+export function requireAuth(roles = [], options = {}) {
+  const { allowIfMustChangePassword = false } = options;
+
   return (req, res, next) => {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     if (!token) return res.status(401).json({ error: 'Missing token' });
     try {
       const payload = verifyAccessToken(token);
+      if (payload.must_change_password && !allowIfMustChangePassword) {
+        return res.status(403).json({ error: 'Password change required' });
+      }
       if (roles.length && !roles.includes(payload.role)) return res.status(403).json({ error: 'Forbidden' });
       req.user = payload;
       next();
