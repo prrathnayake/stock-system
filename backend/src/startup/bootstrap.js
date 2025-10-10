@@ -402,12 +402,125 @@ async function ensureLegacyBinsHaveOrganization() {
   }
 }
 
+async function ensureLegacyStockLevelsHaveOrganization() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tables = await queryInterface.showAllTables();
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('stock_levels')) {
+    return;
+  }
+
+  let columns;
+  try {
+    columns = await queryInterface.describeTable('stock_levels');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  if (columns.organization_id || columns.organizationId) {
+    return;
+  }
+
+  if (!normalizedTables.includes('organizations')) {
+    await Organization.sync();
+  }
+
+  const transaction = await sequelize.transaction();
+  try {
+    const organization = await ensureDefaultOrganization(transaction);
+
+    await queryInterface.addColumn('stock_levels', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    let binColumns;
+    if (normalizedTables.includes('bins')) {
+      try {
+        binColumns = await queryInterface.describeTable('bins');
+      } catch (error) {
+        if (error?.original?.code !== 'ER_NO_SUCH_TABLE') {
+          throw error;
+        }
+      }
+    }
+
+    if (binColumns?.organization_id || binColumns?.organizationId) {
+      await sequelize.query(
+        'UPDATE `stock_levels` AS `sl`\n' +
+        'JOIN `bins` AS `b` ON `sl`.`bin_id` = `b`.`id`\n' +
+        'SET `sl`.`organization_id` = `b`.`organization_id`\n' +
+        'WHERE (`sl`.`organization_id` IS NULL OR `sl`.`organization_id` = 0) AND `sl`.`bin_id` IS NOT NULL',
+        { transaction }
+      );
+    }
+
+    let productColumns;
+    if (normalizedTables.includes('products')) {
+      try {
+        productColumns = await queryInterface.describeTable('products');
+      } catch (error) {
+        if (error?.original?.code !== 'ER_NO_SUCH_TABLE') {
+          throw error;
+        }
+      }
+    }
+
+    if (productColumns?.organization_id || productColumns?.organizationId) {
+      await sequelize.query(
+        'UPDATE `stock_levels` AS `sl`\n' +
+        'JOIN `products` AS `p` ON `sl`.`product_id` = `p`.`id`\n' +
+        'SET `sl`.`organization_id` = `p`.`organization_id`\n' +
+        'WHERE (`sl`.`organization_id` IS NULL OR `sl`.`organization_id` = 0) AND `sl`.`product_id` IS NOT NULL',
+        { transaction }
+      );
+    }
+
+    await sequelize.query(
+      'UPDATE `stock_levels` SET `organization_id` = :organizationId WHERE `organization_id` IS NULL OR `organization_id` = 0',
+      {
+        replacements: { organizationId: organization.id },
+        transaction
+      }
+    );
+
+    await queryInterface.changeColumn('stock_levels', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
 export async function initialiseDatabase() {
   await waitForDatabaseConnection();
   await ensureLegacyProductsHaveOrganization();
   await ensureLegacyUsersHaveOrganization();
   await ensureLegacyLocationsHaveOrganization();
   await ensureLegacyBinsHaveOrganization();
+  await ensureLegacyStockLevelsHaveOrganization();
   await cleanupDuplicateOrganizationSlugIndexes();
   await sequelize.sync({ alter: true });
 
