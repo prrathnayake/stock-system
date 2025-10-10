@@ -41,6 +41,71 @@ async function ensureDefaultOrganization(transaction) {
   return organization;
 }
 
+async function cleanupDuplicateOrganizationSlugIndexes() {
+  const queryInterface = sequelize.getQueryInterface();
+  let tables;
+  try {
+    tables = await queryInterface.showAllTables();
+  } catch (error) {
+    console.warn(`Unable to list tables while cleaning organization slug indexes: ${error.message}`);
+    return;
+  }
+
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('organizations')) {
+    return;
+  }
+
+  let indexes;
+  try {
+    indexes = await queryInterface.showIndex('organizations');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  const slugIndexes = Array.isArray(indexes)
+    ? indexes.filter((index) => {
+      if (!index.unique || !Array.isArray(index.fields) || index.fields.length !== 1) {
+        return false;
+      }
+
+      const field = index.fields[0];
+      const fieldName = normalizeTableName(
+        field.attribute ?? field.name ?? field.columnName ?? field.column_name
+      );
+      return fieldName === 'slug';
+    })
+    : [];
+
+  if (slugIndexes.length <= 1) {
+    return;
+  }
+
+  const [indexToKeep, ...indexesToDrop] = slugIndexes.sort((a, b) => {
+    const nameA = (a.name ?? '').toLowerCase();
+    const nameB = (b.name ?? '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  for (const index of indexesToDrop) {
+    if (!index?.name || index.name === indexToKeep?.name) {
+      continue;
+    }
+
+    try {
+      await queryInterface.removeIndex('organizations', index.name);
+    } catch (error) {
+      console.warn(`Failed to remove duplicate organization slug index ${index.name}: ${error.message}`);
+    }
+  }
+}
+
 async function ensureLegacyProductsHaveOrganization() {
   const queryInterface = sequelize.getQueryInterface();
   const tables = await queryInterface.showAllTables();
@@ -253,6 +318,7 @@ export async function initialiseDatabase() {
   await ensureLegacyProductsHaveOrganization();
   await ensureLegacyUsersHaveOrganization();
   await ensureLegacyLocationsHaveOrganization();
+  await cleanupDuplicateOrganizationSlugIndexes();
   await sequelize.sync({ alter: true });
 
   const [organization] = await Organization.findOrCreate({
