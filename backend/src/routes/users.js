@@ -33,6 +33,7 @@ function presentUser(user) {
     full_name: user.full_name,
     email: user.email,
     role: user.role,
+    must_change_password: user.must_change_password,
     created_at: user.createdAt,
     updated_at: user.updatedAt
   };

@@ -1,3 +1,4 @@
+import { DataTypes } from 'sequelize';
 import { sequelize, User, Product, Location, Bin, StockLevel } from '../db.js';
 import { config } from '../config.js';
 
@@ -5,20 +6,31 @@ export async function initialiseDatabase() {
   await sequelize.authenticate();
   await sequelize.sync();
 
-  if (config.env !== 'production') {
-    const users = await User.count();
-    if (users === 0) {
-      const bcrypt = (await import('bcryptjs')).default;
-      const hash = await bcrypt.hash('admin123', 10);
-      await User.create({
-        full_name: 'Admin',
-        email: 'admin@example.com',
-        password_hash: hash,
-        role: 'admin'
-      });
-      console.log('Seeded admin user admin@example.com / admin123');
-    }
+  const qi = sequelize.getQueryInterface();
+  const userTable = await qi.describeTable('users');
+  if (!userTable.must_change_password) {
+    await qi.addColumn('users', 'must_change_password', {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    });
+  }
 
+  const users = await User.count();
+  if (users === 0) {
+    const bcrypt = (await import('bcryptjs')).default;
+    const hash = await bcrypt.hash('admin123', 10);
+    await User.create({
+      full_name: 'Admin',
+      email: 'admin@example.com',
+      password_hash: hash,
+      role: 'admin',
+      must_change_password: true
+    });
+    console.log('Seeded admin user admin@example.com / admin123');
+  }
+
+  if (config.env !== 'production') {
     const locs = await Location.count();
     if (locs === 0) {
       const loc = await Location.create({ site: 'Main', room: 'Store' });

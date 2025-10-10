@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from '../components/AppLayout.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
+import FirstLogin from '../pages/FirstLogin.jsx';
 import Inventory from '../pages/Inventory.jsx';
 import Login from '../pages/Login.jsx';
 import Scan from '../pages/Scan.jsx';
@@ -9,17 +10,29 @@ import Settings from '../pages/Settings.jsx';
 import WorkOrders from '../pages/WorkOrders.jsx';
 import { useAuth } from '../providers/AuthProvider.jsx';
 
-function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+function ProtectedRoute({ children, allowDuringCredentialReset = false }) {
+  const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  if (user?.must_change_password) {
+    if (allowDuringCredentialReset) {
+      return children;
+    }
+    return <Navigate to="/first-login" replace />;
+  }
+  if (allowDuringCredentialReset) {
+    return <Navigate to="/" replace />;
   }
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   if (isAuthenticated) {
+    if (user?.must_change_password) {
+      return <Navigate to="/first-login" replace />;
+    }
     return <Navigate to="/" replace />;
   }
   return children;
@@ -43,6 +56,14 @@ export default function AppRouter() {
             <PublicRoute>
               <Login />
             </PublicRoute>
+          )}
+        />
+        <Route
+          path="/first-login"
+          element={(
+            <ProtectedRoute allowDuringCredentialReset>
+              <FirstLogin />
+            </ProtectedRoute>
           )}
         />
         <Route

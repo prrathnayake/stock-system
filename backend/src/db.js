@@ -15,7 +15,8 @@ export const User = sequelize.define('user', {
   full_name: { type: DataTypes.STRING, allowNull: false },
   email: { type: DataTypes.STRING(191), unique: true, allowNull: false },
   password_hash: { type: DataTypes.STRING, allowNull: false },
-  role: { type: DataTypes.ENUM('tech','inventory','desk','admin'), defaultValue: 'tech' }
+  role: { type: DataTypes.ENUM('tech','inventory','desk','admin'), defaultValue: 'tech' },
+  must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false }
 });
 
 export const Product = sequelize.define('product', {
