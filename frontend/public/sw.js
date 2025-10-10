@@ -22,21 +22,36 @@ self.addEventListener('activate', (event) => {
   self.clients.claim()
 })
 
+async function normalizeResponse(response) {
+  if (!response.redirected) return response
+
+  const headers = new Headers(response.headers)
+  const body = await response.blob()
+
+  return new Response(body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  })
+}
+
 async function cacheFirst(request) {
   const cache = await caches.open(SHELL_CACHE)
   const cached = await cache.match(request)
   if (cached) return cached
   const response = await fetch(request)
-  cache.put(request, response.clone())
-  return response
+  const safeResponse = await normalizeResponse(response)
+  cache.put(request, safeResponse.clone())
+  return safeResponse
 }
 
 async function networkFirst(request) {
   try {
     const response = await fetch(request)
+    const safeResponse = await normalizeResponse(response)
     const cache = await caches.open(DATA_CACHE)
-    cache.put(request, response.clone())
-    return response
+    cache.put(request, safeResponse.clone())
+    return safeResponse
   } catch (err) {
     const cache = await caches.open(DATA_CACHE)
     const cached = await cache.match(request)
