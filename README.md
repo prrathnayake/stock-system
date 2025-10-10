@@ -82,6 +82,9 @@ A full-stack inventory and work-order management platform for device repair cent
    ```bash
    npm run dev
    ```
+   You can also use `npm start`, which is an alias for the same command. Avoid running `node start` directly—Node will try to
+   execute a file named `start` and fail with a "Cannot find module" error because the project relies on npm scripts to bootstrap
+   Vite.
 3. The dashboard runs at http://localhost:5173 with automatic token refresh and live updates when the backend is online.
 
 Development credentials (for seed data): `admin@example.com / admin123`.
