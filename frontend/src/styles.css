@@ -1,0 +1,13 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; font-family: system-ui, Segoe UI, Roboto, Arial;}
+.nav { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #eee; position: sticky; top: 0; background: white; }
+.grow { flex: 1; }
+.container { max-width: 1100px; margin: 16px auto; padding: 0 12px; }
+.card { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 10px 30px -24px rgba(0,0,0,0.2); }
+input, select, button { padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; width: 100%; }
+button { background: #0f172a; color: white; border: none; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; font-size: 12px; }
+@media (max-width:640px) { .nav { flex-wrap: wrap; } }
