@@ -25,6 +25,14 @@ function PublicRoute({ children }) {
   return children;
 }
 
+function RoleRoute({ children, roles }) {
+  const { user } = useAuth();
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -49,7 +57,10 @@ export default function AppRouter() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="work-orders" element={<WorkOrders />} />
           <Route path="scan" element={<Scan />} />
-          <Route path="settings" element={<Settings />} />
+          <Route
+            path="settings"
+            element={(<RoleRoute roles={['admin']}><Settings /></RoleRoute>)}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

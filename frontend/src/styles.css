@@ -276,6 +276,16 @@ button {
   cursor: not-allowed;
 }
 
+.button--small {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.button--ghost {
+  background: transparent;
+  border: 1px solid #cbd5f5;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -284,12 +294,17 @@ button {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   padding: 12px;
   border-radius: 12px;
   border: 1px solid #cbd5f5;
   font: inherit;
   background: #f8fafc;
+}
+
+.field textarea {
+  resize: vertical;
 }
 
 .muted {
@@ -365,6 +380,106 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.workorder-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.workorder-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.workorder-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.workorder-section {
+  margin-top: 12px;
+}
+
+.serial-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.serial {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.16);
+  font-size: 12px;
+}
+
+.serial--faulty {
+  background: rgba(248, 113, 113, 0.2);
+  color: #b91c1c;
+}
+
+.serial--reserved {
+  background: rgba(59, 130, 246, 0.16);
+  color: #1d4ed8;
+}
+
+.serial--picked,
+.serial--assigned {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+
+.serial--returned,
+.serial--released {
+  background: rgba(34, 197, 94, 0.18);
+  color: #047857;
+}
+
+.banner {
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.banner--warning {
+  background: rgba(250, 204, 21, 0.2);
+  color: #b45309;
+}
+
+.banner--info {
+  background: rgba(96, 165, 250, 0.18);
+  color: #1d4ed8;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.field--span {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .checklist {

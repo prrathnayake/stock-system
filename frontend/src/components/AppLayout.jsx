@@ -7,7 +7,7 @@ const navItems = [
   { to: '/inventory', label: 'Inventory' },
   { to: '/work-orders', label: 'Work Orders' },
   { to: '/scan', label: 'Scan' },
-  { to: '/settings', label: 'Settings' }
+  { to: '/settings', label: 'Settings', roles: ['admin'] }
 ];
 
 export default function AppLayout() {
@@ -30,7 +30,9 @@ export default function AppLayout() {
           </div>
         </div>
         <nav className="sidebar__nav">
-          {navItems.map((item) => (
+          {navItems
+            .filter((item) => !item.roles || item.roles.includes(user?.role))
+            .map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

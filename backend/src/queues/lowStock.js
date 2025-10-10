@@ -2,6 +2,7 @@ import { Queue, QueueScheduler, Worker } from 'bullmq';
 import { createRedisConnection } from '../redis/client.js';
 import { Product, Bin, StockLevel } from '../db.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
+import { getSetting } from '../services/settings.js';
 
 const QUEUE_NAME = 'low-stock';
 
@@ -73,7 +74,8 @@ export async function initLowStockQueue(io) {
 
   worker = new Worker(QUEUE_NAME, async () => {
     const snapshot = await calculateLowStockSnapshot();
-    if (snapshot.length > 0 && ioRef) {
+    const alertsEnabled = await getSetting('low_stock_alerts_enabled', true);
+    if (snapshot.length > 0 && ioRef && alertsEnabled !== false) {
       ioRef.emit('alerts:low-stock', snapshot);
     }
     await invalidateStockOverviewCache();
