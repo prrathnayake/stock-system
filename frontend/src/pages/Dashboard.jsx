@@ -9,7 +9,9 @@ const reasonLabels = {
   adjust: 'Adjusted',
   pick: 'Picked',
   return: 'Returned',
-  transfer: 'Transferred'
+  transfer: 'Transferred',
+  reserve: 'Reserved',
+  release: 'Released'
 }
 
 export default function Dashboard() {
@@ -40,8 +42,10 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['stock-dashboard'] })
     }
     socket.on('stock:update', handler)
+    socket.on('alerts:low-stock', handler)
     return () => {
       socket.off('stock:update', handler)
+      socket.off('alerts:low-stock', handler)
     }
   }, [queryClient])
 
