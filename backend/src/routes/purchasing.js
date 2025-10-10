@@ -11,7 +11,7 @@ import { enqueueLowStockScan } from '../queues/lowStock.js';
 export default function createPurchasingRoutes(io) {
   const router = Router();
 
-  router.get('/suppliers', requireAuth(['inventory','admin']), asyncHandler(async (_req, res) => {
+  router.get('/suppliers', requireAuth(['admin','user']), asyncHandler(async (_req, res) => {
     const suppliers = await Supplier.findAll({ order: [['name', 'ASC']] });
     res.json(suppliers);
   }));
@@ -24,7 +24,7 @@ export default function createPurchasingRoutes(io) {
     lead_time_days: z.number().int().nonnegative().optional()
   });
 
-  router.post('/suppliers', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+  router.post('/suppliers', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = SupplierSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -33,7 +33,7 @@ export default function createPurchasingRoutes(io) {
     res.status(201).json(supplier);
   }));
 
-  router.get('/purchase-orders', requireAuth(['inventory','admin']), asyncHandler(async (_req, res) => {
+  router.get('/purchase-orders', requireAuth(['admin','user']), asyncHandler(async (_req, res) => {
     const orders = await PurchaseOrder.findAll({
       include: [{ model: Supplier }, { model: PurchaseOrderLine, as: 'lines', include: [Product] }],
       order: [['createdAt', 'DESC']]
@@ -52,7 +52,7 @@ export default function createPurchasingRoutes(io) {
     })).min(1)
   });
 
-  router.post('/purchase-orders', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+  router.post('/purchase-orders', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = CreatePoSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -95,7 +95,7 @@ export default function createPurchasingRoutes(io) {
     })).min(1)
   });
 
-  router.post('/purchase-orders/:id/receive', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+  router.post('/purchase-orders/:id/receive', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = ReceiveSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());

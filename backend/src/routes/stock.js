@@ -120,7 +120,7 @@ export default function createStockRoutes(io) {
     reason: z.enum(['receive','adjust','pick','return','transfer'])
   });
 
-  router.post('/move', requireAuth(['inventory','admin','tech']), asyncHandler(async (req, res) => {
+  router.post('/move', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = MoveSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());

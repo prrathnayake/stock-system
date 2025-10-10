@@ -21,7 +21,7 @@ import { getSetting } from '../services/settings.js';
 export default function createWorkOrderRoutes(io) {
   const router = Router();
 
-  router.get('/', requireAuth(), asyncHandler(async (_req, res) => {
+  router.get('/', requireAuth(['admin']), asyncHandler(async (_req, res) => {
     const rows = await WorkOrder.findAll({
       include: [
         {
@@ -52,7 +52,7 @@ export default function createWorkOrderRoutes(io) {
     })).default([])
   });
 
-  router.post('/', requireAuth(['desk','admin','inventory']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
     const parsed = CreateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -103,7 +103,7 @@ export default function createWorkOrderRoutes(io) {
     status_note: z.string().optional()
   });
 
-  router.patch('/:id', requireAuth(['desk','admin','inventory','tech']), asyncHandler(async (req, res) => {
+  router.patch('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
     const parsed = UpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -151,7 +151,7 @@ export default function createWorkOrderRoutes(io) {
     }))
   });
 
-  router.post('/:id/reserve', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+  router.post('/:id/reserve', requireAuth(['admin']), asyncHandler(async (req, res) => {
     const { id } = req.params;
     const parsed = ReserveSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -273,7 +273,7 @@ export default function createWorkOrderRoutes(io) {
     serials: z.array(z.number().int().positive()).optional()
   });
 
-  router.post('/:id/pick', requireAuth(['tech','inventory','admin']), asyncHandler(async (req, res) => {
+  router.post('/:id/pick', requireAuth(['admin']), asyncHandler(async (req, res) => {
     const { id } = req.params;
     const parsed = PickSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -392,7 +392,7 @@ export default function createWorkOrderRoutes(io) {
     mark_faulty: z.boolean().optional()
   });
 
-  router.post('/:id/return', requireAuth(['inventory','admin','tech']), asyncHandler(async (req, res) => {
+  router.post('/:id/return', requireAuth(['admin']), asyncHandler(async (req, res) => {
     const { id } = req.params;
     const parsed = ReturnSchema.safeParse(req.body);
     if (!parsed.success) {

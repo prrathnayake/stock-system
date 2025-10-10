@@ -28,7 +28,7 @@ export default function createSerialRoutes(io) {
     metadata: z.record(z.any()).optional()
   });
 
-  router.post('/', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = CreateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -70,7 +70,7 @@ export default function createSerialRoutes(io) {
     note: z.string().optional()
   });
 
-  router.patch('/:id', requireAuth(['inventory','admin']), asyncHandler(async (req, res) => {
+  router.patch('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = UpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
