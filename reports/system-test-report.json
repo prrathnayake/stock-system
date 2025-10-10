@@ -1,0 +1,129 @@
+{
+  "generatedAt": "2025-10-10T07:07:15.225Z",
+  "steps": [
+    {
+      "name": "Health check",
+      "status": "passed"
+    },
+    {
+      "name": "Authenticate admin",
+      "status": "passed"
+    },
+    {
+      "name": "Refresh access token",
+      "status": "passed"
+    },
+    {
+      "name": "Create additional user",
+      "status": "passed"
+    },
+    {
+      "name": "List users",
+      "status": "passed"
+    },
+    {
+      "name": "Create new product",
+      "status": "passed"
+    },
+    {
+      "name": "List products",
+      "status": "passed"
+    },
+    {
+      "name": "View stock summary",
+      "status": "passed"
+    },
+    {
+      "name": "Move stock between bins",
+      "status": "passed"
+    },
+    {
+      "name": "Fetch stock overview dashboard",
+      "status": "passed"
+    },
+    {
+      "name": "Register tracked serial number",
+      "status": "passed"
+    },
+    {
+      "name": "Create supplier",
+      "status": "passed"
+    },
+    {
+      "name": "List suppliers",
+      "status": "passed"
+    },
+    {
+      "name": "Create purchase order",
+      "status": "passed"
+    },
+    {
+      "name": "List purchase orders",
+      "status": "passed"
+    },
+    {
+      "name": "Receive purchase order items",
+      "status": "passed"
+    },
+    {
+      "name": "Create work order",
+      "status": "passed"
+    },
+    {
+      "name": "Prepare work order part id",
+      "status": "passed"
+    },
+    {
+      "name": "Reserve parts for work order",
+      "status": "passed"
+    },
+    {
+      "name": "Pick reserved parts",
+      "status": "passed"
+    },
+    {
+      "name": "Return picked part to stock",
+      "status": "passed"
+    },
+    {
+      "name": "Update work order status",
+      "status": "passed"
+    },
+    {
+      "name": "List serial numbers",
+      "status": "passed"
+    },
+    {
+      "name": "Create RMA case",
+      "status": "passed"
+    },
+    {
+      "name": "Add item to RMA case",
+      "status": "passed"
+    },
+    {
+      "name": "Advance RMA status",
+      "status": "passed"
+    },
+    {
+      "name": "Read application settings",
+      "status": "passed"
+    },
+    {
+      "name": "Update application settings",
+      "status": "passed"
+    },
+    {
+      "name": "List backups",
+      "status": "passed"
+    },
+    {
+      "name": "Trigger manual backup",
+      "status": "passed"
+    },
+    {
+      "name": "Fetch work order list",
+      "status": "passed"
+    }
+  ]
+}

@@ -39,11 +39,13 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
   port: process.env.PORT || 8080,
   db: {
+    dialect: process.env.DB_DIALECT || 'mysql',
     host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT || 3306),
     name: process.env.DB_NAME || 'repair_center',
     user: process.env.DB_USER || 'root',
-    pass: process.env.DB_PASS || ''
+    pass: process.env.DB_PASS || '',
+    storage: process.env.DB_STORAGE || ''
   },
   auth: {
     jwtSecret: jwtSecrets[0],
