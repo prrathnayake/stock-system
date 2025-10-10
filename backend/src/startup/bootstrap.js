@@ -31,6 +31,86 @@ async function waitForDatabaseConnection({ retries = 10, delayMs = 2000 } = {}) 
   }
 }
 
+async function ensureDefaultOrganization(transaction) {
+  const [organization] = await Organization.findOrCreate({
+    where: { slug: 'default' },
+    defaults: { name: 'Default Organization' },
+    transaction
+  });
+
+  return organization;
+}
+
+async function ensureLegacyProductsHaveOrganization() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tables = await queryInterface.showAllTables();
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('products')) {
+    return;
+  }
+
+  let columns;
+  try {
+    columns = await queryInterface.describeTable('products');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  if (columns.organization_id || columns.organizationId) {
+    return;
+  }
+
+  if (!normalizedTables.includes('organizations')) {
+    await Organization.sync();
+  }
+
+  const transaction = await sequelize.transaction();
+  try {
+    const organization = await ensureDefaultOrganization(transaction);
+
+    await queryInterface.addColumn('products', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    await sequelize.query(
+      'UPDATE `products` SET `organization_id` = :organizationId WHERE `organization_id` IS NULL OR `organization_id` = 0',
+      {
+        replacements: { organizationId: organization.id },
+        transaction
+      }
+    );
+
+    await queryInterface.changeColumn('products', 'organization_id', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: { tableName: 'organizations' },
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    }, { transaction });
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
 async function ensureLegacyUsersHaveOrganization() {
   const queryInterface = sequelize.getQueryInterface();
   const tables = await queryInterface.showAllTables();
@@ -62,11 +142,7 @@ async function ensureLegacyUsersHaveOrganization() {
 
   const transaction = await sequelize.transaction();
   try {
-    const [organization] = await Organization.findOrCreate({
-      where: { slug: 'default' },
-      defaults: { name: 'Default Organization' },
-      transaction
-    });
+    const organization = await ensureDefaultOrganization(transaction);
 
     await queryInterface.addColumn('users', 'organization_id', {
       type: DataTypes.INTEGER.UNSIGNED,
@@ -104,6 +180,7 @@ async function ensureLegacyUsersHaveOrganization() {
 
 export async function initialiseDatabase() {
   await waitForDatabaseConnection();
+  await ensureLegacyProductsHaveOrganization();
   await ensureLegacyUsersHaveOrganization();
   await sequelize.sync({ alter: true });
 
