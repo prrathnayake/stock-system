@@ -96,7 +96,7 @@ Development credentials (for seed data): `admin@example.com / admin123`.
 | `JWT_SECRETS` / `JWT_SECRET_IDS` | Comma-separated secrets & key IDs for signing access tokens | Falls back to `JWT_SECRET` or `dev` |
 | `REFRESH_SECRETS` / `REFRESH_SECRET_IDS` | Secrets & key IDs for refresh token rotation | Falls back to `REFRESH_SECRET` or `devrefresh` |
 | `JWT_EXPIRES` / `REFRESH_EXPIRES` | Token lifetimes | `15m` / `7d` |
-| `CORS_ORIGIN` | Allowed frontend origin(s) | `http://localhost:5173` |
+| `CORS_ORIGIN` | Allowed frontend origin(s). Comma separate multiple values or use `*` to reflect any origin. | `http://localhost:5173` |
 | `REDIS_URL` | Redis connection string | `redis://127.0.0.1:6379` |
 | `STOCK_OVERVIEW_CACHE_TTL` | Cache duration (seconds) for stock overview API | `30` |
 | `TLS_ENABLED` / `TLS_KEY_PATH` / `TLS_CERT_PATH` / `TLS_CA_PATH` | Optional HTTPS configuration | Disabled by default |

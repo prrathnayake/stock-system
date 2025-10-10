@@ -10,6 +10,14 @@ const parseSecrets = (value, fallback) => {
   return secrets;
 };
 
+const parseOrigins = (value) => {
+  if (!value) return ['http://localhost:5173'];
+  return value
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+};
+
 const buildKeyIds = (value, secrets) => {
   const ids = value
     ? value.split(',').map(s => s.trim()).filter(Boolean)
@@ -25,6 +33,7 @@ const refreshSecrets = parseSecrets(process.env.REFRESH_SECRETS, [process.env.RE
 
 const jwtKeyIds = buildKeyIds(process.env.JWT_SECRET_IDS, jwtSecrets);
 const refreshKeyIds = buildKeyIds(process.env.REFRESH_SECRET_IDS, refreshSecrets);
+const corsOrigins = parseOrigins(process.env.CORS_ORIGIN);
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
@@ -48,7 +57,10 @@ export const config = {
     refreshKeyIds,
     refreshExpires: process.env.REFRESH_EXPIRES || '7d'
   },
-  corsOrigin: process.env.CORS_ORIGIN || '*',
+  cors: {
+    origins: corsOrigins,
+    allowAll: corsOrigins.includes('*')
+  },
   redis: {
     url: process.env.REDIS_URL || 'redis://127.0.0.1:6379'
   },

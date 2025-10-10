@@ -18,7 +18,16 @@ const server = config.tls.enabled
   }, app)
   : createHttpServer(app);
 const io = new IOServer(server, {
-  cors: { origin: config.corsOrigin, credentials: true }
+  cors: {
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (config.cors.allowAll || config.cors.origins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+  }
 });
 
 registerRoutes(app, io);
