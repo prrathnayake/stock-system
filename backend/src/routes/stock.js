@@ -182,6 +182,13 @@ export default function createStockRoutes(io) {
     reason: z.enum(['receive','adjust','pick','return','transfer'])
   });
 
+  const LevelUpdateSchema = z.object({
+    on_hand: z.number().int().nonnegative().optional(),
+    reserved: z.number().int().nonnegative().optional()
+  }).refine((payload) => typeof payload.on_hand !== 'undefined' || typeof payload.reserved !== 'undefined', {
+    message: 'Provide at least one field to update.'
+  });
+
   router.post('/move', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
     const parsed = MoveSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -261,6 +268,138 @@ export default function createStockRoutes(io) {
     }).catch((error) => {
       console.error('[notify] failed to send inventory adjustment email', error);
     });
+  }));
+
+  router.patch('/:productId/levels', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+    const parsed = LevelUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
+    }
+
+    const productId = Number(req.params.productId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new HttpError(400, 'Invalid product id');
+    }
+
+    const product = await Product.findByPk(productId);
+    if (!product) {
+      throw new HttpError(404, 'Product not found');
+    }
+
+    const result = await StockLevel.sequelize.transaction(async (t) => {
+      const levels = await StockLevel.findAll({
+        where: { productId },
+        order: [['id', 'ASC']],
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+
+      if (levels.length === 0) {
+        throw new HttpError(400, 'Assign this product to a bin before adjusting stock levels.');
+      }
+
+      const current = levels.reduce((acc, level) => {
+        acc.on_hand += level.on_hand;
+        acc.reserved += level.reserved;
+        return acc;
+      }, { on_hand: 0, reserved: 0 });
+
+      const targetOnHand = typeof parsed.data.on_hand === 'number' ? parsed.data.on_hand : current.on_hand;
+      const targetReserved = typeof parsed.data.reserved === 'number' ? parsed.data.reserved : current.reserved;
+
+      if (targetReserved > targetOnHand) {
+        throw new HttpError(400, 'Reserved quantity cannot exceed on-hand quantity.');
+      }
+
+      const onHandDelta = targetOnHand - current.on_hand;
+      const reservedDelta = targetReserved - current.reserved;
+
+      if (onHandDelta > 0) {
+        const primary = levels[0];
+        primary.on_hand += onHandDelta;
+        await primary.save({ transaction: t });
+        await StockMove.create({
+          productId,
+          qty: onHandDelta,
+          from_bin_id: null,
+          to_bin_id: primary.binId,
+          reason: 'adjust',
+          performed_by: req.user?.id ?? null
+        }, { transaction: t });
+      } else if (onHandDelta < 0) {
+        let remaining = -onHandDelta;
+        const ordered = [...levels].sort((a, b) => b.on_hand - a.on_hand);
+        for (const level of ordered) {
+          if (remaining <= 0) break;
+          const take = Math.min(level.on_hand, remaining);
+          if (take <= 0) continue;
+          level.on_hand -= take;
+          if (level.on_hand < 0) {
+            throw new HttpError(400, 'Cannot reduce on-hand below zero.');
+          }
+          await level.save({ transaction: t });
+          await StockMove.create({
+            productId,
+            qty: take,
+            from_bin_id: level.binId,
+            to_bin_id: null,
+            reason: 'adjust',
+            performed_by: req.user?.id ?? null
+          }, { transaction: t });
+          remaining -= take;
+        }
+        if (remaining > 0) {
+          throw new HttpError(400, 'Not enough stock available to remove that quantity.');
+        }
+      }
+
+      if (reservedDelta !== 0) {
+        if (reservedDelta > 0) {
+          let remaining = reservedDelta;
+          const ordered = [...levels].sort((a, b) => (b.on_hand - b.reserved) - (a.on_hand - a.reserved));
+          for (const level of ordered) {
+            if (remaining <= 0) break;
+            const available = level.on_hand - level.reserved;
+            if (available <= 0) continue;
+            const take = Math.min(available, remaining);
+            level.reserved += take;
+            await level.save({ transaction: t });
+            remaining -= take;
+          }
+          if (remaining > 0) {
+            throw new HttpError(400, 'Not enough available stock to reserve that quantity.');
+          }
+        } else {
+          let remaining = -reservedDelta;
+          const ordered = [...levels].sort((a, b) => b.reserved - a.reserved);
+          for (const level of ordered) {
+            if (remaining <= 0) break;
+            const release = Math.min(level.reserved, remaining);
+            if (release <= 0) continue;
+            level.reserved -= release;
+            await level.save({ transaction: t });
+            remaining -= release;
+          }
+          if (remaining > 0) {
+            throw new HttpError(400, 'Reserved quantity cannot go below zero.');
+          }
+        }
+      }
+
+      return {
+        on_hand: targetOnHand,
+        reserved: targetReserved,
+        available: targetOnHand - targetReserved
+      };
+    });
+
+    io.emit('stock:update', { product_id: productId, hint: 'levels', organization_id: req.user.organization_id });
+    await invalidateStockOverviewCache(req.user.organization_id);
+    enqueueLowStockScan({ delay: 500, organizationId: req.user.organization_id }).catch(err => {
+      console.error('[queue] failed to enqueue low stock scan', err);
+    });
+
+    res.json({ ok: true, levels: result });
   }));
 
   return router;
