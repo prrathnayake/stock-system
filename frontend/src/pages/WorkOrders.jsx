@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useAuth } from '../providers/AuthProvider.jsx'
 
 const statusLabels = {
   intake: 'Intake',
@@ -72,17 +73,20 @@ function StatusHistory({ history }) {
 }
 
 export default function WorkOrders() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [statusDraft, setStatusDraft] = useState({})
   const [statusNotes, setStatusNotes] = useState({})
   const [diagnosticDraft, setDiagnosticDraft] = useState({})
   const [banner, setBanner] = useState(null)
 
   const { data = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['work-orders'],
+    queryKey: ['work-orders', user?.role, user?.id],
     queryFn: async () => {
       const { data } = await api.get('/work-orders')
       return data
-    }
+    },
+    enabled: Boolean(user)
   })
 
   const updateMutation = useMutation({
@@ -116,12 +120,14 @@ export default function WorkOrders() {
   }, [data])
 
   const handleStatusSubmit = (order) => {
+    if (!isAdmin) return
     const nextStatus = statusDraft[order.id] || order.status
     const note = statusNotes[order.id] || undefined
     updateMutation.mutate({ id: order.id, payload: { status: nextStatus, status_note: note } })
   }
 
   const handleDiagnosticsSave = (order) => {
+    if (!isAdmin) return
     const draft = diagnosticDraft[order.id]
     if (draft === undefined || draft === order.diagnostic_findings) return
     updateMutation.mutate({ id: order.id, payload: { diagnostic_findings: draft } })
@@ -132,8 +138,12 @@ export default function WorkOrders() {
       <div className="card">
         <div className="card__header">
           <div>
-            <h2>Work orders</h2>
-            <p className="muted">Track repairs from intake through completion, including SLA and warranty insights.</p>
+            <h2>{isAdmin ? 'Work orders' : 'My work orders'}</h2>
+            <p className="muted">
+              {isAdmin
+                ? 'Track repairs from intake through completion, including SLA and warranty insights.'
+                : 'View the repairs assigned to you and monitor progress across each stage.'}
+            </p>
           </div>
           <button className="button" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? 'Refreshing…' : 'Refresh'}
@@ -164,6 +174,14 @@ export default function WorkOrders() {
                         <div className="workorder-meta">
                           <span className="badge">{priorityLabels[order.priority] || 'Normal'}</span>
                           {order.device_serial && <span className="badge badge--muted">SN {order.device_serial}</span>}
+                          {isAdmin && order.assignee && (
+                            <span className="badge badge--muted">
+                              Assigned to {order.assignee.full_name || order.assignee.email}
+                            </span>
+                          )}
+                          {!isAdmin && (
+                            <span className="badge badge--info">Assigned to you</span>
+                          )}
                           {slaDue && (
                             <span className={`badge ${slaBreached ? 'badge--danger' : 'badge--info'}`}>
                               SLA {slaBreached ? 'breached' : 'due'} {slaDue.toLocaleString()}
@@ -173,52 +191,64 @@ export default function WorkOrders() {
                             <span className="badge badge--success">Warranty {warrantyExpires.toLocaleDateString()}</span>
                           )}
                         </div>
-                        <div className="workorder-controls">
-                          <label className="field" data-help="Set the current progress stage for this work order.">
-                            <span>Status</span>
-                            <select
-                              value={statusDraft[order.id] || order.status}
-                              onChange={(e) => setStatusDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
-                            >
-                              {statusOrder.map((statusKey) => (
-                                <option key={statusKey} value={statusKey}>{statusLabels[statusKey]}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="field" data-help="Optional note shared with the team when applying the update.">
-                            <span>Update note</span>
-                            <input
-                              value={statusNotes[order.id] || ''}
-                              onChange={(e) => setStatusNotes((prev) => ({ ...prev, [order.id]: e.target.value }))}
-                              placeholder="Optional context"
-                            />
-                          </label>
-                          <button
-                            className="button button--small"
-                            onClick={() => handleStatusSubmit(order)}
-                            disabled={updateMutation.isLoading}
-                          >
-                            {updateMutation.isLoading ? 'Saving…' : 'Apply'}
-                          </button>
-                        </div>
-                        <div className="workorder-diagnostics">
-                          <label className="field" data-help="Record fault isolation and test results for future reference.">
-                            <span>Diagnostics</span>
-                            <textarea
-                              rows={3}
-                              value={diagnosticDraft[order.id] ?? order.diagnostic_findings ?? ''}
-                              onChange={(e) => setDiagnosticDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
-                              placeholder="Capture triage and troubleshooting notes"
-                            />
-                          </label>
-                          <button
-                            className="button button--ghost"
-                            onClick={() => handleDiagnosticsSave(order)}
-                            disabled={updateMutation.isLoading}
-                          >
-                            Save diagnostics
-                          </button>
-                        </div>
+                        {isAdmin ? (
+                          <>
+                            <div className="workorder-controls">
+                              <label className="field" data-help="Set the current progress stage for this work order.">
+                                <span>Status</span>
+                                <select
+                                  value={statusDraft[order.id] || order.status}
+                                  onChange={(e) => setStatusDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                                >
+                                  {statusOrder.map((statusKey) => (
+                                    <option key={statusKey} value={statusKey}>{statusLabels[statusKey]}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field" data-help="Optional note shared with the team when applying the update.">
+                                <span>Update note</span>
+                                <input
+                                  value={statusNotes[order.id] || ''}
+                                  onChange={(e) => setStatusNotes((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                                  placeholder="Optional context"
+                                />
+                              </label>
+                              <button
+                                className="button button--small"
+                                onClick={() => handleStatusSubmit(order)}
+                                disabled={updateMutation.isLoading}
+                              >
+                                {updateMutation.isLoading ? 'Saving…' : 'Apply'}
+                              </button>
+                            </div>
+                            <div className="workorder-diagnostics">
+                              <label className="field" data-help="Record fault isolation and test results for future reference.">
+                                <span>Diagnostics</span>
+                                <textarea
+                                  rows={3}
+                                  value={diagnosticDraft[order.id] ?? order.diagnostic_findings ?? ''}
+                                  onChange={(e) => setDiagnosticDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                                  placeholder="Capture triage and troubleshooting notes"
+                                />
+                              </label>
+                              <button
+                                className="button button--ghost"
+                                onClick={() => handleDiagnosticsSave(order)}
+                                disabled={updateMutation.isLoading}
+                              >
+                                Save diagnostics
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="workorder-section">
+                            <h4>Status</h4>
+                            <p className="muted">{statusLabels[order.status] || order.status}</p>
+                            {order.diagnostic_findings && (
+                              <p className="muted">Diagnostics: {order.diagnostic_findings}</p>
+                            )}
+                          </div>
+                        )}
                         <div className="workorder-section">
                           <h4>Parts</h4>
                           <ul className="kanban__parts">

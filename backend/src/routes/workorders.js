@@ -9,7 +9,8 @@ import {
   StockMove,
   WorkOrderStatusHistory,
   SerialNumber,
-  SerialAssignment
+  SerialAssignment,
+  User
 } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
@@ -21,8 +22,14 @@ import { getSetting } from '../services/settings.js';
 export default function createWorkOrderRoutes(io) {
   const router = Router();
 
-  router.get('/', requireAuth(['admin']), asyncHandler(async (_req, res) => {
+  router.get('/', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+    const where = {};
+    if (req.user.role !== 'admin') {
+      where.assignedTo = req.user.id;
+    }
+
     const rows = await WorkOrder.findAll({
+      where,
       include: [
         {
           model: WorkOrderPart,
@@ -31,7 +38,8 @@ export default function createWorkOrderRoutes(io) {
             { model: SerialAssignment, include: [SerialNumber] }
           ]
         },
-        { model: WorkOrderStatusHistory, include: [{ association: 'performedBy' }] }
+        { model: WorkOrderStatusHistory, include: [{ association: 'performedBy' }] },
+        { association: 'assignee', attributes: ['id', 'full_name', 'email'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -46,6 +54,7 @@ export default function createWorkOrderRoutes(io) {
     intake_notes: z.string().optional(),
     warranty_provider: z.string().optional(),
     warranty_expires_at: z.string().optional(),
+    assigned_to: z.number().int().positive().optional(),
     parts: z.array(z.object({
       product_id: z.number().int().positive(),
       qty: z.number().int().positive()
@@ -58,7 +67,14 @@ export default function createWorkOrderRoutes(io) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
     }
 
+    const assignedToId = parsed.data.assigned_to ?? req.user.id;
+    const assignee = await User.findByPk(assignedToId);
+    if (!assignee || assignee.organizationId !== req.user.organization_id) {
+      throw new HttpError(404, 'Assigned user not found');
+    }
+
     const wo = await WorkOrder.create({
+      assignedTo: assignee.id,
       customer_name: parsed.data.customer_name,
       device_info: parsed.data.device_info,
       device_serial: parsed.data.device_serial || null,
@@ -85,8 +101,30 @@ export default function createWorkOrderRoutes(io) {
     for (const p of parsed.data.parts) {
       await WorkOrderPart.create({ workOrderId: wo.id, productId: p.product_id, qty_needed: p.qty });
     }
-    io.emit('workorders:update', { work_order_id: wo.id, action: 'created', organization_id: req.user.organization_id });
-    res.status(201).json(wo);
+    const freshWorkOrder = await WorkOrder.findOne({
+      where: { id: wo.id, organizationId: req.user.organization_id },
+      include: [
+        {
+          model: WorkOrderPart,
+          include: [
+            Product,
+            { model: SerialAssignment, include: [SerialNumber] }
+          ]
+        },
+        { model: WorkOrderStatusHistory, include: [{ association: 'performedBy' }] },
+        { association: 'assignee', attributes: ['id', 'full_name', 'email'] }
+      ],
+      skipOrganizationScope: true
+    });
+    const result = freshWorkOrder || wo;
+
+    io.emit('workorders:update', {
+      work_order_id: wo.id,
+      action: 'created',
+      assigned_to: result.assignedTo ?? wo.assignedTo ?? null,
+      organization_id: req.user.organization_id
+    });
+    res.status(201).json(result);
   }));
 
   const UpdateSchema = z.object({
@@ -100,7 +138,8 @@ export default function createWorkOrderRoutes(io) {
     warranty_expires_at: z.string().optional(),
     warranty_provider: z.string().optional(),
     status: z.enum(['intake','diagnostics','awaiting_approval','approved','in_progress','awaiting_parts','completed','canceled']).optional(),
-    status_note: z.string().optional()
+    status_note: z.string().optional(),
+    assigned_to: z.number().int().positive().optional()
   });
 
   router.patch('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
@@ -126,11 +165,36 @@ export default function createWorkOrderRoutes(io) {
     if (parsed.data.warranty_provider !== undefined) wo.warranty_provider = parsed.data.warranty_provider || null;
     if (parsed.data.status !== undefined) wo.status = parsed.data.status;
 
+    if (parsed.data.assigned_to !== undefined) {
+      const newAssignee = await User.findByPk(parsed.data.assigned_to);
+      if (!newAssignee || newAssignee.organizationId !== req.user.organization_id) {
+        throw new HttpError(404, 'Assigned user not found');
+      }
+      wo.assignedTo = newAssignee.id;
+    }
+
     await wo.save();
+
+    const refreshedWorkOrder = await WorkOrder.findOne({
+      where: { id: wo.id, organizationId: req.user.organization_id },
+      include: [
+        {
+          model: WorkOrderPart,
+          include: [
+            Product,
+            { model: SerialAssignment, include: [SerialNumber] }
+          ]
+        },
+        { model: WorkOrderStatusHistory, include: [{ association: 'performedBy' }] },
+        { association: 'assignee', attributes: ['id', 'full_name', 'email'] }
+      ],
+      skipOrganizationScope: true
+    });
+    const updated = refreshedWorkOrder || wo;
 
     if (parsed.data.status !== undefined && parsed.data.status !== prevStatus) {
       await WorkOrderStatusHistory.create({
-        workOrderId: wo.id,
+        workOrderId: updated.id,
         from_status: prevStatus,
         to_status: parsed.data.status,
         note: parsed.data.status_note || null,
@@ -138,8 +202,14 @@ export default function createWorkOrderRoutes(io) {
       });
     }
 
-    io.emit('workorders:update', { work_order_id: wo.id, status: wo.status, action: 'updated', organization_id: req.user.organization_id });
-    res.json(wo);
+    io.emit('workorders:update', {
+      work_order_id: updated.id,
+      status: updated.status,
+      action: 'updated',
+      assigned_to: updated.assignedTo ?? wo.assignedTo ?? null,
+      organization_id: req.user.organization_id
+    });
+    res.json(updated);
   }));
 
   // Reserve parts
