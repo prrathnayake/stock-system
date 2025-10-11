@@ -57,6 +57,40 @@ export function createApp() {
 }
 
 export function registerRoutes(app, io) {
+  let distPath = null;
+
+  if (config.frontend.serve) {
+    distPath = config.frontend.distPath;
+    if (distPath && existsSync(distPath)) {
+      app.use(express.static(distPath, { index: false }));
+
+      const spaRoutes = [
+        '/',
+        '/login',
+        '/first-login',
+        '/inventory',
+        '/sales',
+        '/invoices',
+        '/work-orders',
+        '/scan',
+        '/settings'
+      ];
+      const serveSpa = (req, res, next) => {
+        if (req.method !== 'GET') return next();
+        const acceptHeader = req.headers.accept || '';
+        const acceptsHtml = acceptHeader.includes('text/html') || acceptHeader === '*/*';
+        if (!acceptsHtml) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+      };
+
+      spaRoutes.forEach((routePath) => {
+        app.get(routePath, serveSpa);
+      });
+    } else {
+      console.warn(`Frontend dist path "${distPath}" not found; SPA assets will not be served.`);
+    }
+  }
+
   app.use('/auth', authRoutes);
   app.use('/users', userRoutes);
   app.use('/products', productRoutes);
@@ -73,20 +107,14 @@ export function registerRoutes(app, io) {
   app.use('/organization', organizationRoutes);
   app.use('/bins', binRoutes);
 
-  if (config.frontend.serve) {
-    const distPath = config.frontend.distPath;
-    if (distPath && existsSync(distPath)) {
-      app.use(express.static(distPath, { index: false }));
-      app.get('*', (req, res, next) => {
-        if (req.method !== 'GET') return next();
-        const acceptHeader = req.headers.accept || '';
-        const acceptsHtml = acceptHeader.includes('text/html') || acceptHeader === '*/*';
-        if (!acceptsHtml) return next();
-        res.sendFile(path.join(distPath, 'index.html'));
-      });
-    } else {
-      console.warn(`Frontend dist path "${distPath}" not found; SPA assets will not be served.`);
-    }
+  if (distPath && existsSync(distPath)) {
+    app.get('*', (req, res, next) => {
+      if (req.method !== 'GET') return next();
+      const acceptHeader = req.headers.accept || '';
+      const acceptsHtml = acceptHeader.includes('text/html') || acceptHeader === '*/*';
+      if (!acceptsHtml) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
 
   app.use(notFoundHandler);
