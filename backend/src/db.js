@@ -212,6 +212,7 @@ export const StockMove = sequelize.define('stock_move', {
   organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty: { type: DataTypes.INTEGER, allowNull: false },
   invoiceId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  saleId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   reason: {
     type: DataTypes.ENUM(
       'receive',
@@ -417,6 +418,49 @@ export const InvoicePayment = sequelize.define('invoice_payment', {
   notes: { type: DataTypes.TEXT }
 });
 
+export const Customer = sequelize.define('customer', {
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  name: { type: DataTypes.STRING(191), allowNull: false },
+  email: { type: DataTypes.STRING(191) },
+  phone: { type: DataTypes.STRING(64) },
+  company: { type: DataTypes.STRING(191) },
+  address: { type: DataTypes.TEXT },
+  notes: { type: DataTypes.TEXT }
+}, {
+  indexes: [
+    { fields: ['organization_id', 'name'] },
+    { fields: ['organization_id', 'email'] }
+  ]
+});
+
+export const Sale = sequelize.define('sale', {
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  customerId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  status: {
+    type: DataTypes.ENUM('reserved', 'backorder', 'complete', 'canceled'),
+    defaultValue: 'reserved'
+  },
+  reference: { type: DataTypes.STRING(64) },
+  notes: { type: DataTypes.TEXT },
+  reserved_at: { type: DataTypes.DATE },
+  completed_at: { type: DataTypes.DATE },
+  backordered_at: { type: DataTypes.DATE },
+  created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  completed_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true }
+});
+
+export const SaleItem = sequelize.define('sale_item', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  saleId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  productId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  quantity: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  qty_reserved: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
+  qty_shipped: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
+  unit_price: { type: DataTypes.DECIMAL(12, 2), allowNull: true }
+});
+
 export const UserActivity = sequelize.define('user_activity', {
   organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   userId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
@@ -447,6 +491,9 @@ applyOrganizationScope(Setting);
 applyOrganizationScope(Invoice);
 applyOrganizationScope(InvoiceLine);
 applyOrganizationScope(InvoicePayment);
+applyOrganizationScope(Customer);
+applyOrganizationScope(Sale);
+applyOrganizationScope(SaleItem);
 applyOrganizationScope(UserActivity);
 
 // Relations
@@ -506,6 +553,12 @@ Organization.hasMany(InvoiceLine, { foreignKey: { name: 'organizationId', allowN
 InvoiceLine.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
 Organization.hasMany(InvoicePayment, { foreignKey: { name: 'organizationId', allowNull: false } });
 InvoicePayment.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
+Organization.hasMany(Customer, { foreignKey: { allowNull: false } });
+Customer.belongsTo(Organization, { foreignKey: { allowNull: false } });
+Organization.hasMany(Sale, { foreignKey: { allowNull: false } });
+Sale.belongsTo(Organization, { foreignKey: { allowNull: false } });
+Organization.hasMany(SaleItem, { foreignKey: { allowNull: false } });
+SaleItem.belongsTo(Organization, { foreignKey: { allowNull: false } });
 Organization.hasMany(UserActivity, { foreignKey: { name: 'organizationId', allowNull: false } });
 UserActivity.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
 
@@ -587,6 +640,16 @@ Invoice.hasMany(InvoiceLine, { as: 'lines', foreignKey: { name: 'invoiceId', all
 InvoiceLine.belongsTo(Invoice, { foreignKey: { name: 'invoiceId', allowNull: false } });
 InvoiceLine.belongsTo(Product, { foreignKey: { name: 'productId', allowNull: false } });
 Product.hasMany(InvoiceLine, { foreignKey: { name: 'productId', allowNull: false } });
+Customer.hasMany(Sale, { foreignKey: { allowNull: false } });
+Sale.belongsTo(Customer, { foreignKey: { allowNull: false } });
+Sale.hasMany(SaleItem, { as: 'items', foreignKey: { name: 'saleId', allowNull: false } });
+SaleItem.belongsTo(Sale, { foreignKey: { name: 'saleId', allowNull: false } });
+Product.hasMany(SaleItem, { foreignKey: { name: 'productId', allowNull: false } });
+SaleItem.belongsTo(Product, { foreignKey: { name: 'productId', allowNull: false } });
+User.hasMany(Sale, { foreignKey: { name: 'created_by', allowNull: true }, as: 'salesCreated' });
+Sale.belongsTo(User, { foreignKey: { name: 'created_by', allowNull: true }, as: 'createdBy' });
+User.hasMany(Sale, { foreignKey: { name: 'completed_by', allowNull: true }, as: 'salesCompleted' });
+Sale.belongsTo(User, { foreignKey: { name: 'completed_by', allowNull: true }, as: 'completedBy' });
 InvoiceLine.belongsTo(Bin, { as: 'bin', foreignKey: { name: 'binId', allowNull: true } });
 Bin.hasMany(InvoiceLine, { foreignKey: { name: 'binId', allowNull: true } });
 
@@ -598,6 +661,8 @@ User.hasMany(Invoice, { foreignKey: { name: 'updated_by', allowNull: true }, as:
 Invoice.belongsTo(User, { foreignKey: { name: 'updated_by', allowNull: true }, as: 'updatedBy' });
 User.hasMany(InvoicePayment, { foreignKey: { name: 'recorded_by', allowNull: true }, as: 'recordedPayments' });
 InvoicePayment.belongsTo(User, { foreignKey: { name: 'recorded_by', allowNull: true }, as: 'recordedBy' });
+Sale.hasMany(StockMove, { foreignKey: { name: 'saleId', allowNull: true } });
+StockMove.belongsTo(Sale, { foreignKey: { name: 'saleId', allowNull: true } });
 User.hasMany(UserActivity, { foreignKey: { name: 'userId', allowNull: true } });
 UserActivity.belongsTo(User, { foreignKey: { name: 'userId', allowNull: true } });
 
