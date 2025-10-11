@@ -72,6 +72,10 @@ describe('End-to-end system workflow', () => {
   let models;
   let runAsOrganizationFn;
   let sendEmailMock;
+  let customerId;
+  let saleId;
+  let backorderSaleId;
+  let saleStartingOnHand;
 
   const step = async (name, fn) => {
     try {
@@ -342,6 +346,150 @@ describe('End-to-end system workflow', () => {
         });
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('ok', true);
+    });
+
+    customerId = await step('Create customer record', async () => {
+      const res = await request(app)
+        .post('/customers')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Retail Client',
+          email: 'retail@example.com',
+          phone: '+61 2 5555 0000',
+          company: 'Retail Co',
+          address: '45 Example Street, Sydney NSW',
+          notes: 'Priority account'
+        });
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty('id');
+      expect(res.body).toHaveProperty('name', 'Retail Client');
+      return res.body.id;
+    });
+
+    await step('Search customers by keyword', async () => {
+      const res = await request(app)
+        .get('/customers')
+        .query({ q: 'Retail' })
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((customer) => customer.id);
+      expect(ids).toContain(customerId);
+    });
+
+    await step('Update customer contact details', async () => {
+      const res = await request(app)
+        .put(`/customers/${customerId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ phone: '+61 2 5555 1234' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('phone', '+61 2 5555 1234');
+    });
+
+    saleStartingOnHand = await step('Inspect available stock before sale', async () => {
+      return await runAsOrganizationFn(organizationId, async () => {
+        const level = await models.StockLevel.findOne({ where: { productId: stockProduct.id, binId: binA.id } });
+        expect(level).toBeTruthy();
+        return level.on_hand;
+      });
+    });
+
+    saleId = await step('Create sale and reserve stock', async () => {
+      const res = await request(app)
+        .post('/sales')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          customer_id: customerId,
+          reference: 'SALE-1001',
+          items: [{ product_id: stockProduct.id, quantity: 2 }]
+        });
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty('status', 'reserved');
+      expect(res.body.items[0]).toHaveProperty('qty_reserved', 2);
+      return res.body.id;
+    });
+
+    await step('Complete sale and deduct inventory', async () => {
+      const res = await request(app)
+        .post(`/sales/${saleId}/complete`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('status', 'complete');
+      expect(res.body.items[0]).toMatchObject({ qty_reserved: 0, qty_shipped: 2 });
+    });
+
+    await step('Verify stock level decreased after sale', async () => {
+      await runAsOrganizationFn(organizationId, async () => {
+        const level = await models.StockLevel.findOne({ where: { productId: stockProduct.id, binId: binA.id } });
+        expect(level).toBeTruthy();
+        expect(level.on_hand).toBe(saleStartingOnHand - 2);
+        expect(level.reserved).toBe(0);
+      });
+    });
+
+    backorderSaleId = await step('Create sale resulting in backorder', async () => {
+      const res = await request(app)
+        .post('/sales')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          customer_id: customerId,
+          reference: 'SALE-1002',
+          items: [{ product_id: stockProduct.id, quantity: 20 }]
+        });
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty('status', 'backorder');
+      expect(res.body.items[0].qty_reserved).toBeLessThan(20);
+      return res.body.id;
+    });
+
+    await step('Top up inventory for backorder sale', async () => {
+      await runAsOrganizationFn(organizationId, async () => {
+        const level = await models.StockLevel.findOne({ where: { productId: stockProduct.id, binId: binA.id } });
+        expect(level).toBeTruthy();
+        level.on_hand += 15;
+        await level.save();
+      });
+    });
+
+    await step('Retry reservation after replenishment', async () => {
+      const res = await request(app)
+        .post(`/sales/${backorderSaleId}/reserve`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('status', 'reserved');
+      expect(res.body.items[0]).toHaveProperty('qty_reserved', 20);
+    });
+
+    await step('Complete backordered sale', async () => {
+      const res = await request(app)
+        .post(`/sales/${backorderSaleId}/complete`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('status', 'complete');
+      expect(res.body.items[0]).toMatchObject({ qty_reserved: 0, qty_shipped: 20 });
+    });
+
+    await step('Prevent deleting customer with sale history', async () => {
+      const res = await request(app)
+        .delete(`/customers/${customerId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(409);
+    });
+
+    const disposableCustomerId = await step('Create disposable customer', async () => {
+      const res = await request(app)
+        .post('/customers')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'One-time Client', email: 'one-time@example.com' });
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty('id');
+      return res.body.id;
+    });
+
+    await step('Delete disposable customer', async () => {
+      const res = await request(app)
+        .delete(`/customers/${disposableCustomerId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(204);
     });
 
     const workOrderId = await step('Create work order', async () => {

@@ -19,6 +19,8 @@ import backupsRoutes from './routes/backups.js';
 import organizationRoutes from './routes/organization.js';
 import createInvoiceRoutes from './routes/invoices.js';
 import binRoutes from './routes/bins.js';
+import createSalesRoutes from './routes/sales.js';
+import createCustomerRoutes from './routes/customers.js';
 import { config } from './config.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
@@ -64,6 +66,8 @@ export function registerRoutes(app, io) {
   app.use('/purchasing', createPurchasingRoutes(io));
   app.use('/rma', createRmaRoutes(io));
   app.use('/invoices', createInvoiceRoutes(io));
+  app.use('/sales', createSalesRoutes(io));
+  app.use('/customers', createCustomerRoutes());
   app.use('/settings', settingsRoutes);
   app.use('/backups', backupsRoutes);
   app.use('/organization', organizationRoutes);

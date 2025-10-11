@@ -57,6 +57,8 @@ export default function Settings() {
     enabled: isAdmin
   })
 
+  const [userSearch, setUserSearch] = useState('')
+
   const filteredUsers = useMemo(() => {
     if (!userSearch) return users
     const term = userSearch.toLowerCase()
@@ -123,7 +125,6 @@ export default function Settings() {
     must_change_password: false,
     ui_variant: 'pro'
   })
-  const [userSearch, setUserSearch] = useState('')
   const [selectedVariant, setSelectedVariant] = useState(user?.ui_variant || 'pro')
   const [orgBanner, setOrgBanner] = useState(null)
   const [orgForm, setOrgForm] = useState({

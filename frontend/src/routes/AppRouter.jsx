@@ -9,6 +9,7 @@ import Scan from '../pages/Scan.jsx';
 import Settings from '../pages/Settings.jsx';
 import Invoices from '../pages/Invoices.jsx';
 import WorkOrders from '../pages/WorkOrders.jsx';
+import Sales from '../pages/Sales.jsx';
 import { useAuth } from '../providers/AuthProvider.jsx';
 
 function ProtectedRoute({ children, allowDuringCredentialReset = false }) {
@@ -85,6 +86,7 @@ export default function AppRouter() {
         >
           <Route index element={<Dashboard />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="sales" element={<Sales />} />
           <Route
             path="invoices"
             element={(<RoleRoute roles={['admin']}><InvoicingRoute><Invoices /></InvoicingRoute></RoleRoute>)}
