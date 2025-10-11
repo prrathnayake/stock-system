@@ -7,6 +7,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { getCachedStockOverview, cacheStockOverview, invalidateStockOverviewCache } from '../services/cache.js';
 import { enqueueLowStockScan } from '../queues/lowStock.js';
+import { notifyInventoryAdjustment } from '../services/notificationService.js';
 
 export default function createStockRoutes(io) {
   const router = Router();
@@ -189,6 +190,17 @@ export default function createStockRoutes(io) {
       console.error('[queue] failed to enqueue low stock scan', err);
     });
     res.status(201).json({ ok: true, move: result });
+    notifyInventoryAdjustment({
+      organizationId: req.user.organization_id,
+      actor: req.user,
+      product: { name: product.name, sku: product.sku },
+      qty,
+      reason,
+      fromBin: fromBin ? { code: fromBin.code } : null,
+      toBin: toBin ? { code: toBin.code } : null
+    }).catch((error) => {
+      console.error('[notify] failed to send inventory adjustment email', error);
+    });
   }));
 
   return router;

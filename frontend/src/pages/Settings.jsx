@@ -4,10 +4,39 @@ import { useAuth } from '../providers/AuthProvider.jsx'
 import { api } from '../lib/api'
 import { setUserProfile as persistUserProfile } from '../lib/auth'
 
+const uiVariants = [
+  {
+    id: 'pro',
+    name: 'Professional',
+    description: 'Balanced layout with charts, tables and actionable KPIs.'
+  },
+  {
+    id: 'analytics',
+    name: 'Analytics',
+    description: 'Graph-focused workspace for performance tracking and forecasting.'
+  },
+  {
+    id: 'tabular',
+    name: 'Tabular',
+    description: 'High-density tables optimised for bulk operations and data entry.'
+  },
+  {
+    id: 'minimal',
+    name: 'Minimal',
+    description: 'Distraction-free controls with simplified navigation for rapid work.'
+  },
+  {
+    id: 'visual',
+    name: 'Visual',
+    description: 'Large charts and tiles for status-at-a-glance monitoring.'
+  }
+]
+
 export default function Settings() {
-  const { user, setUser } = useAuth()
+  const { user, setUser, organization } = useAuth()
   const queryClient = useQueryClient()
   const isAdmin = user?.role === 'admin'
+  const activeVariant = uiVariants.find((variant) => variant.id === (user?.ui_variant || 'pro')) || uiVariants[0]
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
@@ -36,6 +65,15 @@ export default function Settings() {
     enabled: isAdmin
   })
 
+  const { data: organizationDetails } = useQuery({
+    queryKey: ['organization'],
+    queryFn: async () => {
+      const { data } = await api.get('/organization')
+      return data
+    },
+    enabled: isAdmin
+  })
+
   const [formState, setFormState] = useState({
     low_stock_alerts_enabled: true,
     default_sla_hours: 24,
@@ -46,12 +84,14 @@ export default function Settings() {
   })
   const [banner, setBanner] = useState(null)
   const [userBanner, setUserBanner] = useState(null)
+  const [preferencesBanner, setPreferencesBanner] = useState(null)
   const [userForm, setUserForm] = useState({
     full_name: '',
     email: '',
     password: '',
     role: 'user',
-    must_change_password: true
+    must_change_password: true,
+    ui_variant: 'pro'
   })
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({
@@ -59,7 +99,15 @@ export default function Settings() {
     email: '',
     password: '',
     role: 'user',
-    must_change_password: false
+    must_change_password: false,
+    ui_variant: 'pro'
+  })
+  const [selectedVariant, setSelectedVariant] = useState(user?.ui_variant || 'pro')
+  const [orgBanner, setOrgBanner] = useState(null)
+  const [orgForm, setOrgForm] = useState({
+    name: organization?.name || user?.organization?.name || '',
+    contact_email: organization?.contact_email || '',
+    timezone: organization?.timezone || ''
   })
 
   useEffect(() => {
@@ -77,6 +125,20 @@ export default function Settings() {
     }
   }, [settingsData])
 
+  useEffect(() => {
+    setSelectedVariant(user?.ui_variant || 'pro')
+  }, [user?.ui_variant])
+
+  useEffect(() => {
+    if (organizationDetails) {
+      setOrgForm({
+        name: organizationDetails.name || '',
+        contact_email: organizationDetails.contact_email || '',
+        timezone: organizationDetails.timezone || ''
+      })
+    }
+  }, [organizationDetails])
+
   const settingsMutation = useMutation({
     mutationFn: async (payload) => {
       const response = await api.put('/settings', payload)
@@ -92,6 +154,27 @@ export default function Settings() {
     }
   })
 
+  const preferencesMutation = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.put('/users/me/preferences', payload)
+      return data
+    },
+    onSuccess: (updated) => {
+      const merged = {
+        ...user,
+        ...updated,
+        name: updated.full_name || updated.name || user?.name,
+        ui_variant: updated.ui_variant || selectedVariant
+      }
+      setUser(merged)
+      persistUserProfile(merged)
+      setPreferencesBanner({ type: 'success', message: 'Interface preferences updated.' })
+    },
+    onError: (error) => {
+      setPreferencesBanner({ type: 'error', message: error.response?.data?.error || 'Unable to save preferences.' })
+    }
+  })
+
   const createUserMutation = useMutation({
     mutationFn: async (payload) => {
       const { data } = await api.post('/users', payload)
@@ -104,7 +187,8 @@ export default function Settings() {
         email: '',
         password: '',
         role: 'user',
-        must_change_password: true
+        must_change_password: true,
+        ui_variant: 'pro'
       })
       queryClient.invalidateQueries({ queryKey: ['users'] })
     },
@@ -127,7 +211,8 @@ export default function Settings() {
         email: '',
         password: '',
         role: 'user',
-        must_change_password: false
+        must_change_password: false,
+        ui_variant: 'pro'
       })
       if (updatedUser?.id === user?.id) {
         const merged = {
@@ -167,6 +252,35 @@ export default function Settings() {
     }
   })
 
+  const organizationMutation = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.put('/organization', payload)
+      return data
+    },
+    onSuccess: (data) => {
+      setOrgBanner({ type: 'success', message: 'Organization profile updated.' })
+      setOrgForm({
+        name: data.name || '',
+        contact_email: data.contact_email || '',
+        timezone: data.timezone || ''
+      })
+      queryClient.invalidateQueries({ queryKey: ['organization'] })
+      if (user) {
+        const updatedUser = {
+          ...user,
+          organization: user.organization
+            ? { ...user.organization, name: data.name, slug: data.slug, id: data.id, contact_email: data.contact_email, timezone: data.timezone }
+            : { id: data.id, name: data.name, slug: data.slug, contact_email: data.contact_email, timezone: data.timezone }
+        }
+        setUser(updatedUser)
+        persistUserProfile(updatedUser)
+      }
+    },
+    onError: (error) => {
+      setOrgBanner({ type: 'error', message: error.response?.data?.error || 'Unable to update organization.' })
+    }
+  })
+
   const runBackupMutation = useMutation({
     mutationFn: async () => {
       await api.post('/backups/run')
@@ -179,6 +293,29 @@ export default function Settings() {
       setBanner(error.response?.data?.error || 'Unable to trigger backup right now.')
     }
   })
+
+  const handleSavePreferences = (event) => {
+    event.preventDefault()
+    setPreferencesBanner(null)
+    preferencesMutation.mutate({ ui_variant: selectedVariant })
+  }
+
+  const handleOrganizationSubmit = (event) => {
+    event.preventDefault()
+    setOrgBanner(null)
+    const payload = {
+      name: orgForm.name.trim(),
+      contact_email: orgForm.contact_email.trim(),
+      timezone: orgForm.timezone.trim()
+    }
+    if (!payload.name) {
+      setOrgBanner({ type: 'error', message: 'Organization name is required.' })
+      return
+    }
+    if (!payload.contact_email) delete payload.contact_email
+    if (!payload.timezone) delete payload.timezone
+    organizationMutation.mutate(payload)
+  }
 
   const handleSubmit = (event) => {
     event.preventDefault()
@@ -204,7 +341,8 @@ export default function Settings() {
       email: userForm.email.trim(),
       password: userForm.password,
       role: userForm.role,
-      must_change_password: Boolean(userForm.must_change_password)
+      must_change_password: Boolean(userForm.must_change_password),
+      ui_variant: userForm.ui_variant
     }
     if (!payload.full_name || !payload.email || !payload.password) {
       setUserBanner({ type: 'error', message: 'All fields are required to create a user.' })
@@ -221,7 +359,8 @@ export default function Settings() {
       email: selected.email,
       password: '',
       role: selected.role,
-      must_change_password: Boolean(selected.must_change_password)
+      must_change_password: Boolean(selected.must_change_password),
+      ui_variant: selected.ui_variant || 'pro'
     })
   }
 
@@ -244,7 +383,8 @@ export default function Settings() {
       full_name: editForm.full_name.trim(),
       email: editForm.email.trim(),
       role: editForm.role,
-      must_change_password: Boolean(editForm.must_change_password)
+      must_change_password: Boolean(editForm.must_change_password),
+      ui_variant: editForm.ui_variant
     }
     if (editForm.password) {
       payload.password = editForm.password
@@ -284,7 +424,55 @@ export default function Settings() {
             <span className="muted">Organization</span>
             <p>{user?.organization?.name || '—'}</p>
           </div>
+          <div>
+            <span className="muted">Interface style</span>
+            <p className="badge">{activeVariant.name}</p>
+          </div>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <h2>Personal preferences</h2>
+            <p className="muted">Tailor the interface to match how you like to work.</p>
+          </div>
+        </div>
+        {preferencesBanner && (
+          <div className={`banner banner--${preferencesBanner.type === 'error' ? 'danger' : 'info'}`}>
+            {preferencesBanner.message}
+          </div>
+        )}
+        <form className="variant-form" onSubmit={handleSavePreferences}>
+          <div className="variant-grid">
+            {uiVariants.map((variant) => (
+              <label
+                key={variant.id}
+                className={`variant-option${selectedVariant === variant.id ? ' variant-option--active' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="ui-variant"
+                  value={variant.id}
+                  checked={selectedVariant === variant.id}
+                  onChange={() => setSelectedVariant(variant.id)}
+                />
+                <div className="variant-option__body">
+                  <div className={`variant-preview variant-preview--${variant.id}`} aria-hidden="true" />
+                  <div>
+                    <p className="variant-option__title">{variant.name}</p>
+                    <p className="variant-option__description muted">{variant.description}</p>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="form-actions">
+            <button className="button button--primary" type="submit" disabled={preferencesMutation.isLoading}>
+              {preferencesMutation.isLoading ? 'Saving…' : 'Save preferences'}
+            </button>
+          </div>
+        </form>
       </div>
 
       <div className="card">
@@ -311,6 +499,53 @@ export default function Settings() {
 
       {isAdmin && (
         <>
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <h2>Organization profile</h2>
+                <p className="muted">Update contact information and timezone for compliance notices.</p>
+              </div>
+            </div>
+            {orgBanner && (
+              <div className={`banner banner--${orgBanner.type === 'error' ? 'danger' : 'info'}`}>
+                {orgBanner.message}
+              </div>
+            )}
+            <form className="form-grid" onSubmit={handleOrganizationSubmit}>
+              <label className="field">
+                <span>Organization name</span>
+                <input
+                  value={orgForm.name}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, name: e.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Notification email</span>
+                <input
+                  type="email"
+                  value={orgForm.contact_email}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, contact_email: e.target.value }))}
+                  placeholder="alerts@your-company.com"
+                />
+                <small className="muted">Administrative emails and backup alerts will be delivered here.</small>
+              </label>
+              <label className="field">
+                <span>Timezone</span>
+                <input
+                  value={orgForm.timezone}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, timezone: e.target.value }))}
+                  placeholder="e.g. America/New_York"
+                />
+              </label>
+              <div className="form-actions">
+                <button className="button button--primary" type="submit" disabled={organizationMutation.isLoading}>
+                  {organizationMutation.isLoading ? 'Saving…' : 'Save organization'}
+                </button>
+              </div>
+            </form>
+          </div>
+
           <div className="card">
             <div className="card__header">
               <div>
@@ -362,6 +597,17 @@ export default function Settings() {
                     <option value="admin">Administrator</option>
                   </select>
                 </label>
+                <label className="field">
+                  <span>Interface style</span>
+                  <select
+                    value={userForm.ui_variant}
+                    onChange={(e) => setUserForm((prev) => ({ ...prev, ui_variant: e.target.value }))}
+                  >
+                    {uiVariants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>{variant.name}</option>
+                    ))}
+                  </select>
+                </label>
                 <label className="field field--checkbox">
                   <input
                     type="checkbox"
@@ -385,6 +631,7 @@ export default function Settings() {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Role</th>
+                      <th>Interface</th>
                       <th>Reset required</th>
                       <th>Created</th>
                       <th>Actions</th>
@@ -393,7 +640,7 @@ export default function Settings() {
                   <tbody>
                     {users.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="muted">No additional users created yet.</td>
+                        <td colSpan={7} className="muted">No additional users created yet.</td>
                       </tr>
                     )}
                     {users.map((account) => (
@@ -405,6 +652,7 @@ export default function Settings() {
                             {account.role}
                           </span>
                         </td>
+                        <td>{(uiVariants.find((variant) => variant.id === account.ui_variant)?.name) || 'Professional'}</td>
                         <td>{account.must_change_password ? 'Yes' : 'No'}</td>
                         <td>{account.created_at ? new Date(account.created_at).toLocaleDateString() : '—'}</td>
                         <td className="table__actions">
@@ -457,6 +705,17 @@ export default function Settings() {
                       >
                         <option value="user">User</option>
                         <option value="admin">Administrator</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Interface style</span>
+                      <select
+                        value={editForm.ui_variant}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, ui_variant: e.target.value }))}
+                      >
+                        {uiVariants.map((variant) => (
+                          <option key={variant.id} value={variant.id}>{variant.name}</option>
+                        ))}
                       </select>
                     </label>
                     <label className="field">

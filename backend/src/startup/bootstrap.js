@@ -526,7 +526,7 @@ export async function initialiseDatabase() {
 
   const [organization] = await Organization.findOrCreate({
     where: { slug: 'default' },
-    defaults: { name: 'Default Organization' }
+    defaults: { name: 'Default Organization', contact_email: 'operations@example.com' }
   });
 
   await runAsOrganization(organization.id, async () => {
@@ -539,7 +539,8 @@ export async function initialiseDatabase() {
         email: 'admin@example.com',
         password_hash: hash,
         role: 'admin',
-        must_change_password: true
+        must_change_password: true,
+        ui_variant: 'pro'
       });
       console.log('Seeded admin user admin@example.com / admin123');
     }

@@ -6,7 +6,7 @@ import { runAsOrganization } from './services/requestContext.js';
   await sequelize.sync({ force: true });
   const [organization] = await Organization.findOrCreate({
     where: { slug: 'default' },
-    defaults: { name: 'Default Organization' }
+    defaults: { name: 'Default Organization', contact_email: 'operations@example.com' }
   });
 
   await runAsOrganization(organization.id, async () => {
@@ -16,7 +16,8 @@ import { runAsOrganization } from './services/requestContext.js';
       email: 'admin@example.com',
       password_hash: hash,
       role: 'admin',
-      must_change_password: true
+      must_change_password: true,
+      ui_variant: 'pro'
     });
   });
   console.log('Seed complete');

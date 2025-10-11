@@ -67,7 +67,8 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         id: organization.id,
         name: organization.name,
         slug: organization.slug
-      }
+      },
+      ui_variant: user.ui_variant
     }
   });
 }));
@@ -149,7 +150,8 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
         id: organization.id,
         name: organization.name,
         slug: organization.slug
-      } : null
+      } : null,
+      ui_variant: user.ui_variant
     }
   });
 }));

@@ -83,7 +83,8 @@ export const Organization = sequelize.define('organization', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   name: { type: DataTypes.STRING(191), allowNull: false },
   slug: { type: DataTypes.STRING(64), allowNull: false },
-  timezone: { type: DataTypes.STRING(64), allowNull: true }
+  timezone: { type: DataTypes.STRING(64), allowNull: true },
+  contact_email: { type: DataTypes.STRING(191), allowNull: true }
 }, {
   indexes: [
     { unique: true, fields: ['slug'], name: 'organizations_slug_unique' }
@@ -97,6 +98,9 @@ Organization.addHook('beforeValidate', (org) => {
   if (org.name) {
     org.name = org.name.trim();
   }
+  if (org.contact_email) {
+    org.contact_email = org.contact_email.trim().toLowerCase();
+  }
 });
 
 export const User = sequelize.define('user', {
@@ -106,7 +110,8 @@ export const User = sequelize.define('user', {
   email: { type: DataTypes.STRING(191), allowNull: false },
   password_hash: { type: DataTypes.STRING, allowNull: false },
   role: { type: DataTypes.ENUM('admin', 'user'), defaultValue: 'user' },
-  must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false }
+  must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  ui_variant: { type: DataTypes.ENUM('pro', 'analytics', 'tabular', 'minimal', 'visual'), defaultValue: 'pro' }
 }, {
   indexes: [
     { unique: true, fields: ['organization_id', 'email'] }

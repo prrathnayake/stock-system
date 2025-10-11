@@ -25,7 +25,8 @@ export function signAccessToken(user) {
       role: user.role,
       name: user.full_name,
       must_change_password: user.must_change_password,
-      organization_id: user.organizationId
+      organization_id: user.organizationId,
+      ui_variant: user.ui_variant
     },
     config.auth.jwtSecret,
     {

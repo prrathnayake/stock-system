@@ -81,10 +81,7 @@ export default function AppRouter() {
             element={<RoleRoute roles={['admin']}><WorkOrders /></RoleRoute>}
           />
           <Route path="scan" element={<Scan />} />
-          <Route
-            path="settings"
-            element={(<RoleRoute roles={['admin']}><Settings /></RoleRoute>)}
-          />
+          <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
