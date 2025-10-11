@@ -50,14 +50,20 @@ export default function AppLayout() {
   const brandSubtitle = organization?.legal_name || 'Operations Suite'
   const brandLogo = organization?.logo_asset_url || organization?.logo_url
 
-  const navItems = useMemo(() => ([
-    { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
-    { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
-    { to: '/invoices', label: 'Invoices', roles: ['admin'] },
-    { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
-    { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin'] },
-    { to: '/settings', label: user?.role === 'admin' ? 'Administration' : 'Settings', roles: ['admin', 'user'] }
-  ]), [user?.role, variant])
+  const navItems = useMemo(() => {
+    const items = [
+      { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
+      { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
+      { to: '/invoices', label: 'Invoices', roles: ['admin'] },
+      { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
+      { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin'] },
+      { to: '/settings', label: user?.role === 'admin' ? 'Administration' : 'Settings', roles: ['admin', 'user'] }
+    ];
+    if (organization?.invoicing_enabled === false) {
+      return items.filter((item) => item.to !== '/invoices');
+    }
+    return items;
+  }, [user?.role, variant, organization?.invoicing_enabled])
 
   const pageTitle = useMemo(() => {
     const match = navItems.find((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)))

@@ -83,6 +83,17 @@ async function resolveInvoicePrefix(organizationId, transaction) {
   return 'INV-';
 }
 
+async function ensureInvoicingEnabled(organizationId, options = {}) {
+  const organization = await Organization.findByPk(organizationId, {
+    ...options,
+    skipOrganizationScope: true
+  });
+  if (!organization || organization.invoicing_enabled === false) {
+    throw new HttpError(404, 'Invoices are disabled for this organization');
+  }
+  return organization;
+}
+
 async function generateInvoiceNumber(organizationId, transaction) {
   const prefix = await resolveInvoicePrefix(organizationId, transaction);
   const where = { organizationId };
@@ -293,6 +304,7 @@ export default function createInvoiceRoutes(io) {
   const router = Router();
 
   router.get('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+    await ensureInvoicingEnabled(req.user.organization_id);
     const status = req.query.status;
     const where = {};
     if (status) {
@@ -316,7 +328,7 @@ export default function createInvoiceRoutes(io) {
     }
     const data = parsed.data;
     await sequelize.transaction(async (transaction) => {
-      const organization = await Organization.findByPk(req.user.organization_id, { transaction, skipOrganizationScope: true });
+      const organization = await ensureInvoicingEnabled(req.user.organization_id, { transaction });
       const orgDefaults = {
         supplier_name: organization?.legal_name ?? organization?.name ?? null,
         supplier_abn: organization?.abn ?? null,
@@ -381,6 +393,7 @@ export default function createInvoiceRoutes(io) {
   }));
 
   router.get('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+    await ensureInvoicingEnabled(req.user.organization_id);
     const invoice = await Invoice.findByPk(req.params.id, {
       include: [
         { model: InvoiceLine, as: 'lines', include: [Product, { model: Bin, as: 'bin' }] },
@@ -400,11 +413,11 @@ export default function createInvoiceRoutes(io) {
     }
     const data = parsed.data;
     await sequelize.transaction(async (transaction) => {
+      const organization = await ensureInvoicingEnabled(req.user.organization_id, { transaction });
       const invoice = await Invoice.findByPk(req.params.id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!invoice) {
         throw new HttpError(404, 'Invoice not found');
       }
-      const organization = await Organization.findByPk(req.user.organization_id, { transaction, skipOrganizationScope: true });
       const orgDefaults = {
         supplier_name: organization?.legal_name ?? organization?.name ?? null,
         supplier_abn: organization?.abn ?? null,
@@ -485,6 +498,7 @@ export default function createInvoiceRoutes(io) {
       throw new HttpError(400, 'Invalid status payload', parsed.error.flatten());
     }
     await sequelize.transaction(async (transaction) => {
+      await ensureInvoicingEnabled(req.user.organization_id, { transaction });
       const invoice = await Invoice.findByPk(req.params.id, {
         include: [{ model: InvoicePayment, as: 'payments' }, { model: InvoiceLine, as: 'lines' }],
         transaction,
@@ -544,6 +558,7 @@ export default function createInvoiceRoutes(io) {
   }));
 
   router.get('/:id/activity', requireAuth(['admin']), asyncHandler(async (req, res) => {
+    await ensureInvoicingEnabled(req.user.organization_id);
     const activities = await UserActivity.findAll({
       where: { entity_type: 'invoice', entity_id: String(req.params.id) },
       order: [['createdAt', 'DESC']],

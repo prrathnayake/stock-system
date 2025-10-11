@@ -15,6 +15,7 @@ const ProductSchema = z.object({
   track_serial: z.boolean().default(false),
   reorder_point: z.number().int().nonnegative().default(0),
   lead_time_days: z.number().int().nonnegative().default(0),
+  unit_price: z.number().nonnegative().default(0),
   active: z.boolean().default(true)
 });
 

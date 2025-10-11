@@ -16,7 +16,8 @@ import { runAsOrganization } from './services/requestContext.js';
       default_payment_terms: 'Due within 14 days',
       invoice_notes: 'Please remit payment to Default Organization within the agreed terms.',
       invoice_prefix: 'INV-',
-      currency: 'AUD'
+      currency: 'AUD',
+      invoicing_enabled: true
     }
   });
 

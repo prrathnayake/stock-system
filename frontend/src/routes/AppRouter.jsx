@@ -47,6 +47,14 @@ function RoleRoute({ children, roles }) {
   return children;
 }
 
+function InvoicingRoute({ children }) {
+  const { organization } = useAuth();
+  if (organization?.invoicing_enabled === false) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -79,7 +87,7 @@ export default function AppRouter() {
           <Route path="inventory" element={<Inventory />} />
           <Route
             path="invoices"
-            element={<RoleRoute roles={['admin']}><Invoices /></RoleRoute>}
+            element={(<RoleRoute roles={['admin']}><InvoicingRoute><Invoices /></InvoicingRoute></RoleRoute>)}
           />
           <Route
             path="work-orders"

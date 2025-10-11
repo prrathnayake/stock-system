@@ -60,7 +60,8 @@ const UpdateSchema = z.object({
   invoice_prefix: z.string().max(16).optional(),
   default_payment_terms: z.string().max(191).optional(),
   invoice_notes: z.string().max(4000).optional(),
-  currency: z.string().max(8).optional()
+  currency: z.string().max(8).optional(),
+  invoicing_enabled: z.boolean().optional()
 });
 
 function serializeOrganization(org) {
@@ -80,7 +81,8 @@ function serializeOrganization(org) {
     invoice_prefix: org.invoice_prefix,
     default_payment_terms: org.default_payment_terms,
     invoice_notes: org.invoice_notes,
-    currency: org.currency
+    currency: org.currency,
+    invoicing_enabled: org.invoicing_enabled
   };
 }
 

@@ -24,7 +24,8 @@ function normalizeOrganization(value) {
     invoice_prefix: value.invoice_prefix || '',
     default_payment_terms: value.default_payment_terms || '',
     invoice_notes: value.invoice_notes || '',
-    currency: value.currency || 'AUD'
+    currency: value.currency || 'AUD',
+    invoicing_enabled: value.invoicing_enabled !== false
   };
 }
 

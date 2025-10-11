@@ -95,7 +95,8 @@ export const Organization = sequelize.define('organization', {
   invoice_prefix: { type: DataTypes.STRING(16), allowNull: true },
   default_payment_terms: { type: DataTypes.STRING(191), allowNull: true },
   invoice_notes: { type: DataTypes.TEXT, allowNull: true },
-  currency: { type: DataTypes.STRING(8), allowNull: true }
+  currency: { type: DataTypes.STRING(8), allowNull: true },
+  invoicing_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
 }, {
   indexes: [
     { unique: true, fields: ['slug'], name: 'organizations_slug_unique' }
@@ -171,6 +172,7 @@ export const Product = sequelize.define('product', {
   track_serial: { type: DataTypes.BOOLEAN, defaultValue: false },
   reorder_point: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
   lead_time_days: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
+  unit_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
   active: { type: DataTypes.BOOLEAN, defaultValue: true }
 }, {
   indexes: [

@@ -228,7 +228,7 @@ describe('End-to-end system workflow', () => {
       const res = await request(app)
         .post('/products')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ sku: 'NEW-100', name: 'New Gadget', reorder_point: 3, lead_time_days: 7 });
+        .send({ sku: 'NEW-100', name: 'New Gadget', reorder_point: 3, lead_time_days: 7, unit_price: 199.99 });
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
     });

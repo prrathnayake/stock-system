@@ -44,7 +44,8 @@ async function ensureDefaultOrganization(transaction) {
       default_payment_terms: 'Due within 14 days',
       invoice_notes: 'Please remit payment within the agreed terms.',
       invoice_prefix: 'INV-',
-      currency: 'AUD'
+      currency: 'AUD',
+      invoicing_enabled: true
     },
     transaction
   });
@@ -547,7 +548,8 @@ export async function initialiseDatabase() {
       default_payment_terms: 'Due within 14 days',
       invoice_notes: 'Please remit payment within the agreed terms.',
       invoice_prefix: 'INV-',
-      currency: 'AUD'
+      currency: 'AUD',
+      invoicing_enabled: true
     }
   });
 

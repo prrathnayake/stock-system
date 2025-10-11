@@ -10,6 +10,7 @@ const initialProductForm = {
   uom: 'ea',
   reorder_point: '5',
   lead_time_days: '0',
+  unit_price: '0',
   track_serial: false
 }
 
@@ -21,7 +22,7 @@ const initialAdjustmentForm = {
 }
 
 export default function Inventory() {
-  const { user } = useAuth()
+  const { user, organization } = useAuth()
   const canManageProcurement = ['admin', 'user'].includes(user?.role)
   const [query, setQuery] = useState('')
   const [productForm, setProductForm] = useState(initialProductForm)
@@ -30,6 +31,12 @@ export default function Inventory() {
   const [selectedProductId, setSelectedProductId] = useState(null)
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm, setEditForm] = useState(initialProductForm)
+
+  const currencyCode = (organization?.currency || user?.organization?.currency || 'AUD').toUpperCase()
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat('en-AU', { style: 'currency', currency: currencyCode }),
+    [currencyCode]
+  )
 
   const stockQuery = useQuery({
     queryKey: ['inventory'],
@@ -92,7 +99,7 @@ export default function Inventory() {
   const productMetaMap = useMemo(() => {
     const map = new Map()
     products.forEach((item) => {
-      map.set(item.id, item)
+      map.set(item.id, { ...item, unit_price: Number(item.unit_price ?? 0) })
     })
     return map
   }, [products])
@@ -113,7 +120,8 @@ export default function Inventory() {
         uom: meta?.uom ?? row.uom ?? 'ea',
         track_serial: meta?.track_serial ?? row.track_serial ?? false,
         reorder_point: meta?.reorder_point ?? row.reorder_point ?? 0,
-        lead_time_days: meta?.lead_time_days ?? row.lead_time_days ?? 0
+        lead_time_days: meta?.lead_time_days ?? row.lead_time_days ?? 0,
+        unit_price: Number(meta?.unit_price ?? 0)
       }
     })
   ), [filteredProducts, productMetaMap])
@@ -245,6 +253,7 @@ export default function Inventory() {
       uom: productForm.uom.trim() || 'ea',
       reorder_point: Number(productForm.reorder_point) || 0,
       lead_time_days: Number(productForm.lead_time_days) || 0,
+      unit_price: Math.max(0, Number(productForm.unit_price) || 0),
       track_serial: Boolean(productForm.track_serial)
     }
     if (!payload.sku || !payload.name) {
@@ -322,6 +331,7 @@ export default function Inventory() {
       uom: meta.uom ?? product.uom ?? 'ea',
       reorder_point: String(meta.reorder_point ?? product.reorder_point ?? 0),
       lead_time_days: String(meta.lead_time_days ?? product.lead_time_days ?? 0),
+      unit_price: String(meta.unit_price ?? product.unit_price ?? 0),
       track_serial: Boolean(meta.track_serial ?? product.track_serial ?? false)
     })
   }
@@ -340,6 +350,7 @@ export default function Inventory() {
       uom: editForm.uom.trim() || 'ea',
       reorder_point: Number(editForm.reorder_point) || 0,
       lead_time_days: Number(editForm.lead_time_days) || 0,
+      unit_price: Math.max(0, Number(editForm.unit_price) || 0),
       track_serial: Boolean(editForm.track_serial)
     }
     if (!payload.sku || !payload.name) {
@@ -457,6 +468,7 @@ export default function Inventory() {
                 <th>On hand</th>
                 <th>Reserved</th>
                 <th>Available</th>
+                <th>Unit price</th>
                 <th>Reorder point</th>
                 <th>Lead time (days)</th>
                 <th>Actions</th>
@@ -465,7 +477,7 @@ export default function Inventory() {
             <tbody>
               {enrichedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="muted">No products found. Try adjusting your filters or add a new item.</td>
+                  <td colSpan={10} className="muted">No products found. Try adjusting your filters or add a new item.</td>
                 </tr>
               )}
               {enrichedProducts.map((product) => (
@@ -480,6 +492,7 @@ export default function Inventory() {
                     <td>{product.on_hand}</td>
                     <td>{product.reserved}</td>
                     <td>{product.available}</td>
+                    <td>{currencyFormatter.format(Number(product.unit_price) || 0)}</td>
                     <td>{product.reorder_point}</td>
                     <td>{product.lead_time_days}</td>
                     <td>
@@ -511,7 +524,7 @@ export default function Inventory() {
                   </tr>
                   {String(product.id) === String(selectedProductId) && (
                     <tr className="inventory-table__details">
-                      <td colSpan={9}>
+                      <td colSpan={10}>
                         <div className="inventory-detail">
                           <div>
                             <p className="inventory-detail__label">Unit of measure</p>
@@ -520,6 +533,10 @@ export default function Inventory() {
                           <div>
                             <p className="inventory-detail__label">Serial tracking</p>
                             <p className="inventory-detail__value">{product.track_serial ? 'Enabled' : 'Disabled'}</p>
+                          </div>
+                          <div>
+                            <p className="inventory-detail__label">Unit price</p>
+                            <p className="inventory-detail__value">{currencyFormatter.format(Number(product.unit_price) || 0)}</p>
                           </div>
                           <div className="inventory-detail__bins">
                             <p className="inventory-detail__label">Bin allocations</p>
@@ -660,6 +677,18 @@ export default function Inventory() {
               value={productForm.lead_time_days}
               onChange={(e) => setProductForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
             />
+          </label>
+          <label className="field" data-help="Default price applied when adding this product to invoices.">
+            <span>Unit price</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={productForm.unit_price}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, unit_price: e.target.value }))}
+              placeholder={`e.g. ${currencyFormatter.format(99.95)}`}
+            />
+            <small className="muted">Stored in {currencyCode}.</small>
           </label>
           <label className="field field--checkbox" data-help="Track individual serial numbers for warranty or traceability.">
             <input
@@ -934,6 +963,17 @@ export default function Inventory() {
                   value={editForm.lead_time_days}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
                 />
+              </label>
+              <label className="field" data-help="Default price applied to invoices for this product.">
+                <span>Unit price</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.unit_price}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, unit_price: e.target.value }))}
+                />
+                <small className="muted">Stored in {currencyCode}.</small>
               </label>
               <label className="field field--checkbox" data-help="Keep serial tracking enabled for warranty traceability.">
                 <input
