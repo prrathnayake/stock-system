@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { io } from 'socket.io-client'
@@ -21,8 +21,18 @@ const reasonLabels = {
 
 export default function Dashboard() {
   const queryClient = useQueryClient()
-  const { user } = useAuth()
+  const { user, organization } = useAuth()
   const organizationId = user?.organization?.id
+
+  const orgName = organization?.legal_name || organization?.name || user?.organization?.name || null
+  const headerTitle = orgName ? `${orgName} inventory pulse` : 'Inventory control center'
+  const headerSubtitle = orgName
+    ? `Search, curate and adjust your catalogue for ${orgName}.`
+    : 'Search, curate and adjust your catalogue with real-time visibility into stock health.'
+  const timezoneSummary = useMemo(() => {
+    if (!organization?.timezone) return null
+    return `Timezone: ${organization.timezone}`
+  }, [organization?.timezone])
 
   const { data: overview } = useQuery({
     queryKey: ['stock-overview'],
@@ -84,6 +94,14 @@ export default function Dashboard() {
 
   return (
     <div className="page">
+      <div className="card dashboard__intro">
+        <div>
+          <h2>{headerTitle}</h2>
+          <p className="muted">{headerSubtitle}</p>
+        </div>
+        {timezoneSummary && <span className="badge badge--muted">{timezoneSummary}</span>}
+      </div>
+
       <div className="grid stats">
         <div className="card stat-card">
           <p className="muted">Active products</p>

@@ -39,6 +39,38 @@ const jwtKeyIds = buildKeyIds(process.env.JWT_SECRET_IDS, jwtSecrets);
 const refreshKeyIds = buildKeyIds(process.env.REFRESH_SECRET_IDS, refreshSecrets);
 const corsOrigins = parseOrigins(process.env.CORS_ORIGIN);
 
+const resolveMailEnabled = () => {
+  const explicit = process.env.MAIL_ENABLED;
+  if (explicit !== undefined) {
+    return explicit === 'true';
+  }
+  return Boolean((process.env.MAIL_URL || '').trim() || (process.env.MAIL_HOST || '').trim());
+};
+
+const bootstrapDefaults = {
+  organization: {
+    name: process.env.DEFAULT_ORG_NAME || 'Default Organization',
+    legalName: process.env.DEFAULT_ORG_LEGAL_NAME || 'Default Organization Pty Ltd',
+    contactEmail: process.env.DEFAULT_ORG_CONTACT_EMAIL || 'operations@example.com',
+    timezone: process.env.DEFAULT_ORG_TIMEZONE || 'Australia/Sydney',
+    abn: process.env.DEFAULT_ORG_ABN || '12 345 678 901',
+    taxId: process.env.DEFAULT_ORG_TAX_ID || '',
+    address: process.env.DEFAULT_ORG_ADDRESS || '123 Example Street\nSydney NSW 2000',
+    phone: process.env.DEFAULT_ORG_PHONE || '',
+    website: process.env.DEFAULT_ORG_WEBSITE || '',
+    invoicePrefix: process.env.DEFAULT_ORG_INVOICE_PREFIX || 'INV-',
+    defaultPaymentTerms: process.env.DEFAULT_ORG_PAYMENT_TERMS || 'Due within 14 days',
+    invoiceNotes: process.env.DEFAULT_ORG_INVOICE_NOTES || 'Please remit payment within the agreed terms.',
+    currency: process.env.DEFAULT_ORG_CURRENCY || 'AUD',
+    invoicingEnabled: process.env.DEFAULT_ORG_INVOICING_ENABLED !== 'false'
+  },
+  admin: {
+    email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com',
+    password: process.env.DEFAULT_ADMIN_PASSWORD || 'admin123',
+    name: process.env.DEFAULT_ADMIN_NAME || 'Admin User'
+  }
+};
+
 const resolveFrontendPath = () => {
   const configured = process.env.FRONTEND_DIST_PATH;
   if (configured) {
@@ -117,7 +149,7 @@ export const config = {
     retainDays: Number(process.env.BACKUP_RETAIN_DAYS || 14)
   },
   mail: {
-    enabled: process.env.MAIL_ENABLED === 'true',
+    enabled: resolveMailEnabled(),
     host: process.env.MAIL_HOST || '',
     port: Number(process.env.MAIL_PORT || 587),
     secure: process.env.MAIL_SECURE === 'true',
@@ -126,6 +158,10 @@ export const config = {
     from: process.env.MAIL_FROM || 'no-reply@stock-system.local',
     url: process.env.MAIL_URL || '',
     rejectUnauthorized: process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== 'false'
+  },
+  bootstrap: {
+    organization: bootstrapDefaults.organization,
+    admin: bootstrapDefaults.admin
   },
   frontend: {
     serve: process.env.SERVE_FRONTEND !== 'false',

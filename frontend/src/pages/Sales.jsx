@@ -57,6 +57,7 @@ export default function Sales() {
   const [saleBanner, setSaleBanner] = useState(null)
   const [customerPage, setCustomerPage] = useState(1)
   const [salePage, setSalePage] = useState(1)
+  const [activeSection, setActiveSection] = useState('sales')
 
   const { data: customers = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ['customers', customerSearch],
@@ -335,14 +336,47 @@ export default function Sales() {
 
   return (
     <div className="page">
+      <div className="subnav" role="tablist" aria-label="Sales sections">
+        <button
+          id="sales-orders-tab"
+          type="button"
+          role="tab"
+          aria-controls="sales-orders-panel"
+          aria-selected={activeSection === 'sales'}
+          tabIndex={activeSection === 'sales' ? 0 : -1}
+          className={`subnav__item${activeSection === 'sales' ? ' subnav__item--active' : ''}`}
+          onClick={() => setActiveSection('sales')}
+        >
+          Sales
+        </button>
+        <button
+          id="sales-customers-tab"
+          type="button"
+          role="tab"
+          aria-controls="sales-customers-panel"
+          aria-selected={activeSection === 'customers'}
+          tabIndex={activeSection === 'customers' ? 0 : -1}
+          className={`subnav__item${activeSection === 'customers' ? ' subnav__item--active' : ''}`}
+          onClick={() => setActiveSection('customers')}
+        >
+          Customers
+        </button>
+      </div>
+
       <div className="grid split">
-        <section className="card">
-          <header className="card__header">
-            <div>
-              <h2>Customers</h2>
-              <p className="stat-card__hint">Create and manage customer contact details.</p>
-            </div>
-          </header>
+        {activeSection === 'customers' && (
+          <section
+            id="sales-customers-panel"
+            role="tabpanel"
+            aria-labelledby="sales-customers-tab"
+            className="card sales__panel"
+          >
+            <header className="card__header">
+              <div>
+                <h2>Customers</h2>
+                <p className="stat-card__hint">Create and manage customer contact details.</p>
+              </div>
+            </header>
           <Banner banner={customerBanner} onClose={() => setCustomerBanner(null)} />
           <form className="grid two-columns" onSubmit={handleCustomerSubmit}>
             <label className="form-field">
@@ -424,7 +458,7 @@ export default function Sales() {
               placeholder="Search by name, company or email"
             />
           </div>
-          <div className="table-scroll">
+            <div className="table-scroll">
             <table className="table table--compact">
               <thead>
                 <tr>
@@ -489,10 +523,17 @@ export default function Sales() {
               onPrev={() => setCustomerPage((page) => Math.max(1, page - 1))}
               onNext={() => setCustomerPage((page) => Math.min(customerTotalPages, page + 1))}
             />
-          </div>
-        </section>
+            </div>
+          </section>
+        )}
 
-        <section className="card">
+        {activeSection === 'sales' && (
+          <section
+            id="sales-orders-panel"
+            role="tabpanel"
+            aria-labelledby="sales-orders-tab"
+            className="card sales__panel"
+          >
           <header className="card__header">
             <div>
               <h2>Sales</h2>
@@ -591,7 +632,7 @@ export default function Sales() {
             </select>
           </div>
 
-          <div className="table-scroll">
+            <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>
@@ -682,8 +723,9 @@ export default function Sales() {
               onPrev={() => setSalePage((page) => Math.max(1, page - 1))}
               onNext={() => setSalePage((page) => Math.min(saleTotalPages, page + 1))}
             />
-          </div>
-        </section>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )

@@ -1,13 +1,15 @@
-# Repair Center Stock System
+# Stock Management System
 
-A production-ready inventory, purchasing, and work-order platform tailored for device repair centers. The stack combines a hardened Express API with a responsive React dashboard so technicians, buyers, and managers share a single source of truth for parts, serials, RMAs, and invoicing.
+A production-ready stock management platform built for multi-location repair and operations teams. It combines a hardened Express API with a responsive React dashboard so technicians, buyers, and managers share a single source of truth for products, customers, work orders, and invoicing. Dynamic organization branding flows through the UI, and workspace navigation adapts to the task at hand.
 
 ## Key Capabilities
-- **Inventory intelligence** – Track on-hand, reserved, and available quantities per bin with low-stock alerts and adjustment auditing.
+- **Inventory intelligence** – Track on-hand, reserved, and available quantities per bin with low-stock alerts, adjustment auditing, and focused inventory versus bin workspaces.
 - **Product catalogue management** – Create, update, archive, and search products with tenant-aware scoping and duplicate SKU protection.
+- **Customer and sales flows** – Toggle between customer maintenance and sales fulfilment views without leaving the page, keeping context on the same data grid.
 - **Operational workflows** – Coordinate purchasing, serial tracking, RMAs, work orders, and invoicing from a unified interface.
+- **Dynamic organization branding** – Page headers, navigation labels, and contact information refresh instantly when organization settings change.
 - **Secure multi-tenant access** – JWT authentication, role-based permissions, rate limiting, and organization-aware data scoping.
-- **Observability & resilience** – Structured logging, caching, backup scheduling, and queue-powered background jobs.
+- **Observability & resilience** – Structured logging, caching, backup scheduling, email notifications, and queue-powered background jobs.
 
 ## Use Case Diagram
 ```mermaid
@@ -105,7 +107,7 @@ The Vitest system test provisions an in-memory SQLite database, exercises authen
 
 ## Environment Configuration
 ### Backend
-Create `backend/.env` (values shown are defaults):
+Copy `backend/.env.example` and adjust the values for your environment. Key entries include:
 ```
 PORT=8080
 DB_DIALECT=mysql
@@ -114,30 +116,76 @@ DB_PORT=3306
 DB_NAME=repair_center
 DB_USER=appuser
 DB_PASS=appsecret
-JWT_SECRETS=dev
-REFRESH_SECRETS=devrefresh
+JWT_SECRETS=dev-secret
+REFRESH_SECRETS=dev-refresh
 JWT_EXPIRES=15m
 REFRESH_EXPIRES=7d
 CORS_ORIGIN=http://localhost:5173
 REDIS_URL=redis://127.0.0.1:6379
-STOCK_OVERVIEW_CACHE_TTL=30
+
+# Mail transport
+MAIL_ENABLED=false
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_SECURE=false
+MAIL_USER=mailer@example.com
+MAIL_PASS=super-secret-password
+MAIL_FROM=Stock System <no-reply@example.com>
+MAIL_URL=
+MAIL_TLS_REJECT_UNAUTHORIZED=true
+
+# Frontend + uploads
 SERVE_FRONTEND=true
 FRONTEND_DIST_PATH=../frontend/dist
+UPLOADS_DIRECTORY=../uploads
+UPLOADS_PUBLIC_PATH=/uploads
+UPLOAD_MAX_FILE_SIZE=5mb
+
+# Backups
 BACKUP_ENABLED=false
 BACKUP_SCHEDULE=0 3 * * *
 BACKUP_DIRECTORY=backups
 BACKUP_RETAIN_DAYS=14
-UPLOADS_DIRECTORY=../uploads
-UPLOADS_PUBLIC_PATH=/uploads
-UPLOAD_MAX_FILE_SIZE=2mb
+
+# Bootstrap defaults
+DEFAULT_ORG_NAME=Default Organization
+DEFAULT_ORG_LEGAL_NAME=Default Organization Pty Ltd
+DEFAULT_ORG_CONTACT_EMAIL=operations@example.com
+DEFAULT_ORG_TIMEZONE=Australia/Sydney
+DEFAULT_ORG_ABN=12 345 678 901
+DEFAULT_ORG_TAX_ID=
+DEFAULT_ORG_ADDRESS=123 Example Street\nSydney NSW 2000
+DEFAULT_ORG_PHONE=+61 2 1234 5678
+DEFAULT_ORG_WEBSITE=https://example.com
+DEFAULT_ORG_INVOICE_PREFIX=INV-
+DEFAULT_ORG_PAYMENT_TERMS=Due within 14 days
+DEFAULT_ORG_INVOICE_NOTES=Please remit payment within the agreed terms.
+DEFAULT_ORG_CURRENCY=AUD
+DEFAULT_ORG_INVOICING_ENABLED=true
+DEFAULT_ADMIN_EMAIL=admin@example.com
+DEFAULT_ADMIN_NAME=Admin User
+DEFAULT_ADMIN_PASSWORD=admin123
 ```
 
+> **Email delivery.** Setting `MAIL_HOST` or `MAIL_URL` automatically enables outbound email even if `MAIL_ENABLED` is omitted. Explicitly set `MAIL_ENABLED=false` to suppress delivery in development.
+
 ### Frontend
-Create `frontend/.env`:
+Copy `frontend/.env.example` and update the API endpoints if required:
 ```
 VITE_API_URL=http://localhost:8080
 VITE_SOCKET_URL=http://localhost:8080
 ```
+
+## UI Highlights
+- **Organization-aware headers** – Dashboard and navigation copy react immediately to updates made in the organization settings.
+- **Inventory sub-navigation** – Switch between active stock monitoring and storage bin administration without losing context.
+- **Sales workspace tabs** – Jump between customer management and in-flight sales from the same route using quick toggle buttons.
+
+## Email notifications
+- Configure SMTP credentials in `backend/.env` using the `MAIL_*` variables. Providing `MAIL_HOST` or `MAIL_URL` automatically enables the transporter.
+- System messages (user onboarding, inventory alerts, sale status changes) reuse a shared email service that now surfaces transporter errors in the Vitest suite (`backend/tests/email.test.js`).
+- Setting `MAIL_ENABLED=true` without providing `MAIL_HOST` or `MAIL_URL` will log a configuration error and skip delivery so misconfigured environments fail loudly rather than silently.
+- Leave `MAIL_ENABLED=false` in development to simulate sends without contacting your SMTP provider.
 
 ## Deployment Checklist
 1. Prepare production bundles:

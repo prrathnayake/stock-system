@@ -222,6 +222,7 @@ export default function Settings() {
         invoicing_enabled: organizationDetails.invoicing_enabled !== false
       })
       setLogoPreview(resolveAssetUrl(organizationDetails.logo_url || ''))
+      updateCachedOrganization(organizationDetails)
     }
   }, [organizationDetails])
 
