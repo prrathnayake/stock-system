@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { api } from '../lib/api'
 import { getAccessToken, setUserProfile as persistUserProfile } from '../lib/auth'
@@ -50,9 +51,80 @@ function TablePagination({ page, totalPages, onPrev, onNext }) {
 
 export default function Settings() {
   const { user, setUser, organization } = useAuth()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const isAdmin = user?.role === 'admin'
   const activeVariant = uiVariants.find((variant) => variant.id === (user?.ui_variant || 'pro')) || uiVariants[0]
+
+  const navigationItems = useMemo(() => {
+    const base = [
+      { id: 'profile', label: 'Profile & preferences' },
+      { id: 'readiness', label: 'Security & readiness' }
+    ]
+    if (isAdmin) {
+      base.push(
+        { id: 'organization', label: 'Organization profile' },
+        { id: 'team', label: 'User management' },
+        { id: 'operations', label: 'Operations & alerts' },
+        { id: 'records', label: 'Audit & backups' }
+      )
+    }
+    return base
+  }, [isAdmin])
+
+  const [activeSection, setActiveSection] = useState(() => navigationItems[0]?.id || 'profile')
+
+  useEffect(() => {
+    if (!navigationItems.some((item) => item.id === activeSection)) {
+      setActiveSection(navigationItems[0]?.id || 'profile')
+    }
+  }, [activeSection, navigationItems])
+
+  const scrollToSection = useCallback((id) => {
+    if (typeof document === 'undefined') return
+    const element = document.getElementById(`settings-${id}`)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const sections = navigationItems
+      .map((item) => document.getElementById(`settings-${item.id}`))
+      .filter(Boolean)
+    if (sections.length === 0) return undefined
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        if (visible.length > 0) {
+          const id = visible[0].target.id.replace('settings-', '')
+          setActiveSection(id)
+        }
+      },
+      { rootMargin: '-40% 0px -40% 0px', threshold: [0.1, 0.25, 0.5, 0.75] }
+    )
+    sections.forEach((section) => observer.observe(section))
+    return () => {
+      sections.forEach((section) => observer.unobserve(section))
+      observer.disconnect()
+    }
+  }, [navigationItems])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!location.hash) return
+    const target = location.hash.replace('#', '')
+    if (!target) return
+    const exists = navigationItems.some((item) => item.id === target)
+    if (!exists) return
+    setActiveSection(target)
+    window.requestAnimationFrame(() => {
+      scrollToSection(target)
+    })
+  }, [location.hash, navigationItems, scrollToSection])
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
@@ -608,708 +680,777 @@ export default function Settings() {
   }
 
   return (
-    <div className="page">
-      <div className="card">
-        <h2>Account</h2>
-        <div className="details-grid">
-          <div>
-            <span className="muted">Name</span>
-            <p>{user?.name || '—'}</p>
-          </div>
-          <div>
-            <span className="muted">Email</span>
-            <p>{user?.email || '—'}</p>
-          </div>
-          <div>
-            <span className="muted">Role</span>
-            <p className="badge badge--muted">{user?.role || 'team member'}</p>
-          </div>
-          <div>
-            <span className="muted">Organization</span>
-            <p>{user?.organization?.name || '—'}</p>
-          </div>
-          <div>
-            <span className="muted">Interface style</span>
-            <p className="badge">{activeVariant.name}</p>
-          </div>
+    <div className="page settings-page">
+      <div className="card settings-page__intro">
+        <div>
+          <h2>Administration hub</h2>
+          <p className="muted">Coordinate workspace preferences, manage your organization and keep your data safe.</p>
+        </div>
+        <div className="settings-page__summary">
+          <span className="badge badge--muted">{user?.email || 'Signed-in user'}</span>
+          {organization?.timezone && <span className="badge">{organization.timezone}</span>}
         </div>
       </div>
 
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <h2>Personal preferences</h2>
-            <p className="muted">Tailor the interface to match how you like to work.</p>
-          </div>
-        </div>
-        {preferencesBanner && (
-          <div className={`banner banner--${preferencesBanner.type === 'error' ? 'danger' : 'info'}`}>
-            {preferencesBanner.message}
-          </div>
-        )}
-        <form className="variant-form" onSubmit={handleSavePreferences}>
-          <div className="variant-grid">
-            {uiVariants.map((variant) => (
-              <label
-                key={variant.id}
-                className={`variant-option${selectedVariant === variant.id ? ' variant-option--active' : ''}`}
+      <div className="settings-layout">
+        <aside className="settings-secondary-nav">
+          <p className="settings-secondary-nav__title">Jump to</p>
+          <div className="settings-secondary-nav__list">
+            {navigationItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`settings-secondary-nav__link${activeSection === item.id ? ' settings-secondary-nav__link--active' : ''}`}
+                onClick={() => {
+                  setActiveSection(item.id)
+                  scrollToSection(item.id)
+                }}
               >
-                <input
-                  type="radio"
-                  name="ui-variant"
-                  value={variant.id}
-                  checked={selectedVariant === variant.id}
-                  onChange={() => setSelectedVariant(variant.id)}
-                />
-                <div className="variant-option__body">
-                  <div className={`variant-preview variant-preview--${variant.id}`} aria-hidden="true" />
-                  <div>
-                    <p className="variant-option__title">{variant.name}</p>
-                    <p className="variant-option__description muted">{variant.description}</p>
-                  </div>
-                </div>
-              </label>
+                {item.label}
+              </button>
             ))}
           </div>
-          <div className="form-actions">
-            <button className="button button--primary" type="submit" disabled={preferencesMutation.isLoading}>
-              {preferencesMutation.isLoading ? 'Saving…' : 'Save preferences'}
-            </button>
-          </div>
-        </form>
-      </div>
+        </aside>
 
-      <div className="card">
-        <h2>Deployment checklist</h2>
-        <ul className="checklist">
-          <li>
-            <strong>Environment variables</strong>
-            <p className="muted">Define secure JWT secrets, database credentials and the allowed CORS origin before going live.</p>
-          </li>
-          <li>
-            <strong>Database backups</strong>
-            <p className="muted">Schedule nightly backups of the MySQL database and verify the restoration procedure.</p>
-          </li>
-          <li>
-            <strong>Access control</strong>
-            <p className="muted">Provision accounts for staff using the admin console or SQL migrations.</p>
-          </li>
-          <li>
-            <strong>Legal documents</strong>
-            <p className="muted">Add your terms of service, privacy notice and any other required files to the repository.</p>
-          </li>
-        </ul>
-      </div>
-
-      {isAdmin && (
-        <>
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <h2>Organization profile</h2>
-                <p className="muted">Manage branding, legal and invoicing defaults for this organization.</p>
-              </div>
-            </div>
-            {orgBanner && (
-              <div className={`banner banner--${orgBanner.type === 'error' ? 'danger' : 'info'}`}>
-                {orgBanner.message}
-              </div>
-            )}
-            <form className="form-grid" onSubmit={handleOrganizationSubmit}>
-              <label className="field" data-help="Display name shown in navigation and dashboards.">
-                <span>Organization name</span>
-                <input
-                  value={orgForm.name}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, name: e.target.value }))}
-                  required
-                />
-              </label>
-              <label className="field" data-help="Registered legal entity name used on invoices.">
-                <span>Legal name</span>
-                <input
-                  value={orgForm.legal_name}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, legal_name: e.target.value }))}
-                  placeholder="Registered business name"
-                />
-              </label>
-              <label className="field" data-help="Primary address for alerts and administrative notifications.">
-                <span>Notification email</span>
-                <input
-                  type="email"
-                  value={orgForm.contact_email}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, contact_email: e.target.value }))}
-                  placeholder="alerts@your-company.com"
-                />
-                <small className="muted">Administrative emails and backup alerts will be delivered here.</small>
-              </label>
-              <label className="field" data-help="Timezone used for due dates and scheduling.">
-                <span>Timezone</span>
-                <input
-                  value={orgForm.timezone}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, timezone: e.target.value }))}
-                  placeholder="e.g. America/New_York"
-                />
-              </label>
-              <label className="field" data-help="Government-issued business number for compliance.">
-                <span>ABN / business number</span>
-                <input
-                  value={orgForm.abn}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, abn: e.target.value }))}
-                  placeholder="e.g. 12 345 678 901"
-                />
-              </label>
-              <label className="field" data-help="Tax identifier displayed on quotes and invoices.">
-                <span>Tax registration</span>
-                <input
-                  value={orgForm.tax_id}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, tax_id: e.target.value }))}
-                  placeholder="VAT, GST or other tax ID"
-                />
-              </label>
-              <label className="field field--span" data-help="Head office or registered trading address.">
-                <span>Registered address</span>
-                <textarea
-                  rows={3}
-                  value={orgForm.address}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, address: e.target.value }))}
-                  placeholder="Street, city, state and postcode"
-                />
-              </label>
-              <label className="field" data-help="Main phone number for customer contact.">
-                <span>Support phone</span>
-                <input
-                  value={orgForm.phone}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  placeholder="e.g. +61 2 1234 5678"
-                />
-              </label>
-              <label className="field" data-help="Public website or knowledge base link for staff reference.">
-                <span>Website</span>
-                <input
-                  value={orgForm.website}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, website: e.target.value }))}
-                  placeholder="https://example.com"
-                />
-              </label>
-              <label className="field field--span" data-help="Upload a PNG or JPG logo or provide a hosted link for branding.">
-                <span>Brand logo</span>
-                {logoPreview ? (
-                  <div className="logo-preview">
-                    <img src={logoPreview} alt="Logo preview" />
+        <div className="settings-content">
+          <section id="settings-profile" className="settings-section">
+            <header className="settings-section__header">
+              <h2>Profile & preferences</h2>
+              <p className="muted">Keep your personal details and workspace layout up to date.</p>
+            </header>
+            <div className="settings-section__cards">
+              <div className="card settings-card">
+                <h3>Account</h3>
+                <div className="details-grid">
+                  <div>
+                    <span className="muted">Name</span>
+                    <p>{user?.name || '—'}</p>
                   </div>
-                ) : null}
-                <div className="field__stack">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={handleLogoUpload}
-                    disabled={uploadLogoMutation.isLoading}
-                  />
-                  <input
-                    value={orgForm.logo_url}
-                    onChange={(e) => setOrgForm((prev) => ({ ...prev, logo_url: e.target.value }))}
-                    placeholder="Link to hosted logo image"
-                  />
-                </div>
-                <small className="muted">
-                  {uploadLogoMutation.isLoading
-                    ? 'Uploading logo…'
-                    : 'PNG or JPG up to 2 MB. Leave blank to use the default system mark.'}
-                </small>
-              </label>
-              <div className="field field--span">
-                <span>Invoicing visibility</span>
-                <div className="field__stack">
-                  <button
-                    type="button"
-                    className={`button ${orgForm.invoicing_enabled ? 'button--ghost' : 'button--primary'}`}
-                    onClick={toggleInvoicing}
-                  >
-                    {orgForm.invoicing_enabled ? 'Disable invoicing' : 'Enable invoicing'}
-                  </button>
-                  <small className="muted">
-                    {orgForm.invoicing_enabled
-                      ? 'Invoices are visible to admins. Disable to hide all invoicing features across the workspace.'
-                      : 'Invoices are hidden for everyone. Enable to restore invoicing screens and defaults.'}
-                  </small>
+                  <div>
+                    <span className="muted">Email</span>
+                    <p>{user?.email || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="muted">Role</span>
+                    <p className="badge badge--muted">{user?.role || 'team member'}</p>
+                  </div>
+                  <div>
+                    <span className="muted">Organization</span>
+                    <p>{user?.organization?.name || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="muted">Interface style</span>
+                    <p className="badge">{activeVariant.name}</p>
+                  </div>
                 </div>
               </div>
-              <label className="field" data-help="Prefix automatically applied to new invoice numbers.">
-                <span>Invoice prefix</span>
-                <input
-                  value={orgForm.invoice_prefix}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_prefix: e.target.value }))}
-                  placeholder="e.g. INV- or JOB-"
-                  disabled={!orgForm.invoicing_enabled}
-                />
-              </label>
-              <label className="field" data-help="Default credit terms displayed on new invoices.">
-                <span>Default payment terms</span>
-                <input
-                  value={orgForm.default_payment_terms}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, default_payment_terms: e.target.value }))}
-                  placeholder="e.g. Net 14"
-                  disabled={!orgForm.invoicing_enabled}
-                />
-              </label>
-              <label className="field" data-help="Currency code used for pricing and billing.">
-                <span>Default currency</span>
-                <input
-                  value={orgForm.currency}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, currency: e.target.value }))}
-                  placeholder="e.g. AUD"
-                  disabled={!orgForm.invoicing_enabled}
-                />
-              </label>
-              <label className="field field--span" data-help="Standard footer text appended to every invoice.">
-                <span>Default invoice notes</span>
-                <textarea
-                  rows={3}
-                  value={orgForm.invoice_notes}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_notes: e.target.value }))}
-                  placeholder="Displayed on all invoices by default"
-                  disabled={!orgForm.invoicing_enabled}
-                />
-              </label>
-              <div className="form-actions">
-                <button className="button button--primary" type="submit" disabled={organizationMutation.isLoading}>
-                  {organizationMutation.isLoading ? 'Saving…' : 'Save organization'}
-                </button>
-              </div>
-            </form>
-          </div>
 
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <h2>User management</h2>
-                <p className="muted">Control who can access the platform and enforce secure practices.</p>
-              </div>
-            </div>
-            {userBanner && (
-              <div className={`banner banner--${userBanner.type === 'error' ? 'danger' : 'info'}`}>
-                {userBanner.message}
-              </div>
-            )}
-            <div className="grid split">
-              <form className="form-grid" onSubmit={handleCreateUser}>
-                <h3>Invite a team member</h3>
-                <label className="field" data-help="Name shown to other teammates and on activity logs.">
-                  <span>Full name</span>
-                  <input
-                    value={userForm.full_name}
-                    onChange={(e) => setUserForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                    required
-                  />
-                </label>
-                <label className="field" data-help="Work email address used to sign in and receive notifications.">
-                  <span>Email</span>
-                  <input
-                    type="email"
-                    value={userForm.email}
-                    onChange={(e) => setUserForm((prev) => ({ ...prev, email: e.target.value }))}
-                    required
-                  />
-                </label>
-                <label className="field" data-help="Initial password the user must change after first login.">
-                  <span>Temporary password</span>
-                  <input
-                    type="password"
-                    value={userForm.password}
-                    onChange={(e) => setUserForm((prev) => ({ ...prev, password: e.target.value }))}
-                    required
-                  />
-                </label>
-                <label className="field" data-help="Determines administrative permissions for the user.">
-                  <span>Role</span>
-                  <select
-                    value={userForm.role}
-                    onChange={(e) => setUserForm((prev) => ({ ...prev, role: e.target.value }))}
-                  >
-                    <option value="user">User</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                </label>
-                <label className="field" data-help="Preferred interface layout that loads after login.">
-                  <span>Interface style</span>
-                  <select
-                    value={userForm.ui_variant}
-                    onChange={(e) => setUserForm((prev) => ({ ...prev, ui_variant: e.target.value }))}
-                  >
+              <div className="card settings-card">
+                <div className="card__header">
+                  <div>
+                    <h3>Personal preferences</h3>
+                    <p className="muted">Tailor the interface to match how you like to work.</p>
+                  </div>
+                </div>
+                {preferencesBanner && (
+                  <div className={`banner banner--${preferencesBanner.type === 'error' ? 'danger' : 'info'}`}>
+                    {preferencesBanner.message}
+                  </div>
+                )}
+                <form className="variant-form" onSubmit={handleSavePreferences}>
+                  <div className="variant-grid">
                     {uiVariants.map((variant) => (
-                      <option key={variant.id} value={variant.id}>{variant.name}</option>
+                      <label
+                        key={variant.id}
+                        className={`variant-option${selectedVariant === variant.id ? ' variant-option--active' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="ui-variant"
+                          value={variant.id}
+                          checked={selectedVariant === variant.id}
+                          onChange={() => setSelectedVariant(variant.id)}
+                        />
+                        <div className="variant-option__body">
+                          <div className={`variant-preview variant-preview--${variant.id}`} aria-hidden="true" />
+                          <div>
+                            <p className="variant-option__title">{variant.name}</p>
+                            <p className="variant-option__description muted">{variant.description}</p>
+                          </div>
+                        </div>
+                      </label>
                     ))}
-                  </select>
-                </label>
-                <label className="field field--checkbox" data-help="Forces the invited user to set a personal password.">
-                  <input
-                    type="checkbox"
-                    checked={userForm.must_change_password}
-                    onChange={(e) => setUserForm((prev) => ({ ...prev, must_change_password: e.target.checked }))}
-                  />
-                  <span>Require password change on next login</span>
-                </label>
-                <div className="form-actions">
-                  <button className="button button--primary" type="submit" disabled={createUserMutation.isLoading}>
-                    {createUserMutation.isLoading ? 'Creating…' : 'Create user'}
-                  </button>
-                </div>
-              </form>
+                  </div>
+                  <div className="form-actions">
+                    <button className="button button--primary" type="submit" disabled={preferencesMutation.isLoading}>
+                      {preferencesMutation.isLoading ? 'Saving…' : 'Save preferences'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
 
-              <div className="user-management">
-                <div className="user-management__header">
-                  <h3>Active users</h3>
-                  <div className="user-management__search">
-                    <label className="field">
-                      <span>Search users</span>
-                      <input
-                        value={userSearch}
-                        onChange={(e) => setUserSearch(e.target.value)}
-                        placeholder="Search by name, email or role"
-                      />
-                    </label>
+          <section id="settings-readiness" className="settings-section">
+            <header className="settings-section__header">
+              <h2>Security & readiness</h2>
+              <p className="muted">Tick through deployment essentials before go-live.</p>
+            </header>
+            <div className="settings-section__cards">
+              <div className="card settings-card">
+                <h3>Deployment checklist</h3>
+                <ul className="checklist">
+                  <li>
+                    <strong>Environment variables</strong>
+                    <p className="muted">Define secure JWT secrets, database credentials and the allowed CORS origin before going live.</p>
+                  </li>
+                  <li>
+                    <strong>Database backups</strong>
+                    <p className="muted">Schedule nightly backups of the MySQL database and verify the restoration procedure.</p>
+                  </li>
+                  <li>
+                    <strong>Access control</strong>
+                    <p className="muted">Provision accounts for staff using the admin console or SQL migrations.</p>
+                  </li>
+                  <li>
+                    <strong>Legal documents</strong>
+                    <p className="muted">Add your terms of service, privacy notice and any other required files to the repository.</p>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {isAdmin && (
+            <>
+              <section id="settings-organization" className="settings-section">
+                <header className="settings-section__header">
+                  <h2>Organization profile</h2>
+                  <p className="muted">Manage branding, legal and invoicing defaults for this organization.</p>
+                </header>
+                <div className="settings-section__cards">
+                  <div className="card settings-card">
+                    {orgBanner && (
+                      <div className={`banner banner--${orgBanner.type === 'error' ? 'danger' : 'info'}`}>
+                        {orgBanner.message}
+                      </div>
+                    )}
+                    <form className="form-grid" onSubmit={handleOrganizationSubmit}>
+                      <label className="field" data-help="Display name shown in navigation and dashboards.">
+                        <span>Organization name</span>
+                        <input
+                          value={orgForm.name}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, name: e.target.value }))}
+                          required
+                        />
+                      </label>
+                      <label className="field" data-help="Registered legal entity name used on invoices.">
+                        <span>Legal name</span>
+                        <input
+                          value={orgForm.legal_name}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, legal_name: e.target.value }))}
+                          placeholder="Registered business name"
+                        />
+                      </label>
+                      <label className="field" data-help="Primary address for alerts and administrative notifications.">
+                        <span>Notification email</span>
+                        <input
+                          type="email"
+                          value={orgForm.contact_email}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, contact_email: e.target.value }))}
+                          placeholder="alerts@your-company.com"
+                        />
+                        <small className="muted">Administrative emails and backup alerts will be delivered here.</small>
+                      </label>
+                      <label className="field" data-help="Timezone used for due dates and scheduling.">
+                        <span>Timezone</span>
+                        <input
+                          value={orgForm.timezone}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, timezone: e.target.value }))}
+                          placeholder="e.g. America/New_York"
+                        />
+                      </label>
+                      <label className="field" data-help="Government-issued business number for compliance.">
+                        <span>ABN / business number</span>
+                        <input
+                          value={orgForm.abn}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, abn: e.target.value }))}
+                          placeholder="e.g. 12 345 678 901"
+                        />
+                      </label>
+                      <label className="field" data-help="Tax identifier displayed on quotes and invoices.">
+                        <span>Tax registration</span>
+                        <input
+                          value={orgForm.tax_id}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, tax_id: e.target.value }))}
+                          placeholder="VAT, GST or other tax ID"
+                        />
+                      </label>
+                      <label className="field field--span" data-help="Head office or registered trading address.">
+                        <span>Registered address</span>
+                        <textarea
+                          rows={3}
+                          value={orgForm.address}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, address: e.target.value }))}
+                          placeholder="Street, city, state and postcode"
+                        />
+                      </label>
+                      <label className="field" data-help="Main phone number for customer contact.">
+                        <span>Support phone</span>
+                        <input
+                          value={orgForm.phone}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, phone: e.target.value }))}
+                          placeholder="e.g. +61 2 1234 5678"
+                        />
+                      </label>
+                      <label className="field" data-help="Public website or knowledge base link for staff reference.">
+                        <span>Website</span>
+                        <input
+                          value={orgForm.website}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, website: e.target.value }))}
+                          placeholder="https://example.com"
+                        />
+                      </label>
+                      <label className="field field--span" data-help="Upload a PNG or JPG logo or provide a hosted link for branding.">
+                        <span>Brand logo</span>
+                        {logoPreview ? (
+                          <div className="logo-preview">
+                            <img src={logoPreview} alt="Logo preview" />
+                          </div>
+                        ) : null}
+                        <div className="field__stack">
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            onChange={handleLogoUpload}
+                            disabled={uploadLogoMutation.isLoading}
+                          />
+                          <input
+                            value={orgForm.logo_url}
+                            onChange={(e) => setOrgForm((prev) => ({ ...prev, logo_url: e.target.value }))}
+                            placeholder="Link to hosted logo image"
+                          />
+                        </div>
+                        <small className="muted">
+                          {uploadLogoMutation.isLoading
+                            ? 'Uploading logo…'
+                            : 'PNG or JPG up to 2 MB. Leave blank to use the default system mark.'}
+                        </small>
+                      </label>
+                      <div className="field field--span">
+                        <span>Invoicing visibility</span>
+                        <div className="field__stack">
+                          <button
+                            type="button"
+                            className={`button ${orgForm.invoicing_enabled ? 'button--ghost' : 'button--primary'}`}
+                            onClick={toggleInvoicing}
+                          >
+                            {orgForm.invoicing_enabled ? 'Disable invoicing' : 'Enable invoicing'}
+                          </button>
+                          <small className="muted">
+                            {orgForm.invoicing_enabled
+                              ? 'Invoices are visible to admins. Disable to hide all invoicing features across the workspace.'
+                              : 'Invoices are hidden for everyone. Enable to restore invoicing screens and defaults.'}
+                          </small>
+                        </div>
+                      </div>
+                      <label className="field" data-help="Prefix automatically applied to new invoice numbers.">
+                        <span>Invoice prefix</span>
+                        <input
+                          value={orgForm.invoice_prefix}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_prefix: e.target.value }))}
+                          placeholder="e.g. INV- or JOB-"
+                          disabled={!orgForm.invoicing_enabled}
+                        />
+                      </label>
+                      <label className="field" data-help="Default credit terms displayed on new invoices.">
+                        <span>Default payment terms</span>
+                        <input
+                          value={orgForm.default_payment_terms}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, default_payment_terms: e.target.value }))}
+                          placeholder="e.g. Net 14"
+                          disabled={!orgForm.invoicing_enabled}
+                        />
+                      </label>
+                      <label className="field" data-help="Currency code used for pricing and billing.">
+                        <span>Default currency</span>
+                        <input
+                          value={orgForm.currency}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, currency: e.target.value }))}
+                          placeholder="e.g. AUD"
+                          disabled={!orgForm.invoicing_enabled}
+                        />
+                      </label>
+                      <label className="field field--span" data-help="Standard footer text appended to every invoice.">
+                        <span>Default invoice notes</span>
+                        <textarea
+                          rows={3}
+                          value={orgForm.invoice_notes}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_notes: e.target.value }))}
+                          placeholder="Displayed on all invoices by default"
+                          disabled={!orgForm.invoicing_enabled}
+                        />
+                      </label>
+                      <div className="form-actions">
+                        <button className="button button--primary" type="submit" disabled={organizationMutation.isLoading}>
+                          {organizationMutation.isLoading ? 'Saving…' : 'Save organization'}
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 </div>
-                <table className="table table--compact">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Interface</th>
-                      <th>Reset required</th>
-                      <th>Created</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="muted">
-                          {users.length === 0
-                            ? 'No additional users created yet.'
-                            : 'No users match your search.'}
-                        </td>
-                      </tr>
-                    ) : (
-                      visibleUsers.map((account) => (
-                        <tr key={account.id}>
-                          <td>{account.full_name}</td>
-                          <td>{account.email}</td>
-                          <td>
-                            <span className={`badge badge--${account.role === 'admin' ? 'info' : 'muted'}`}>
-                              {account.role}
-                            </span>
-                          </td>
-                          <td>
-                            <div>
-                              <span className={`badge badge--${account.online ? 'success' : 'muted'}`}>
-                                {account.online ? 'Online now' : 'Offline'}
-                              </span>
-                            </div>
-                            {!account.online && (
-                              <div className="muted" style={{ fontSize: '12px', marginTop: '4px' }}>
-                                Last seen {account.last_seen_at
-                                  ? new Date(account.last_seen_at).toLocaleString()
-                                  : 'never'}
-                              </div>
-                            )}
-                          </td>
-                          <td>{(uiVariants.find((variant) => variant.id === account.ui_variant)?.name) || 'Professional'}</td>
-                          <td>{account.must_change_password ? 'Yes' : 'No'}</td>
-                          <td>{account.created_at ? new Date(account.created_at).toLocaleDateString() : '—'}</td>
-                          <td className="table__actions">
-                            <button
-                              type="button"
-                              className="button button--ghost button--small"
-                              onClick={() => handleStartEdit(account)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="button button--ghost button--small"
-                              onClick={() => handleDeleteUser(account.id)}
-                              disabled={deleteUserMutation.isLoading}
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <TablePagination
-                  page={userPage}
-                  totalPages={totalUserPages}
-                  onPrev={() => setUserPage((page) => Math.max(1, page - 1))}
-                  onNext={() => setUserPage((page) => Math.min(totalUserPages, page + 1))}
-                />
+              </section>
 
-                {editingUser && (
-                  <form className="form-grid form-grid--inline" onSubmit={handleUpdateUser}>
-                    <h4>Edit {editingUser.full_name}</h4>
-                    <label className="field" data-help="Update the name that appears in user menus and logs.">
-                      <span>Full name</span>
-                      <input
-                        value={editForm.full_name}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                        required
-                      />
-                    </label>
-                    <label className="field" data-help="Change the email address used to sign in.">
-                      <span>Email</span>
-                      <input
-                        type="email"
-                        value={editForm.email}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
-                        required
-                      />
-                    </label>
-                    <label className="field" data-help="Adjust the user's access level.">
-                      <span>Role</span>
-                      <select
-                        value={editForm.role}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value }))}
+              <section id="settings-team" className="settings-section">
+                <header className="settings-section__header">
+                  <h2>User management</h2>
+                  <p className="muted">Control who can access the platform and enforce secure practices.</p>
+                </header>
+                <div className="settings-section__cards">
+                  <div className="card settings-card">
+                    {userBanner && (
+                      <div className={`banner banner--${userBanner.type === 'error' ? 'danger' : 'info'}`}>
+                        {userBanner.message}
+                      </div>
+                    )}
+                    <div className="grid split">
+                      <form className="form-grid" onSubmit={handleCreateUser}>
+                        <h3>Invite a team member</h3>
+                        <label className="field" data-help="Name shown to other teammates and on activity logs.">
+                          <span>Full name</span>
+                          <input
+                            value={userForm.full_name}
+                            onChange={(e) => setUserForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                            required
+                          />
+                        </label>
+                        <label className="field" data-help="Work email address used to sign in and receive notifications.">
+                          <span>Email</span>
+                          <input
+                            type="email"
+                            value={userForm.email}
+                            onChange={(e) => setUserForm((prev) => ({ ...prev, email: e.target.value }))}
+                            required
+                          />
+                        </label>
+                        <label className="field" data-help="Initial password the user must change after first login.">
+                          <span>Temporary password</span>
+                          <input
+                            type="password"
+                            value={userForm.password}
+                            onChange={(e) => setUserForm((prev) => ({ ...prev, password: e.target.value }))}
+                            required
+                          />
+                        </label>
+                        <label className="field" data-help="Determines administrative permissions for the user.">
+                          <span>Role</span>
+                          <select
+                            value={userForm.role}
+                            onChange={(e) => setUserForm((prev) => ({ ...prev, role: e.target.value }))}
+                          >
+                            <option value="user">User</option>
+                            <option value="admin">Administrator</option>
+                          </select>
+                        </label>
+                        <label className="field" data-help="Preferred interface layout that loads after login.">
+                          <span>Interface style</span>
+                          <select
+                            value={userForm.ui_variant}
+                            onChange={(e) => setUserForm((prev) => ({ ...prev, ui_variant: e.target.value }))}
+                          >
+                            {uiVariants.map((variant) => (
+                              <option key={variant.id} value={variant.id}>{variant.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field field--checkbox" data-help="Forces the invited user to set a personal password.">
+                          <input
+                            type="checkbox"
+                            checked={userForm.must_change_password}
+                            onChange={(e) => setUserForm((prev) => ({ ...prev, must_change_password: e.target.checked }))}
+                          />
+                          <span>Require password change on next login</span>
+                        </label>
+                        <div className="form-actions">
+                          <button className="button button--primary" type="submit" disabled={createUserMutation.isLoading}>
+                            {createUserMutation.isLoading ? 'Creating…' : 'Create user'}
+                          </button>
+                        </div>
+                      </form>
+
+                      <div className="user-management">
+                        <div className="user-management__header">
+                          <h3>Active users</h3>
+                          <div className="user-management__search">
+                            <label className="field">
+                              <span>Search users</span>
+                              <input
+                                value={userSearch}
+                                onChange={(e) => setUserSearch(e.target.value)}
+                                placeholder="Search by name, email or role"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="table-scroll user-management__table">
+                          <table className="table table--compact">
+                            <thead>
+                              <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Interface</th>
+                                <th>Reset required</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredUsers.length === 0 ? (
+                                <tr>
+                                  <td colSpan={8} className="muted">
+                                    {users.length === 0
+                                      ? 'No additional users created yet.'
+                                      : 'No users match your search.'}
+                                  </td>
+                                </tr>
+                              ) : (
+                                visibleUsers.map((account) => (
+                                  <tr key={account.id}>
+                                    <td>{account.full_name}</td>
+                                    <td>{account.email}</td>
+                                    <td>
+                                      <span className={`badge badge--${account.role === 'admin' ? 'info' : 'muted'}`}>
+                                        {account.role}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div>
+                                        <span className={`badge badge--${account.online ? 'success' : 'muted'}`}>
+                                          {account.online ? 'Online now' : 'Offline'}
+                                        </span>
+                                      </div>
+                                      {!account.online && (
+                                        <div className="muted" style={{ fontSize: '12px', marginTop: '4px' }}>
+                                          Last seen {account.last_seen_at
+                                            ? new Date(account.last_seen_at).toLocaleString()
+                                            : 'never'}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td>{(uiVariants.find((variant) => variant.id === account.ui_variant)?.name) || 'Professional'}</td>
+                                    <td>{account.must_change_password ? 'Yes' : 'No'}</td>
+                                    <td>{account.created_at ? new Date(account.created_at).toLocaleDateString() : '—'}</td>
+                                    <td className="table__actions">
+                                      <button
+                                        type="button"
+                                        className="button button--ghost button--small"
+                                        onClick={() => handleStartEdit(account)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="button button--ghost button--small"
+                                        onClick={() => handleDeleteUser(account.id)}
+                                        disabled={deleteUserMutation.isLoading}
+                                      >
+                                        Remove
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <TablePagination
+                          page={userPage}
+                          totalPages={totalUserPages}
+                          onPrev={() => setUserPage((page) => Math.max(1, page - 1))}
+                          onNext={() => setUserPage((page) => Math.min(totalUserPages, page + 1))}
+                        />
+
+                        {editingUser && (
+                          <form className="form-grid form-grid--inline" onSubmit={handleUpdateUser}>
+                            <h4>Edit {editingUser.full_name}</h4>
+                            <label className="field" data-help="Update the name that appears in user menus and logs.">
+                              <span>Full name</span>
+                              <input
+                                value={editForm.full_name}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                                required
+                              />
+                            </label>
+                            <label className="field" data-help="Change the email address used to sign in.">
+                              <span>Email</span>
+                              <input
+                                type="email"
+                                value={editForm.email}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                                required
+                              />
+                            </label>
+                            <label className="field" data-help="Adjust the user's access level.">
+                              <span>Role</span>
+                              <select
+                                value={editForm.role}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value }))}
+                              >
+                                <option value="user">User</option>
+                                <option value="admin">Administrator</option>
+                              </select>
+                            </label>
+                            <label className="field" data-help="Select the workspace layout this user will see by default.">
+                              <span>Interface style</span>
+                              <select
+                                value={editForm.ui_variant}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, ui_variant: e.target.value }))}
+                              >
+                                {uiVariants.map((variant) => (
+                                  <option key={variant.id} value={variant.id}>{variant.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="field" data-help="Optional reset to immediately change the account password.">
+                              <span>New password</span>
+                              <input
+                                type="password"
+                                value={editForm.password}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, password: e.target.value }))}
+                                placeholder="Leave blank to keep current password"
+                              />
+                            </label>
+                            <label className="field field--checkbox" data-help="Prompt the user to pick a new password after this update.">
+                              <input
+                                type="checkbox"
+                                checked={editForm.must_change_password}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, must_change_password: e.target.checked }))}
+                              />
+                              <span>Require password change on next login</span>
+                            </label>
+                            <div className="form-actions">
+                              <button className="button button--primary" type="submit" disabled={updateUserMutation.isLoading}>
+                                {updateUserMutation.isLoading ? 'Saving…' : 'Save user'}
+                              </button>
+                              <button className="button button--ghost button--small" type="button" onClick={handleCancelEdit}>
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="settings-operations" className="settings-section">
+                <header className="settings-section__header">
+                  <h2>Operations & alerts</h2>
+                  <p className="muted">Tune SLA targets, notifications and automation.</p>
+                </header>
+                <div className="settings-section__cards">
+                  <div className="card settings-card">
+                    {banner && <div className="banner banner--info">{banner}</div>}
+                    <form className="form-grid" onSubmit={handleSubmit}>
+                      <label className="field" data-help="Toggle proactive notifications when products fall below reorder points.">
+                        <span>Low stock alerts</span>
+                        <select
+                          value={formState.low_stock_alerts_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            low_stock_alerts_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Target response time applied to new work orders.">
+                        <span>Default SLA window (hours)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formState.default_sla_hours}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, default_sla_hours: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field field--span" data-help="People alerted when escalations or SLA breaches occur.">
+                        <span>Escalation emails</span>
+                        <textarea
+                          rows={2}
+                          value={formState.notification_emails}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, notification_emails: e.target.value }))}
+                          placeholder="ops@example.com, lead@example.com"
+                        />
+                      </label>
+                      <label className="field" data-help="Send a daily digest summarising work orders and stock levels.">
+                        <span>Daily digest</span>
+                        <select
+                          value={formState.daily_digest_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            daily_digest_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Time the daily digest email should be delivered.">
+                        <span>Digest delivery time</span>
+                        <input
+                          type="time"
+                          value={formState.daily_digest_time}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, daily_digest_time: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field" data-help="Control whether automatic database backups are scheduled.">
+                        <span>Backups</span>
+                        <select
+                          value={formState.backup_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            backup_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Cron expression describing when backups should run.">
+                        <span>Backup schedule (cron)</span>
+                        <input
+                          type="text"
+                          value={formState.backup_schedule}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, backup_schedule: e.target.value }))}
+                          placeholder="0 3 * * *"
+                          required={formState.backup_enabled}
+                        />
+                        <p className="muted">Use cron syntax to control when automatic backups run.</p>
+                      </label>
+                      <label className="field" data-help="How long backups are kept before automatic cleanup.">
+                        <span>Retention window (days)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formState.backup_retain_days}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, backup_retain_days: e.target.value }))}
+                        />
+                        <p className="muted">Older backups beyond this window are pruned automatically.</p>
+                      </label>
+                      <div className="form-actions">
+                        <button className="button" type="submit" disabled={settingsMutation.isLoading}>
+                          {settingsMutation.isLoading ? 'Saving…' : 'Save changes'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </section>
+
+              <section id="settings-records" className="settings-section">
+                <header className="settings-section__header">
+                  <h2>Audit & backups</h2>
+                  <p className="muted">Track administrator activity and safeguard your data.</p>
+                </header>
+                <div className="settings-section__cards settings-section__cards--columns">
+                  <div className="card settings-card">
+                    <div className="card__header">
+                      <div>
+                        <h3>User activity</h3>
+                        <p className="muted">Audit trail of key actions taken by product administrators.</p>
+                      </div>
+                    </div>
+                    <div className="table-scroll">
+                      <table className="table table--compact">
+                        <thead>
+                          <tr>
+                            <th>Activity</th>
+                            <th>User</th>
+                            <th>When</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activities.length === 0 && (
+                            <tr>
+                              <td colSpan={3} className="muted">No activity recorded yet.</td>
+                            </tr>
+                          )}
+                          {activities.map((entry) => (
+                            <tr key={entry.id}>
+                              <td>
+                                <strong>{entry.action}</strong>
+                                {entry.description && <p className="muted">{entry.description}</p>}
+                              </td>
+                              <td>{entry.user ? `${entry.user.name || entry.user.email}` : 'System'}</td>
+                              <td>{entry.performed_at ? new Date(entry.performed_at).toLocaleString() : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="card settings-card">
+                    <div className="card__header">
+                      <div>
+                        <h3>Database backups</h3>
+                        <p className="muted">Review automated snapshots and trigger an on-demand backup if required.</p>
+                      </div>
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        onClick={() => runBackupMutation.mutate()}
+                        disabled={runBackupMutation.isLoading}
                       >
-                        <option value="user">User</option>
-                        <option value="admin">Administrator</option>
-                      </select>
-                    </label>
-                    <label className="field" data-help="Select the workspace layout this user will see by default.">
-                      <span>Interface style</span>
-                      <select
-                        value={editForm.ui_variant}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, ui_variant: e.target.value }))}
-                      >
-                        {uiVariants.map((variant) => (
-                          <option key={variant.id} value={variant.id}>{variant.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="field" data-help="Optional reset to immediately change the account password.">
-                      <span>New password</span>
-                      <input
-                        type="password"
-                        value={editForm.password}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, password: e.target.value }))}
-                        placeholder="Leave blank to keep current password"
-                      />
-                    </label>
-                    <label className="field field--checkbox" data-help="Prompt the user to pick a new password after this update.">
-                      <input
-                        type="checkbox"
-                        checked={editForm.must_change_password}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, must_change_password: e.target.checked }))}
-                      />
-                      <span>Require password change on next login</span>
-                    </label>
-                    <div className="form-actions">
-                      <button className="button button--primary" type="submit" disabled={updateUserMutation.isLoading}>
-                        {updateUserMutation.isLoading ? 'Saving…' : 'Save user'}
-                      </button>
-                      <button className="button button--ghost button--small" type="button" onClick={handleCancelEdit}>
-                        Cancel
+                        {runBackupMutation.isLoading ? 'Starting…' : 'Run backup now'}
                       </button>
                     </div>
-                  </form>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <h2>Operational settings</h2>
-                <p className="muted">Tune SLA targets, notifications and alerting without redeploying.</p>
-              </div>
-            </div>
-            {banner && <div className="banner banner--info">{banner}</div>}
-            <form className="form-grid" onSubmit={handleSubmit}>
-              <label className="field" data-help="Toggle proactive notifications when products fall below reorder points.">
-                <span>Low stock alerts</span>
-                <select
-                  value={formState.low_stock_alerts_enabled ? 'enabled' : 'disabled'}
-                  onChange={(e) => setFormState((prev) => ({
-                    ...prev,
-                    low_stock_alerts_enabled: e.target.value === 'enabled'
-                  }))}
-                >
-                  <option value="enabled">Enabled</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </label>
-              <label className="field" data-help="Target response time applied to new work orders.">
-                <span>Default SLA window (hours)</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={formState.default_sla_hours}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, default_sla_hours: e.target.value }))}
-                />
-              </label>
-              <label className="field field--span" data-help="People alerted when escalations or SLA breaches occur.">
-                <span>Escalation emails</span>
-                <textarea
-                  rows={2}
-                  value={formState.notification_emails}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, notification_emails: e.target.value }))}
-                  placeholder="ops@example.com, lead@example.com"
-                />
-                <p className="muted">Comma-separated list of recipients notified for SLA breaches.</p>
-              </label>
-              <label className="field" data-help="Send a daily summary of system activity to key contacts.">
-                <span>Daily digest emails</span>
-                <select
-                  value={formState.daily_digest_enabled ? 'enabled' : 'disabled'}
-                  onChange={(e) => setFormState((prev) => ({
-                    ...prev,
-                    daily_digest_enabled: e.target.value === 'enabled'
-                  }))}
-                >
-                  <option value="enabled">Enabled</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </label>
-              <label className="field" data-help="Choose when the daily summary email should be delivered (server time).">
-                <span>Digest send time</span>
-                <input
-                  type="time"
-                  value={formState.daily_digest_time}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, daily_digest_time: e.target.value }))}
-                  required={formState.daily_digest_enabled}
-                />
-              </label>
-              <label className="field" data-help="Enable scheduled exports of your database for recovery.">
-                <span>Automatic backups</span>
-                <select
-                  value={formState.backup_enabled ? 'enabled' : 'disabled'}
-                  onChange={(e) => setFormState((prev) => ({
-                    ...prev,
-                    backup_enabled: e.target.value === 'enabled'
-                  }))}
-                >
-                  <option value="enabled">Enabled</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </label>
-              <label className="field" data-help="Cron expression describing when backups should run.">
-                <span>Backup schedule (cron)</span>
-                <input
-                  type="text"
-                  value={formState.backup_schedule}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, backup_schedule: e.target.value }))}
-                  placeholder="0 3 * * *"
-                  required={formState.backup_enabled}
-                />
-                <p className="muted">Use cron syntax to control when automatic backups run.</p>
-              </label>
-              <label className="field" data-help="How long backups are kept before automatic cleanup.">
-                <span>Retention window (days)</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={formState.backup_retain_days}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, backup_retain_days: e.target.value }))}
-                />
-                <p className="muted">Older backups beyond this window are pruned automatically.</p>
-              </label>
-              <div className="form-actions">
-                <button className="button" type="submit" disabled={settingsMutation.isLoading}>
-                  {settingsMutation.isLoading ? 'Saving…' : 'Save changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <h2>User activity</h2>
-                <p className="muted">Audit trail of key actions taken by product administrators.</p>
-              </div>
-            </div>
-            <table className="table table--compact">
-              <thead>
-                <tr>
-                  <th>Activity</th>
-                  <th>User</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activities.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="muted">No activity recorded yet.</td>
-                  </tr>
-                )}
-                {activities.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>
-                      <strong>{entry.action}</strong>
-                      {entry.description && <p className="muted">{entry.description}</p>}
-                    </td>
-                    <td>{entry.user ? `${entry.user.name || entry.user.email}` : 'System'}</td>
-                    <td>{entry.performed_at ? new Date(entry.performed_at).toLocaleString() : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="card">
-            <div className="card__header">
-              <div>
-                <h2>Database backups</h2>
-                <p className="muted">Review automated snapshots and trigger an on-demand backup if required.</p>
-              </div>
-              <button
-                className="button button--primary"
-                type="button"
-                onClick={() => runBackupMutation.mutate()}
-                disabled={runBackupMutation.isLoading}
-              >
-                {runBackupMutation.isLoading ? 'Starting…' : 'Run backup now'}
-              </button>
-            </div>
-            <table className="table table--compact">
-              <thead>
-                <tr>
-                  <th>File</th>
-                  <th>Created</th>
-                  <th>Size</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {backups.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="muted">No backups generated yet.</td>
-                  </tr>
-                )}
-                {backups.map((backup) => (
-                  <tr key={backup.file}>
-                    <td>{backup.file}</td>
-                    <td>{backup.createdAt ? new Date(backup.createdAt).toLocaleString() : '—'}</td>
-                    <td>{(backup.size / 1024 / 1024).toFixed(2)} MB</td>
-                    <td>
-                      <a
-                        className="button button--ghost button--small"
-                        href={`${api.defaults.baseURL}/backups/${backup.file}?token=${getAccessToken()}`}
-                      >
-                        Download
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+                    <div className="table-scroll">
+                      <table className="table table--compact">
+                        <thead>
+                          <tr>
+                            <th>File</th>
+                            <th>Created</th>
+                            <th>Size</th>
+                            <th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {backups.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="muted">No backups generated yet.</td>
+                            </tr>
+                          )}
+                          {backups.map((backup) => (
+                            <tr key={backup.file}>
+                              <td>{backup.file}</td>
+                              <td>{backup.createdAt ? new Date(backup.createdAt).toLocaleString() : '—'}</td>
+                              <td>{(backup.size / 1024 / 1024).toFixed(2)} MB</td>
+                              <td>
+                                <a
+                                  className="button button--ghost button--small"
+                                  href={`${api.defaults.baseURL}/backups/${backup.file}?token=${getAccessToken()}`}
+                                >
+                                  Download
+                                </a>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
+
