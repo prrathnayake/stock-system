@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../providers/AuthProvider.jsx'
+import StockHistoryChart from '../components/StockHistoryChart.jsx'
 
 const initialProductForm = {
   sku: '',
   name: '',
+  uom: 'ea',
   reorder_point: '5',
   lead_time_days: '0',
   track_serial: false
@@ -25,24 +27,30 @@ export default function Inventory() {
   const [productForm, setProductForm] = useState(initialProductForm)
   const [adjustForm, setAdjustForm] = useState(initialAdjustmentForm)
   const [feedback, setFeedback] = useState(null)
+  const [selectedProductId, setSelectedProductId] = useState(null)
+  const [editingProduct, setEditingProduct] = useState(null)
+  const [editForm, setEditForm] = useState(initialProductForm)
 
-  const { data: stock = [], isFetching, refetch } = useQuery({
+  const stockQuery = useQuery({
     queryKey: ['inventory'],
     queryFn: async () => {
       const { data } = await api.get('/stock')
       return data
     }
   })
+  const stock = stockQuery.data ?? []
+  const { isFetching, refetch } = stockQuery
 
-  const { data: serials = [] } = useQuery({
+  const serialsQuery = useQuery({
     queryKey: ['serials'],
     queryFn: async () => {
       const { data } = await api.get('/serials')
       return data
     }
   })
+  const serials = serialsQuery.data ?? []
 
-  const { data: purchaseOrders = [] } = useQuery({
+  const purchaseOrdersQuery = useQuery({
     queryKey: ['purchase-orders'],
     queryFn: async () => {
       const { data } = await api.get('/purchasing/purchase-orders')
@@ -50,8 +58,9 @@ export default function Inventory() {
     },
     enabled: canManageProcurement
   })
+  const purchaseOrders = purchaseOrdersQuery.data ?? []
 
-  const { data: suppliers = [] } = useQuery({
+  const suppliersQuery = useQuery({
     queryKey: ['suppliers'],
     queryFn: async () => {
       const { data } = await api.get('/purchasing/suppliers')
@@ -59,8 +68,9 @@ export default function Inventory() {
     },
     enabled: canManageProcurement
   })
+  const suppliers = suppliersQuery.data ?? []
 
-  const { data: rmaCases = [] } = useQuery({
+  const rmaQuery = useQuery({
     queryKey: ['rma-cases'],
     queryFn: async () => {
       const { data } = await api.get('/rma')
@@ -68,20 +78,24 @@ export default function Inventory() {
     },
     enabled: canManageProcurement
   })
+  const rmaCases = rmaQuery.data ?? []
 
-  const createProduct = useMutation({
-    mutationFn: async (payload) => {
-      const { data } = await api.post('/products', payload)
+  const productsQuery = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const { data } = await api.get('/products')
       return data
     }
   })
+  const products = productsQuery.data ?? []
 
-  const adjustStock = useMutation({
-    mutationFn: async (payload) => {
-      const { data } = await api.post('/stock/move', payload)
-      return data
-    }
-  })
+  const productMetaMap = useMemo(() => {
+    const map = new Map()
+    products.forEach((item) => {
+      map.set(item.id, item)
+    })
+    return map
+  }, [products])
 
   const filteredProducts = useMemo(() => {
     if (!query) return stock
@@ -91,13 +105,51 @@ export default function Inventory() {
     )
   }, [stock, query])
 
-  const lowStock = useMemo(
-    () => stock.filter((row) => row.available <= (row.reorder_point ?? 0)),
-    [stock]
+  const enrichedProducts = useMemo(() => (
+    filteredProducts.map((row) => {
+      const meta = productMetaMap.get(row.id)
+      return {
+        ...row,
+        uom: meta?.uom ?? row.uom ?? 'ea',
+        track_serial: meta?.track_serial ?? row.track_serial ?? false,
+        reorder_point: meta?.reorder_point ?? row.reorder_point ?? 0,
+        lead_time_days: meta?.lead_time_days ?? row.lead_time_days ?? 0
+      }
+    })
+  ), [filteredProducts, productMetaMap])
+
+  useEffect(() => {
+    if (!enrichedProducts.length) {
+      setSelectedProductId(null)
+      return
+    }
+    const exists = enrichedProducts.some((row) => String(row.id) === selectedProductId)
+    if (!exists) {
+      setSelectedProductId(String(enrichedProducts[0].id))
+    }
+  }, [enrichedProducts, selectedProductId])
+
+  const selectedProduct = useMemo(
+    () => enrichedProducts.find((row) => String(row.id) === String(selectedProductId)) ?? null,
+    [enrichedProducts, selectedProductId]
   )
 
-  const productOptions = useMemo(
-    () => stock.map((row) => ({ id: row.id, name: row.name, sku: row.sku })),
+  const overviewStats = useMemo(() => {
+    const onHandTotal = stock.reduce((acc, row) => acc + row.on_hand, 0)
+    const availableTotal = stock.reduce((acc, row) => acc + row.available, 0)
+    const reorderRisk = stock.filter((row) => row.available <= (row.reorder_point ?? 0)).length
+    const trackedSerials = products.filter((product) => product.track_serial).length
+    return {
+      skuCount: stock.length,
+      onHandTotal,
+      availableTotal,
+      reorderRisk,
+      trackedSerials
+    }
+  }, [stock, products])
+
+  const lowStock = useMemo(
+    () => stock.filter((row) => row.available <= (row.reorder_point ?? 0)),
     [stock]
   )
 
@@ -117,25 +169,72 @@ export default function Inventory() {
     return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
   }, [stock])
 
-  const selectedProduct = useMemo(
+  const productForAdjustment = useMemo(
     () => stock.find((item) => String(item.id) === adjustForm.product_id) || null,
     [stock, adjustForm.product_id]
   )
 
   const binsForSelection = useMemo(() => {
-    if (selectedProduct && selectedProduct.bins.length > 0) {
-      return selectedProduct.bins.map((bin) => ({
+    if (productForAdjustment && productForAdjustment.bins.length > 0) {
+      return productForAdjustment.bins.map((bin) => ({
         id: bin.bin_id,
         code: bin.bin_code,
         location: bin.location
       }))
     }
     return allBins
-  }, [selectedProduct, allBins])
+  }, [productForAdjustment, allBins])
+
+  const hasBinsAvailable = binsForSelection.length > 0
+
+  const historyQuery = useQuery({
+    queryKey: ['stock-history', selectedProductId],
+    queryFn: async () => {
+      const { data } = await api.get(`/stock/${selectedProductId}/history`)
+      return data
+    },
+    enabled: Boolean(selectedProductId)
+  })
+
+  const historyPoints = historyQuery.data?.datapoints ?? []
+  const historySummary = historyQuery.data?.summary ?? null
+
+  const productOptions = useMemo(
+    () => stock.map((row) => ({ id: row.id, name: row.name, sku: row.sku })),
+    [stock]
+  )
 
   const latestSerials = serials.slice(0, 8)
   const openPurchaseOrders = purchaseOrders.slice(0, 5)
   const openRmas = rmaCases.slice(0, 5)
+
+  const createProduct = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.post('/products', payload)
+      return data
+    }
+  })
+
+  const updateProduct = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      const { data } = await api.patch(`/products/${id}`, payload)
+      return data
+    }
+  })
+
+  const removeProduct = useMutation({
+    mutationFn: async (id) => {
+      await api.delete(`/products/${id}`)
+      return true
+    }
+  })
+
+  const adjustStock = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.post('/stock/move', payload)
+      return data
+    }
+  })
 
   const handleCreateProduct = (event) => {
     event.preventDefault()
@@ -143,6 +242,7 @@ export default function Inventory() {
     const payload = {
       sku: productForm.sku.trim(),
       name: productForm.name.trim(),
+      uom: productForm.uom.trim() || 'ea',
       reorder_point: Number(productForm.reorder_point) || 0,
       lead_time_days: Number(productForm.lead_time_days) || 0,
       track_serial: Boolean(productForm.track_serial)
@@ -156,6 +256,7 @@ export default function Inventory() {
         setFeedback({ type: 'success', message: 'Product created successfully.' })
         setProductForm(initialProductForm)
         refetch()
+        productsQuery.refetch()
       },
       onError: (error) => {
         setFeedback({
@@ -209,190 +310,437 @@ export default function Inventory() {
         bin_id: defaultBin ? String(defaultBin.bin_id ?? defaultBin.id) : ''
       }
     })
+    setSelectedProductId(value || null)
   }
 
-  const hasBinsAvailable = binsForSelection.length > 0
+  const openEdit = (product) => {
+    const meta = productMetaMap.get(product.id) || product
+    setEditingProduct({ id: product.id, name: meta.name, sku: meta.sku })
+    setEditForm({
+      sku: meta.sku ?? product.sku ?? '',
+      name: meta.name ?? product.name ?? '',
+      uom: meta.uom ?? product.uom ?? 'ea',
+      reorder_point: String(meta.reorder_point ?? product.reorder_point ?? 0),
+      lead_time_days: String(meta.lead_time_days ?? product.lead_time_days ?? 0),
+      track_serial: Boolean(meta.track_serial ?? product.track_serial ?? false)
+    })
+  }
+
+  const closeEdit = () => {
+    setEditingProduct(null)
+    setEditForm(initialProductForm)
+  }
+
+  const handleUpdateProduct = (event) => {
+    event.preventDefault()
+    if (!editingProduct) return
+    const payload = {
+      sku: editForm.sku.trim(),
+      name: editForm.name.trim(),
+      uom: editForm.uom.trim() || 'ea',
+      reorder_point: Number(editForm.reorder_point) || 0,
+      lead_time_days: Number(editForm.lead_time_days) || 0,
+      track_serial: Boolean(editForm.track_serial)
+    }
+    if (!payload.sku || !payload.name) {
+      setFeedback({ type: 'error', message: 'SKU and product name are required.' })
+      return
+    }
+    updateProduct.mutate({ id: editingProduct.id, payload }, {
+      onSuccess: () => {
+        setFeedback({ type: 'success', message: 'Product updated successfully.' })
+        closeEdit()
+        refetch()
+        productsQuery.refetch()
+      },
+      onError: (error) => {
+        setFeedback({
+          type: 'error',
+          message: error.response?.data?.error || 'Unable to update this product.'
+        })
+      }
+    })
+  }
+
+  const handleRemoveProduct = (product) => {
+    if (!product) return
+    const confirmed = window.confirm(`Remove ${product.name}? This will zero out its stock levels.`)
+    if (!confirmed) return
+    setFeedback(null)
+    removeProduct.mutate(product.id, {
+      onSuccess: () => {
+        setFeedback({ type: 'success', message: `${product.name} was archived and stock cleared.` })
+        if (String(product.id) === String(selectedProductId)) {
+          setSelectedProductId(null)
+        }
+        if (String(product.id) === adjustForm.product_id) {
+          setAdjustForm(initialAdjustmentForm)
+        }
+        refetch()
+        productsQuery.refetch()
+      },
+      onError: (error) => {
+        setFeedback({
+          type: 'error',
+          message: error.response?.data?.error || 'Unable to remove this product.'
+        })
+      }
+    })
+  }
+
+  const actionDisabled = createProduct.isLoading || updateProduct.isLoading || removeProduct.isLoading
 
   return (
-    <div className="page">
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <h2>Inventory controls</h2>
-            <p className="muted">Create new catalogue entries and keep physical stock in sync with the system of record.</p>
-          </div>
+    <div className="page inventory">
+      <div className="card inventory__header">
+        <div>
+          <h2>Inventory control center</h2>
+          <p className="muted">Search, curate and adjust your catalogue with real-time visibility into stock health.</p>
         </div>
-        {feedback && (
-          <div className={`banner banner--${feedback.type === 'error' ? 'danger' : 'info'}`}>
-            {feedback.message}
-          </div>
-        )}
-        <div className="grid split">
-          <form className="form-grid" onSubmit={handleCreateProduct}>
-            <h3>Create product</h3>
-            <label className="field">
-              <span>SKU</span>
-              <input
-                value={productForm.sku}
-                onChange={(e) => setProductForm((prev) => ({ ...prev, sku: e.target.value }))}
-                placeholder="Ex. BATT-IPHONE"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Name</span>
-              <input
-                value={productForm.name}
-                onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="iPhone Battery"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Reorder point</span>
-              <input
-                type="number"
-                min="0"
-                value={productForm.reorder_point}
-                onChange={(e) => setProductForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
-              />
-            </label>
-            <label className="field">
-              <span>Lead time (days)</span>
-              <input
-                type="number"
-                min="0"
-                value={productForm.lead_time_days}
-                onChange={(e) => setProductForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
-              />
-            </label>
-            <label className="field field--checkbox">
-              <input
-                type="checkbox"
-                checked={productForm.track_serial}
-                onChange={(e) => setProductForm((prev) => ({ ...prev, track_serial: e.target.checked }))}
-              />
-              <span>Track serial numbers for this product</span>
-            </label>
-            <div className="form-actions">
-              <button className="button button--primary" type="submit" disabled={createProduct.isLoading}>
-                {createProduct.isLoading ? 'Creating…' : 'Add product'}
-              </button>
-            </div>
-          </form>
-
-          <form className="form-grid" onSubmit={handleAdjustStock}>
-            <h3>Adjust stock</h3>
-            <label className="field">
-              <span>Product</span>
-              <select
-                value={adjustForm.product_id}
-                onChange={(e) => handleProductSelect(e.target.value)}
-                required
-              >
-                <option value="" disabled>Select product</option>
-                {productOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name} · {option.sku}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Bin</span>
-              <select
-                value={adjustForm.bin_id}
-                onChange={(e) => setAdjustForm((prev) => ({ ...prev, bin_id: e.target.value }))}
-                required
-                disabled={!hasBinsAvailable}
-              >
-                {hasBinsAvailable ? null : <option value="">No bins available</option>}
-                {binsForSelection.map((bin) => (
-                  <option key={bin.id} value={bin.id}>
-                    {bin.code}{bin.location ? ` · ${bin.location}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Quantity</span>
-              <input
-                type="number"
-                min="1"
-                value={adjustForm.qty}
-                onChange={(e) => setAdjustForm((prev) => ({ ...prev, qty: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Action</span>
-              <select
-                value={adjustForm.direction}
-                onChange={(e) => setAdjustForm((prev) => ({ ...prev, direction: e.target.value }))}
-              >
-                <option value="increase">Increase on-hand quantity</option>
-                <option value="decrease">Decrease on-hand quantity</option>
-              </select>
-            </label>
-            <p className="muted field--span">
-              Adjustments will be logged with your user account and reflected in dashboards instantly.
-            </p>
-            <div className="form-actions">
-              <button className="button button--primary" type="submit" disabled={adjustStock.isLoading || !hasBinsAvailable}>
-                {adjustStock.isLoading ? 'Applying…' : 'Update stock'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <h2>Inventory catalogue</h2>
-            <p className="muted">Search, filter and act on live stock data, including purchasing and RMA pipelines.</p>
-          </div>
+        <div className="inventory__header-actions">
+          <label className="field">
+            <span>Search catalogue</span>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by SKU or product name" />
+          </label>
           <button className="button" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
-        <div className="filter-grid">
-          <label className="field">
-            <span>Search by SKU or name</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ex. BATT-IPHONE" />
-          </label>
+      </div>
+
+      {feedback && (
+        <div className={`banner banner--${feedback.type === 'error' ? 'danger' : 'info'}`}>
+          {feedback.message}
+        </div>
+      )}
+
+      <div className="grid stats">
+        <div className="stat-card card">
+          <p className="muted">Active SKUs</p>
+          <h2>{overviewStats.skuCount}</h2>
+          <p className="stat-card__hint">Total live items across the organisation.</p>
+        </div>
+        <div className="stat-card card">
+          <p className="muted">On-hand units</p>
+          <h2>{overviewStats.onHandTotal}</h2>
+          <p className="stat-card__hint">All bins summed together.</p>
+        </div>
+        <div className="stat-card card">
+          <p className="muted">Available to promise</p>
+          <h2>{overviewStats.availableTotal}</h2>
+          <p className="stat-card__hint">On hand minus reserved commitments.</p>
+        </div>
+        <div className="stat-card card">
+          <p className="muted">Reorder alerts</p>
+          <h2>{overviewStats.reorderRisk}</h2>
+          <p className="stat-card__hint">Products at or below their reorder point.</p>
+        </div>
+        <div className="stat-card card">
+          <p className="muted">Tracked serial SKUs</p>
+          <h2>{overviewStats.trackedSerials}</h2>
+          <p className="stat-card__hint">Items with serial level traceability.</p>
         </div>
       </div>
 
-      <div className="grid two-columns">
-        <div className="card">
-          <h3>All products</h3>
-          <table className="table">
+      <div className="inventory__layout">
+        <div className="card inventory__table-card">
+          <div className="inventory__table-header">
+            <h3>Catalogue</h3>
+            <p className="muted">Click a row to reveal bin allocations and action shortcuts.</p>
+          </div>
+          <table className="table inventory-table">
             <thead>
               <tr>
                 <th>SKU</th>
                 <th>Name</th>
+                <th>Bins</th>
                 <th>On hand</th>
                 <th>Reserved</th>
                 <th>Available</th>
+                <th>Reorder point</th>
                 <th>Lead time (days)</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map((row) => (
-                <tr key={row.id}>
-                  <td><span className="badge">{row.sku}</span></td>
-                  <td>{row.name}</td>
-                  <td>{row.on_hand}</td>
-                  <td>{row.reserved}</td>
-                  <td>{row.available}</td>
-                  <td>{row.lead_time_days}</td>
+              {enrichedProducts.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="muted">No products found. Try adjusting your filters or add a new item.</td>
                 </tr>
+              )}
+              {enrichedProducts.map((product) => (
+                <React.Fragment key={product.id}>
+                  <tr
+                    className={`inventory-table__row${String(product.id) === String(selectedProductId) ? ' inventory-table__row--active' : ''}`}
+                    onClick={() => setSelectedProductId(String(product.id))}
+                  >
+                    <td><span className="badge">{product.sku}</span></td>
+                    <td>{product.name}</td>
+                    <td>{product.bins.length}</td>
+                    <td>{product.on_hand}</td>
+                    <td>{product.reserved}</td>
+                    <td>{product.available}</td>
+                    <td>{product.reorder_point}</td>
+                    <td>{product.lead_time_days}</td>
+                    <td>
+                      <div className="table__actions">
+                        <button
+                          className="button button--small"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openEdit(product)
+                          }}
+                          disabled={actionDisabled}
+                        >
+                          Update
+                        </button>
+                        <button
+                          className="button button--small button--danger"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleRemoveProduct(product)
+                          }}
+                          disabled={removeProduct.isLoading}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {String(product.id) === String(selectedProductId) && (
+                    <tr className="inventory-table__details">
+                      <td colSpan={9}>
+                        <div className="inventory-detail">
+                          <div>
+                            <p className="inventory-detail__label">Unit of measure</p>
+                            <p className="inventory-detail__value">{product.uom.toUpperCase()}</p>
+                          </div>
+                          <div>
+                            <p className="inventory-detail__label">Serial tracking</p>
+                            <p className="inventory-detail__value">{product.track_serial ? 'Enabled' : 'Disabled'}</p>
+                          </div>
+                          <div className="inventory-detail__bins">
+                            <p className="inventory-detail__label">Bin allocations</p>
+                            <ul>
+                              {product.bins.length === 0 && <li>No bin assignments yet.</li>}
+                              {product.bins.map((bin) => (
+                                <li key={bin.bin_id}>
+                                  <span>{bin.bin_code}</span>
+                                  <span>{bin.location ? ` · ${bin.location}` : ''}</span>
+                                  <span className="inventory-detail__bin-qty">{bin.on_hand} on hand</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
 
+        <aside className="inventory__aside">
+          <div className="card inventory__history-card">
+            <div className="inventory__history-header">
+              <div>
+                <h3>Stock history</h3>
+                <p className="muted">Visualise adjustments and movements over time.</p>
+              </div>
+              {historySummary && (
+                <span className="badge badge--muted">{historySummary.totalMoves} movements</span>
+              )}
+            </div>
+            {historyQuery.isFetching ? (
+              <p className="muted">Loading history…</p>
+            ) : (
+              <>
+                <StockHistoryChart points={historyPoints} height={220} />
+                <ul className="timeline inventory__history-timeline">
+                  {historyPoints.length === 0 && <li className="muted">No stock movements recorded for this product yet.</li>}
+                  {[...historyPoints].reverse().slice(0, 6).map((entry) => (
+                    <li key={entry.id}>
+                      <div className="timeline__title">{entry.reason} · {entry.qty} units</div>
+                      <div className="timeline__meta">
+                        {new Date(entry.occurredAt).toLocaleString()} · Level {entry.level}
+                        {entry.performedBy ? ` · by ${entry.performedBy}` : ''}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+
+          {selectedProduct && (
+            <div className="card inventory__summary-card">
+              <h3>{selectedProduct.name}</h3>
+              <p className="muted">SKU {selectedProduct.sku}</p>
+              <div className="inventory__summary-grid">
+                <div>
+                  <p className="inventory-detail__label">Available</p>
+                  <p className="inventory-detail__value">{selectedProduct.available}</p>
+                </div>
+                <div>
+                  <p className="inventory-detail__label">On hand</p>
+                  <p className="inventory-detail__value">{selectedProduct.on_hand}</p>
+                </div>
+                <div>
+                  <p className="inventory-detail__label">Reserved</p>
+                  <p className="inventory-detail__value">{selectedProduct.reserved}</p>
+                </div>
+                <div>
+                  <p className="inventory-detail__label">Reorder point</p>
+                  <p className="inventory-detail__value">{selectedProduct.reorder_point}</p>
+                </div>
+                <div>
+                  <p className="inventory-detail__label">Lead time</p>
+                  <p className="inventory-detail__value">{selectedProduct.lead_time_days} days</p>
+                </div>
+                <div>
+                  <p className="inventory-detail__label">Tracked serials</p>
+                  <p className="inventory-detail__value">{selectedProduct.track_serial ? 'Yes' : 'No'}</p>
+                </div>
+              </div>
+              {historySummary && (
+                <p className="muted inventory__summary-footer">Last movement on {new Date(historySummary.lastUpdated).toLocaleString()}.</p>
+              )}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <div className="inventory__forms">
+        <form className="card form-grid" onSubmit={handleCreateProduct}>
+          <h3>Create product</h3>
+          <label className="field">
+            <span>SKU</span>
+            <input
+              value={productForm.sku}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, sku: e.target.value }))}
+              placeholder="Ex. BATT-IPHONE"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Name</span>
+            <input
+              value={productForm.name}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="iPhone Battery"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Unit of measure</span>
+            <input
+              value={productForm.uom}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, uom: e.target.value }))}
+              placeholder="ea"
+            />
+          </label>
+          <label className="field">
+            <span>Reorder point</span>
+            <input
+              type="number"
+              min="0"
+              value={productForm.reorder_point}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
+            />
+          </label>
+          <label className="field">
+            <span>Lead time (days)</span>
+            <input
+              type="number"
+              min="0"
+              value={productForm.lead_time_days}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
+            />
+          </label>
+          <label className="field field--checkbox">
+            <input
+              type="checkbox"
+              checked={productForm.track_serial}
+              onChange={(e) => setProductForm((prev) => ({ ...prev, track_serial: e.target.checked }))}
+            />
+            <span>Track serial numbers for this product</span>
+          </label>
+          <div className="form-actions">
+            <button className="button button--primary" type="submit" disabled={createProduct.isLoading}>
+              {createProduct.isLoading ? 'Creating…' : 'Add product'}
+            </button>
+          </div>
+        </form>
+
+        <form className="card form-grid" onSubmit={handleAdjustStock}>
+          <h3>Adjust stock</h3>
+          <label className="field">
+            <span>Product</span>
+            <select
+              value={adjustForm.product_id}
+              onChange={(e) => handleProductSelect(e.target.value)}
+              required
+            >
+              <option value="" disabled>Select product</option>
+              {productOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name} · {option.sku}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Bin</span>
+            <select
+              value={adjustForm.bin_id}
+              onChange={(e) => setAdjustForm((prev) => ({ ...prev, bin_id: e.target.value }))}
+              required
+              disabled={!hasBinsAvailable}
+            >
+              {hasBinsAvailable ? null : <option value="">No bins available</option>}
+              {binsForSelection.map((bin) => (
+                <option key={bin.id} value={bin.id}>
+                  {bin.code}{bin.location ? ` · ${bin.location}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Quantity</span>
+            <input
+              type="number"
+              min="1"
+              value={adjustForm.qty}
+              onChange={(e) => setAdjustForm((prev) => ({ ...prev, qty: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Action</span>
+            <select
+              value={adjustForm.direction}
+              onChange={(e) => setAdjustForm((prev) => ({ ...prev, direction: e.target.value }))}
+            >
+              <option value="increase">Increase on-hand quantity</option>
+              <option value="decrease">Decrease on-hand quantity</option>
+            </select>
+          </label>
+          <p className="muted field--span">
+            Adjustments will be logged with your user account and reflected in dashboards instantly.
+          </p>
+          <div className="form-actions">
+            <button className="button button--primary" type="submit" disabled={adjustStock.isLoading || !hasBinsAvailable}>
+              {adjustStock.isLoading ? 'Applying…' : 'Update stock'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="inventory__insights">
         <div className="card">
           <h3>Low stock alerts</h3>
           <p className="muted">Products that are at or below their reorder point.</p>
@@ -406,13 +754,11 @@ export default function Inventory() {
             ))}
           </ul>
         </div>
-      </div>
 
-      <div className="grid two-columns">
         <div className="card">
           <h3>Serialised inventory</h3>
           <p className="muted">Most recent serial numbers registered in the system.</p>
-          <table className="table">
+          <table className="table table--compact">
             <thead>
               <tr>
                 <th>Serial</th>
@@ -459,14 +805,12 @@ export default function Inventory() {
             <p className="muted">Inventory administrators can add suppliers from the backend API.</p>
           )}
         </div>
-      </div>
 
-      <div className="grid two-columns">
         <div className="card">
           <h3>Purchase orders</h3>
           <p className="muted">Open procurement activity awaiting receipt.</p>
           {canManageProcurement ? (
-            <table className="table">
+            <table className="table table--compact">
               <thead>
                 <tr>
                   <th>Reference</th>
@@ -500,7 +844,7 @@ export default function Inventory() {
           <h3>RMA cases</h3>
           <p className="muted">Returns and credits awaiting supplier resolution.</p>
           {canManageProcurement ? (
-            <table className="table">
+            <table className="table table--compact">
               <thead>
                 <tr>
                   <th>Reference</th>
@@ -530,6 +874,79 @@ export default function Inventory() {
           )}
         </div>
       </div>
+
+      {editingProduct && (
+        <div className="inventory__modal" role="dialog" aria-modal="true">
+          <div className="inventory__modal-content card">
+            <div className="inventory__modal-header">
+              <div>
+                <h3>Edit product</h3>
+                <p className="muted">Update catalogue details for {editingProduct.name}.</p>
+              </div>
+              <button className="button button--ghost" type="button" onClick={closeEdit}>
+                Close
+              </button>
+            </div>
+            <form className="form-grid" onSubmit={handleUpdateProduct}>
+              <label className="field">
+                <span>SKU</span>
+                <input
+                  value={editForm.sku}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, sku: e.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Unit of measure</span>
+                <input
+                  value={editForm.uom}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, uom: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Reorder point</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.reorder_point}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Lead time (days)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.lead_time_days}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
+                />
+              </label>
+              <label className="field field--checkbox">
+                <input
+                  type="checkbox"
+                  checked={editForm.track_serial}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, track_serial: e.target.checked }))}
+                />
+                <span>Track serial numbers for this product</span>
+              </label>
+              <div className="form-actions">
+                <button className="button" type="button" onClick={closeEdit} disabled={updateProduct.isLoading}>Cancel</button>
+                <button className="button button--primary" type="submit" disabled={updateProduct.isLoading}>
+                  {updateProduct.isLoading ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
