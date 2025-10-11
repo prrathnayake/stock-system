@@ -210,7 +210,10 @@ export default function Settings() {
     backup_schedule: '0 3 * * *',
     backup_retain_days: 14,
     daily_digest_enabled: false,
-    daily_digest_time: '18:00'
+    daily_digest_time: '18:00',
+    auto_product_sku: false,
+    auto_customer_id: false,
+    auto_warehouse_id: false
   })
   const [banner, setBanner] = useState(null)
   const [userBanner, setUserBanner] = useState(null)
@@ -249,7 +252,10 @@ export default function Settings() {
     default_payment_terms: organization?.default_payment_terms || '',
     invoice_notes: organization?.invoice_notes || '',
     currency: organization?.currency || 'AUD',
-    invoicing_enabled: organization?.invoicing_enabled !== false
+    invoicing_enabled: organization?.invoicing_enabled !== false,
+    banner_images: Array.isArray(organization?.banner_images)
+      ? organization.banner_images.join('\n')
+      : ''
   })
   const [logoPreview, setLogoPreview] = useState(resolveAssetUrl(organization?.logo_url || ''))
 
@@ -265,7 +271,10 @@ export default function Settings() {
         backup_schedule: settingsData.backup_schedule || '0 3 * * *',
         backup_retain_days: settingsData.backup_retain_days ?? 14,
         daily_digest_enabled: settingsData.daily_digest_enabled === true,
-        daily_digest_time: settingsData.daily_digest_time || '18:00'
+        daily_digest_time: settingsData.daily_digest_time || '18:00',
+        auto_product_sku: settingsData.auto_product_sku === true,
+        auto_customer_id: settingsData.auto_customer_id === true,
+        auto_warehouse_id: settingsData.auto_warehouse_id === true
       })
     }
   }, [settingsData])
@@ -291,7 +300,10 @@ export default function Settings() {
         default_payment_terms: organizationDetails.default_payment_terms || '',
         invoice_notes: organizationDetails.invoice_notes || '',
         currency: organizationDetails.currency || 'AUD',
-        invoicing_enabled: organizationDetails.invoicing_enabled !== false
+        invoicing_enabled: organizationDetails.invoicing_enabled !== false,
+        banner_images: Array.isArray(organizationDetails.banner_images)
+          ? organizationDetails.banner_images.join('\n')
+          : ''
       })
       setLogoPreview(resolveAssetUrl(organizationDetails.logo_url || ''))
       updateCachedOrganization(organizationDetails)
@@ -437,7 +449,10 @@ export default function Settings() {
         default_payment_terms: data.default_payment_terms || '',
         invoice_notes: data.invoice_notes || '',
         currency: data.currency || 'AUD',
-        invoicing_enabled: data.invoicing_enabled !== false
+        invoicing_enabled: data.invoicing_enabled !== false,
+        banner_images: Array.isArray(data.banner_images)
+          ? data.banner_images.join('\n')
+          : ''
       })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       setLogoPreview(resolveAssetUrl(data.logo_url || ''))
@@ -472,7 +487,10 @@ export default function Settings() {
       currency: data.currency ?? user.organization?.currency ?? 'AUD',
       invoicing_enabled: data.invoicing_enabled !== undefined
         ? data.invoicing_enabled
-        : (user.organization?.invoicing_enabled !== false)
+        : (user.organization?.invoicing_enabled !== false),
+      banner_images: Array.isArray(data.banner_images)
+        ? data.banner_images
+        : (Array.isArray(user.organization?.banner_images) ? user.organization.banner_images : [])
     }
     const mergedUser = {
       ...user,
@@ -567,6 +585,11 @@ export default function Settings() {
       currency: orgForm.currency.trim(),
       invoicing_enabled: Boolean(orgForm.invoicing_enabled)
     }
+    const bannerImages = orgForm.banner_images
+      .split(/\n|,/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+    payload.banner_images = bannerImages
     if (!payload.name) {
       setOrgBanner({ type: 'error', message: 'Organization name is required.' })
       return
@@ -604,7 +627,10 @@ export default function Settings() {
       backup_schedule: formState.backup_schedule.trim(),
       backup_retain_days: Number(formState.backup_retain_days) || 0,
       daily_digest_enabled: Boolean(formState.daily_digest_enabled),
-      daily_digest_time: formState.daily_digest_time?.trim() || '18:00'
+      daily_digest_time: formState.daily_digest_time?.trim() || '18:00',
+      auto_product_sku: Boolean(formState.auto_product_sku),
+      auto_customer_id: Boolean(formState.auto_customer_id),
+      auto_warehouse_id: Boolean(formState.auto_warehouse_id)
     }
     settingsMutation.mutate(payload)
   }
@@ -936,6 +962,16 @@ export default function Settings() {
                             ? 'Uploading logo…'
                             : 'PNG or JPG up to 2 MB. Leave blank to use the default system mark.'}
                         </small>
+                      </label>
+                      <label className="field field--span" data-help="Images displayed on the dashboard banner carousel.">
+                        <span>Dashboard banner images</span>
+                        <textarea
+                          rows={3}
+                          value={orgForm.banner_images}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, banner_images: e.target.value }))}
+                          placeholder={`https://example.com/banner-1.jpg\nhttps://example.com/banner-2.jpg`}
+                        />
+                        <small className="muted">One URL per line, up to 10 images. Leave blank to use default placeholders.</small>
                       </label>
                       <div className="field field--span">
                         <span>Invoicing visibility</span>
@@ -1276,6 +1312,45 @@ export default function Settings() {
                           value={formState.default_sla_hours}
                           onChange={(e) => setFormState((prev) => ({ ...prev, default_sla_hours: e.target.value }))}
                         />
+                      </label>
+                      <label className="field" data-help="Automatically assign sequential SKUs to newly created products.">
+                        <span>Automatic product SKU</span>
+                        <select
+                          value={formState.auto_product_sku ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            auto_product_sku: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Generate customer IDs automatically when a new record is created.">
+                        <span>Automatic customer ID</span>
+                        <select
+                          value={formState.auto_customer_id ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            auto_customer_id: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Reserve sequential IDs for new storage locations and warehouses.">
+                        <span>Automatic warehouse ID</span>
+                        <select
+                          value={formState.auto_warehouse_id ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            auto_warehouse_id: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
                       </label>
                       <label className="field field--span" data-help="People alerted when escalations or SLA breaches occur.">
                         <span>Escalation emails</span>

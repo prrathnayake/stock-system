@@ -36,6 +36,11 @@ export default function Inventory() {
   const [editForm, setEditForm] = useState(initialProductForm)
   const [binForm, setBinForm] = useState({ code: '', site: '', room: '' })
   const [activeSection, setActiveSection] = useState('stock')
+  const [binTableFeedback, setBinTableFeedback] = useState(null)
+  const [editingBinId, setEditingBinId] = useState(null)
+  const [binEditForm, setBinEditForm] = useState({ code: '', site: '', room: '', locationId: null })
+  const [activeStockTool, setActiveStockTool] = useState('history')
+  const [notificationsOpen, setNotificationsOpen] = useState(true)
 
   const queryClient = useQueryClient()
 
@@ -210,6 +215,9 @@ export default function Inventory() {
         id: bin.id,
         code: bin.code,
         location: locationParts.join(' · '),
+        site: bin.location?.site || '',
+        room: bin.location?.room || '',
+        locationId: bin.location?.id ?? bin.location_id ?? null,
         productCount: 0,
         onHand: 0,
         available: 0
@@ -223,6 +231,9 @@ export default function Inventory() {
             id,
             code: bin.bin_code,
             location: bin.location || '',
+            site: '',
+            room: '',
+            locationId: null,
             productCount: 0,
             onHand: 0,
             available: 0
@@ -317,6 +328,20 @@ export default function Inventory() {
     mutationFn: async (payload) => {
       const { data } = await api.post('/bins', payload)
       return data
+    }
+  })
+
+  const updateBin = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      const { data } = await api.patch(`/bins/${id}`, payload)
+      return data
+    }
+  })
+
+  const deleteBin = useMutation({
+    mutationFn: async (id) => {
+      await api.delete(`/bins/${id}`)
+      return true
     }
   })
 
@@ -426,6 +451,79 @@ export default function Inventory() {
         setBinFeedback({
           type: 'error',
           message: error.response?.data?.error || 'Unable to create bin right now.'
+        })
+      }
+    })
+  }
+
+  const openBinEditor = (bin) => {
+    setBinTableFeedback(null)
+    setEditingBinId(bin.id)
+    setBinEditForm({
+      code: bin.code || '',
+      site: bin.site || '',
+      room: bin.room || '',
+      locationId: bin.locationId ?? null
+    })
+  }
+
+  const cancelBinEdit = () => {
+    setEditingBinId(null)
+    setBinEditForm({ code: '', site: '', room: '', locationId: null })
+  }
+
+  const handleUpdateBinRow = (event) => {
+    event.preventDefault()
+    if (!editingBinId) return
+    setBinTableFeedback(null)
+    const code = binEditForm.code.trim()
+    if (!code) {
+      setBinTableFeedback({ type: 'error', message: 'Bin code is required.' })
+      return
+    }
+    const payload = { code }
+    const site = binEditForm.site.trim()
+    const room = binEditForm.room.trim()
+    if (site) {
+      payload.location = { site }
+      if (room) {
+        payload.location.room = room
+      }
+    } else if (binEditForm.locationId) {
+      payload.clear_location = true
+    }
+    updateBin.mutate({ id: editingBinId, payload }, {
+      onSuccess: () => {
+        setBinTableFeedback({ type: 'success', message: 'Storage bin updated successfully.' })
+        cancelBinEdit()
+        queryClient.invalidateQueries({ queryKey: ['bins'] })
+        refetch()
+      },
+      onError: (error) => {
+        setBinTableFeedback({
+          type: 'error',
+          message: error.response?.data?.error || 'Unable to update storage bin.'
+        })
+      }
+    })
+  }
+
+  const handleDeleteBin = (bin) => {
+    if (typeof window !== 'undefined' && !window.confirm(`Remove bin ${bin.code}? Any stock must be reassigned first.`)) return
+    setBinTableFeedback(null)
+    deleteBin.mutate(bin.id, {
+      onSuccess: () => {
+        setBinTableFeedback({ type: 'success', message: 'Storage bin removed.' })
+        if (editingBinId === bin.id) {
+          cancelBinEdit()
+        }
+        queryClient.invalidateQueries({ queryKey: ['bins'] })
+        refetch()
+      },
+      onError: (error) => {
+        setBinTableFeedback({
+          type: 'error',
+          message: error.response?.data?.error || 'Unable to remove storage bin.'
         })
       }
     })
@@ -556,6 +654,7 @@ export default function Inventory() {
     updateProduct.isLoading ||
     updateStockLevels.isLoading ||
     removeProduct.isLoading
+  const binActionDisabled = updateBin.isLoading || deleteBin.isLoading
   const savingProduct = updateProduct.isLoading || updateStockLevels.isLoading
   const isStockView = activeSection === 'stock'
   const isBinsView = activeSection === 'bins'
@@ -642,407 +741,558 @@ export default function Inventory() {
         </div>
       </div>
 
-          <div className="inventory__layout">
-        <div className="card inventory__table-card">
-          <div className="inventory__table-header">
-            <div>
-              <h3>Catalogue</h3>
-              <p className="muted">Click a row to reveal bin allocations and action shortcuts.</p>
-            </div>
-            <div className="inventory__table-controls">
-              <label className="field" data-help="Filter the catalogue by SKU or product name.">
-                <span>Search catalogue</span>
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by SKU or product name"
-                />
-              </label>
-            </div>
-          </div>
-          <table className="table inventory-table">
-            <thead>
-              <tr>
-                <th>SKU</th>
-                <th>Name</th>
-                <th>Bins</th>
-                <th>On hand</th>
-                <th>Reserved</th>
-                <th>Available</th>
-                <th>Unit price</th>
-                <th>Reorder point</th>
-                <th>Lead time (days)</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {enrichedProducts.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="muted">
-                    {query ? 'No products match your search.' : 'No products found. Try adjusting your filters or add a new item.'}
-                  </td>
-                </tr>
-              )}
-              {enrichedProducts.map((product) => (
-                <React.Fragment key={product.id}>
-                  <tr
-                    className={`inventory-table__row${String(product.id) === String(selectedProductId) ? ' inventory-table__row--active' : ''}`}
-                    onClick={() => setSelectedProductId(String(product.id))}
-                  >
-                    <td><span className="badge">{product.sku}</span></td>
-                    <td>{product.name}</td>
-                    <td>
-                      {product.bins.length === 0 ? (
-                        <span className="muted">No bins</span>
-                      ) : (
-                        <div
-                          className="inventory-table__bins-cell"
-                          title={product.bins.map((bin) => {
-                            const location = bin.location ? ` · ${bin.location}` : ''
-                            const available = (bin.on_hand - (bin.reserved ?? 0))
-                            return `${bin.bin_code}${location}: ${available} available`
-                          }).join('\n')}
+          <div className="inventory__workspace">
+            <div className="inventory__primary">
+              <div className="card inventory__table-card">
+                <div className="inventory__table-header">
+                  <div>
+                    <h3>Catalogue</h3>
+                    <p className="muted">Click a row to reveal bin allocations and action shortcuts.</p>
+                  </div>
+                  <div className="inventory__table-controls">
+                    <label className="field" data-help="Filter the catalogue by SKU or product name.">
+                      <span>Search catalogue</span>
+                      <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search by SKU or product name"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <table className="table inventory-table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Name</th>
+                      <th>Bins</th>
+                      <th>On hand</th>
+                      <th>Reserved</th>
+                      <th>Available</th>
+                      <th>Unit price</th>
+                      <th>Reorder point</th>
+                      <th>Lead time (days)</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {enrichedProducts.length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="muted">
+                          {query ? 'No products match your search.' : 'No products found. Try adjusting your filters or add a new item.'}
+                        </td>
+                      </tr>
+                    )}
+                    {enrichedProducts.map((product) => (
+                      <React.Fragment key={product.id}>
+                        <tr
+                          className={`inventory-table__row${String(product.id) === String(selectedProductId) ? ' inventory-table__row--active' : ''}`}
+                          onClick={() => setSelectedProductId(String(product.id))}
                         >
-                          {product.bins.slice(0, 2).map((bin) => (
-                            <span key={bin.bin_id} className="badge badge--muted inventory-table__bin-pill">
-                              {bin.bin_code}{bin.location ? ` · ${bin.location}` : ''}
-                            </span>
-                          ))}
-                          {product.bins.length > 2 && (
-                            <span className="muted">+{product.bins.length - 2} more</span>
+                          <td><span className="badge">{product.sku}</span></td>
+                          <td>{product.name}</td>
+                          <td>
+                            {product.bins.length === 0 ? (
+                              <span className="muted">No bins</span>
+                            ) : (
+                              <div
+                                className="inventory-table__bins-cell"
+                                title={product.bins.map((bin) => {
+                                  const location = bin.location ? ` · ${bin.location}` : ''
+                                  const available = (bin.on_hand - (bin.reserved ?? 0))
+                                  return `${bin.bin_code}${location}: ${available} available`
+                                }).join('\n')}
+                              >
+                                {product.bins.slice(0, 2).map((bin) => (
+                                  <span key={bin.bin_id} className="badge badge--muted inventory-table__bin-pill">
+                                    {bin.bin_code}{bin.location ? ` · ${bin.location}` : ''}
+                                  </span>
+                                ))}
+                                {product.bins.length > 2 && (
+                                  <span className="muted">+{product.bins.length - 2} more</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td>{product.on_hand}</td>
+                          <td>{product.reserved}</td>
+                          <td>{product.available}</td>
+                          <td>{currencyFormatter.format(Number(product.unit_price) || 0)}</td>
+                          <td>{product.reorder_point}</td>
+                          <td>{product.lead_time_days}</td>
+                          <td>
+                            <div className="table__actions">
+                              <button
+                                className="button button--small"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  openEdit(product)
+                                }}
+                                disabled={actionDisabled}
+                              >
+                                Update
+                              </button>
+                              <button
+                                className="button button--small button--danger"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleRemoveProduct(product)
+                                }}
+                                disabled={removeProduct.isLoading}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {String(product.id) === String(selectedProductId) && (
+                          <tr className="inventory-table__details">
+                            <td colSpan={10}>
+                              <div className="inventory-detail">
+                                <div>
+                                  <p className="inventory-detail__label">Unit of measure</p>
+                                  <p className="inventory-detail__value">{product.uom.toUpperCase()}</p>
+                                </div>
+                                <div>
+                                  <p className="inventory-detail__label">Serial tracking</p>
+                                  <p className="inventory-detail__value">{product.track_serial ? 'Enabled' : 'Disabled'}</p>
+                                </div>
+                                <div>
+                                  <p className="inventory-detail__label">Unit price</p>
+                                  <p className="inventory-detail__value">{currencyFormatter.format(Number(product.unit_price) || 0)}</p>
+                                </div>
+                                <div className="inventory-detail__bins">
+                                  <p className="inventory-detail__label">Bin allocations</p>
+                                  <ul>
+                                    {product.bins.length === 0 && <li>No bin assignments yet.</li>}
+                                    {product.bins.map((bin) => (
+                                      <li key={bin.bin_id}>
+                                        <span>{bin.bin_code}</span>
+                                        <span>{bin.location ? ` · ${bin.location}` : ''}</span>
+                                        <span className="inventory-detail__bin-qty">{bin.on_hand} on hand</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <section className="card inventory__tools-card">
+                <div
+                  className="inventory__tools-nav"
+                  role="tablist"
+                  aria-label="Inventory actions"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`inventory__tools-nav-item${activeStockTool === 'history' ? ' inventory__tools-nav-item--active' : ''}`}
+                    aria-selected={activeStockTool === 'history'}
+                    onClick={() => setActiveStockTool('history')}
+                  >
+                    Stock history
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`inventory__tools-nav-item${activeStockTool === 'create' ? ' inventory__tools-nav-item--active' : ''}`}
+                    aria-selected={activeStockTool === 'create'}
+                    onClick={() => setActiveStockTool('create')}
+                  >
+                    Create product
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`inventory__tools-nav-item${activeStockTool === 'adjust' ? ' inventory__tools-nav-item--active' : ''}`}
+                    aria-selected={activeStockTool === 'adjust'}
+                    onClick={() => setActiveStockTool('adjust')}
+                  >
+                    Adjust stock
+                  </button>
+                </div>
+
+                <div className="inventory__tool-panel">
+                  {activeStockTool === 'history' && (
+                    <div className="inventory__history-grid">
+                      <div className="card inventory__history-card">
+                        <div className="inventory__history-header">
+                          <div>
+                            <h3>Stock history</h3>
+                            <p className="muted">Visualise adjustments and movements over time.</p>
+                          </div>
+                          {historySummary && (
+                            <span className="badge badge--muted">{historySummary.totalMoves} movements</span>
                           )}
                         </div>
-                      )}
-                    </td>
-                    <td>{product.on_hand}</td>
-                    <td>{product.reserved}</td>
-                    <td>{product.available}</td>
-                    <td>{currencyFormatter.format(Number(product.unit_price) || 0)}</td>
-                    <td>{product.reorder_point}</td>
-                    <td>{product.lead_time_days}</td>
-                    <td>
-                      <div className="table__actions">
-                        <button
-                          className="button button--small"
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            openEdit(product)
-                          }}
-                          disabled={actionDisabled}
-                        >
-                          Update
-                        </button>
-                        <button
-                          className="button button--small button--danger"
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleRemoveProduct(product)
-                          }}
-                          disabled={removeProduct.isLoading}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {String(product.id) === String(selectedProductId) && (
-                    <tr className="inventory-table__details">
-                      <td colSpan={10}>
-                        <div className="inventory-detail">
-                          <div>
-                            <p className="inventory-detail__label">Unit of measure</p>
-                            <p className="inventory-detail__value">{product.uom.toUpperCase()}</p>
-                          </div>
-                          <div>
-                            <p className="inventory-detail__label">Serial tracking</p>
-                            <p className="inventory-detail__value">{product.track_serial ? 'Enabled' : 'Disabled'}</p>
-                          </div>
-                          <div>
-                            <p className="inventory-detail__label">Unit price</p>
-                            <p className="inventory-detail__value">{currencyFormatter.format(Number(product.unit_price) || 0)}</p>
-                          </div>
-                          <div className="inventory-detail__bins">
-                            <p className="inventory-detail__label">Bin allocations</p>
-                            <ul>
-                              {product.bins.length === 0 && <li>No bin assignments yet.</li>}
-                              {product.bins.map((bin) => (
-                                <li key={bin.bin_id}>
-                                  <span>{bin.bin_code}</span>
-                                  <span>{bin.location ? ` · ${bin.location}` : ''}</span>
-                                  <span className="inventory-detail__bin-qty">{bin.on_hand} on hand</span>
+                        {historyQuery.isFetching ? (
+                          <p className="muted">Loading history…</p>
+                        ) : (
+                          <>
+                            <StockHistoryChart points={historyPoints} height={220} />
+                            <ul className="timeline inventory__history-timeline">
+                              {historyPoints.length === 0 && <li className="muted">No stock movements recorded for this product yet.</li>}
+                              {[...historyPoints].reverse().slice(0, 6).map((entry) => (
+                                <li key={entry.id}>
+                                  <div className="timeline__title">{entry.reason} · {entry.qty} units</div>
+                                  <div className="timeline__meta">
+                                    {new Date(entry.occurredAt).toLocaleString()} · Level {entry.level}
+                                    {entry.performedBy ? ` · by ${entry.performedBy}` : ''}
+                                  </div>
                                 </li>
                               ))}
                             </ul>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <aside className="inventory__aside">
-          <div className="card inventory__history-card">
-            <div className="inventory__history-header">
-              <div>
-                <h3>Stock history</h3>
-                <p className="muted">Visualise adjustments and movements over time.</p>
-              </div>
-              {historySummary && (
-                <span className="badge badge--muted">{historySummary.totalMoves} movements</span>
-              )}
-            </div>
-            {historyQuery.isFetching ? (
-              <p className="muted">Loading history…</p>
-            ) : (
-              <>
-                <StockHistoryChart points={historyPoints} height={220} />
-                <ul className="timeline inventory__history-timeline">
-                  {historyPoints.length === 0 && <li className="muted">No stock movements recorded for this product yet.</li>}
-                  {[...historyPoints].reverse().slice(0, 6).map((entry) => (
-                    <li key={entry.id}>
-                      <div className="timeline__title">{entry.reason} · {entry.qty} units</div>
-                      <div className="timeline__meta">
-                        {new Date(entry.occurredAt).toLocaleString()} · Level {entry.level}
-                        {entry.performedBy ? ` · by ${entry.performedBy}` : ''}
+                          </>
+                        )}
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
 
-          {selectedProduct && (
-            <div className="card inventory__summary-card">
-              <h3>{selectedProduct.name}</h3>
-              <p className="muted">SKU {selectedProduct.sku}</p>
-              <div className="inventory__summary-grid">
-                <div>
-                  <p className="inventory-detail__label">Available</p>
-                  <p className="inventory-detail__value">{selectedProduct.available}</p>
+                      {selectedProduct && (
+                        <div className="card inventory__summary-card">
+                          <h3>{selectedProduct.name}</h3>
+                          <p className="muted">SKU {selectedProduct.sku}</p>
+                          <div className="inventory__summary-grid">
+                            <div>
+                              <p className="inventory-detail__label">Available</p>
+                              <p className="inventory-detail__value">{selectedProduct.available}</p>
+                            </div>
+                            <div>
+                              <p className="inventory-detail__label">On hand</p>
+                              <p className="inventory-detail__value">{selectedProduct.on_hand}</p>
+                            </div>
+                            <div>
+                              <p className="inventory-detail__label">Reserved</p>
+                              <p className="inventory-detail__value">{selectedProduct.reserved}</p>
+                            </div>
+                            <div>
+                              <p className="inventory-detail__label">Reorder point</p>
+                              <p className="inventory-detail__value">{selectedProduct.reorder_point}</p>
+                            </div>
+                            <div>
+                              <p className="inventory-detail__label">Lead time</p>
+                              <p className="inventory-detail__value">{selectedProduct.lead_time_days} days</p>
+                            </div>
+                            <div>
+                              <p className="inventory-detail__label">Tracked serials</p>
+                              <p className="inventory-detail__value">{selectedProduct.track_serial ? 'Yes' : 'No'}</p>
+                            </div>
+                          </div>
+                          {historySummary && (
+                            <p className="muted inventory__summary-footer">Last movement on {new Date(historySummary.lastUpdated).toLocaleString()}.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeStockTool === 'create' && (
+                    <form className="form-grid" onSubmit={handleCreateProduct}>
+                      <h3>Create product</h3>
+                      <label className="field" data-help="Unique identifier used for scanning, search and integrations.">
+                        <span>SKU</span>
+                        <input
+                          value={productForm.sku}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, sku: e.target.value }))}
+                          placeholder="Ex. BATT-IPHONE"
+                          required
+                        />
+                      </label>
+                      <label className="field" data-help="Descriptive name your team recognises on pick lists and invoices.">
+                        <span>Name</span>
+                        <input
+                          value={productForm.name}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))}
+                          placeholder="iPhone Battery"
+                          required
+                        />
+                      </label>
+                      <label className="field" data-help="Base unit for tracking this item (e.g. each, box, pack).">
+                        <span>Unit of measure</span>
+                        <input
+                          value={productForm.uom}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, uom: e.target.value }))}
+                          placeholder="ea"
+                        />
+                      </label>
+                      <label className="field" data-help="Quantity at which replenishment reminders should trigger.">
+                        <span>Reorder point</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={productForm.reorder_point}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field" data-help="Average supplier lead time in days.">
+                        <span>Lead time (days)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={productForm.lead_time_days}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field" data-help="Default price applied when adding this product to invoices.">
+                        <span>Unit price</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={productForm.unit_price}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, unit_price: e.target.value }))}
+                          placeholder={`e.g. ${currencyFormatter.format(99.95)}`}
+                        />
+                        <small className="muted">Stored in {currencyCode}.</small>
+                      </label>
+                      <label className="field field--checkbox" data-help="Track individual serial numbers for warranty or traceability.">
+                        <input
+                          type="checkbox"
+                          checked={productForm.track_serial}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, track_serial: e.target.checked }))}
+                        />
+                        <span>Track serial numbers for this product</span>
+                      </label>
+                      <div className="form-actions">
+                        <button className="button button--primary" type="submit" disabled={createProduct.isLoading}>
+                          {createProduct.isLoading ? 'Creating…' : 'Add product'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {activeStockTool === 'adjust' && (
+                    <form className="form-grid" onSubmit={handleAdjustStock}>
+                      <h3>Adjust stock</h3>
+                      <label className="field" data-help="Select the item that requires a stock adjustment.">
+                        <span>Product</span>
+                        <select
+                          value={adjustForm.product_id}
+                          onChange={(e) => handleProductSelect(e.target.value)}
+                          required
+                        >
+                          <option value="" disabled>Select product</option>
+                          {productOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.name} · {option.sku}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field" data-help="Bin location receiving or issuing the stock movement.">
+                        <span>Bin</span>
+                        <select
+                          value={adjustForm.bin_id}
+                          onChange={(e) => setAdjustForm((prev) => ({ ...prev, bin_id: e.target.value }))}
+                          required
+                          disabled={!hasBinsAvailable}
+                        >
+                          {hasBinsAvailable ? null : <option value="">No bins available</option>}
+                          {binsForSelection.map((bin) => (
+                            <option key={bin.id} value={bin.id}>
+                              {bin.code}{bin.location ? ` · ${bin.location}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field" data-help="Number of units being moved in this adjustment.">
+                        <span>Quantity</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={adjustForm.qty}
+                          onChange={(e) => setAdjustForm((prev) => ({ ...prev, qty: e.target.value }))}
+                          required
+                        />
+                      </label>
+                      <label className="field" data-help="Choose whether inventory is being added or removed.">
+                        <span>Action</span>
+                        <select
+                          value={adjustForm.direction}
+                          onChange={(e) => setAdjustForm((prev) => ({ ...prev, direction: e.target.value }))}
+                        >
+                          <option value="increase">Increase on-hand quantity</option>
+                          <option value="decrease">Decrease on-hand quantity</option>
+                        </select>
+                      </label>
+                      <p className="muted field--span">
+                        Adjustments will be logged with your user account and reflected in dashboards instantly.
+                      </p>
+                      <div className="form-actions">
+                        <button className="button button--primary" type="submit" disabled={adjustStock.isLoading || !hasBinsAvailable}>
+                          {adjustStock.isLoading ? 'Applying…' : 'Update stock'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
-                <div>
-                  <p className="inventory-detail__label">On hand</p>
-                  <p className="inventory-detail__value">{selectedProduct.on_hand}</p>
+              </section>
+            </div>
+
+            <aside className={`inventory__notifications${notificationsOpen ? ' inventory__notifications--open' : ''}`}>
+              <div className="inventory__notifications-header">
+                <h3>Operations feed</h3>
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={() => setNotificationsOpen((prev) => !prev)}
+                  aria-expanded={notificationsOpen}
+                  aria-controls="inventory-notifications-panel"
+                >
+                  {notificationsOpen ? 'Hide insights' : 'Show insights'}
+                </button>
+              </div>
+              <div
+                id="inventory-notifications-panel"
+                className="inventory__notifications-content"
+              >
+                <div className="card inventory__notification-card">
+                  <h4>Low stock alerts</h4>
+                  <p className="muted">Products that are at or below their reorder point.</p>
+                  <ul className="timeline">
+                    {lowStock.length === 0 && <li className="muted">Everything looks healthy.</li>}
+                    {lowStock.map((item) => (
+                      <li key={item.id}>
+                        <div className="timeline__title">{item.name}</div>
+                        <div className="timeline__meta">{item.available} available · reorder at {item.reorder_point}</div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div>
-                  <p className="inventory-detail__label">Reserved</p>
-                  <p className="inventory-detail__value">{selectedProduct.reserved}</p>
+
+                <div className="card inventory__notification-card">
+                  <h4>Serialised inventory</h4>
+                  <p className="muted">Most recent serial numbers registered in the system.</p>
+                  <div className="table-scroll">
+                    <table className="table table--compact">
+                      <thead>
+                        <tr>
+                          <th>Serial</th>
+                          <th>Product</th>
+                          <th>Status</th>
+                          <th>Bin</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {latestSerials.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="muted">No serialised units recorded.</td>
+                          </tr>
+                        )}
+                        {latestSerials.map((serial) => (
+                          <tr key={serial.id}>
+                            <td><span className="badge badge--muted">{serial.serial}</span></td>
+                            <td>{serial.product?.name || serial.productId}</td>
+                            <td><span className={`badge badge--${serial.status === 'available' ? 'success' : serial.status === 'faulty' ? 'danger' : 'info'}`}>{serial.status}</span></td>
+                            <td>{serial.bin?.code || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div>
-                  <p className="inventory-detail__label">Reorder point</p>
-                  <p className="inventory-detail__value">{selectedProduct.reorder_point}</p>
+
+                <div className="card inventory__notification-card">
+                  <h4>Supplies & vendors</h4>
+                  {canManageProcurement ? (
+                    <ul className="timeline">
+                      {suppliers.length === 0 && <li className="muted">No suppliers configured yet.</li>}
+                      {suppliers.map((supplier) => (
+                        <li key={supplier.id}>
+                          <div className="timeline__title">{supplier.name}</div>
+                          <div className="timeline__meta">
+                            {supplier.contact_email || supplier.contact_name || '—'}
+                            {supplier.lead_time_days ? ` · ${supplier.lead_time_days} day lead` : ''}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="muted">Inventory administrators can add suppliers from the backend API.</p>
+                  )}
                 </div>
-                <div>
-                  <p className="inventory-detail__label">Lead time</p>
-                  <p className="inventory-detail__value">{selectedProduct.lead_time_days} days</p>
+
+                <div className="card inventory__notification-card">
+                  <h4>Purchase orders</h4>
+                  {canManageProcurement ? (
+                    <div className="table-scroll">
+                      <table className="table table--compact">
+                        <thead>
+                          <tr>
+                            <th>Reference</th>
+                            <th>Supplier</th>
+                            <th>Status</th>
+                            <th>Expected</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {openPurchaseOrders.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="muted">No purchase orders yet.</td>
+                            </tr>
+                          )}
+                          {openPurchaseOrders.map((po) => (
+                            <tr key={po.id}>
+                              <td>{po.reference}</td>
+                              <td>{po.supplier?.name || '—'}</td>
+                              <td><span className="badge badge--info">{po.status}</span></td>
+                              <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="muted">Purchase orders are available to inventory coordinators.</p>
+                  )}
                 </div>
-                <div>
-                  <p className="inventory-detail__label">Tracked serials</p>
-                  <p className="inventory-detail__value">{selectedProduct.track_serial ? 'Yes' : 'No'}</p>
+
+                <div className="card inventory__notification-card">
+                  <h4>RMA cases</h4>
+                  {canManageProcurement ? (
+                    <div className="table-scroll">
+                      <table className="table table--compact">
+                        <thead>
+                          <tr>
+                            <th>Reference</th>
+                            <th>Supplier</th>
+                            <th>Status</th>
+                            <th>Credit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {openRmas.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="muted">No RMA activity.</td>
+                            </tr>
+                          )}
+                          {openRmas.map((rma) => (
+                            <tr key={rma.id}>
+                              <td>{rma.reference}</td>
+                              <td>{rma.supplier?.name || '—'}</td>
+                              <td>{rma.status}</td>
+                              <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="muted">RMA tracking is reserved for inventory leads.</p>
+                  )}
                 </div>
               </div>
-              {historySummary && (
-                <p className="muted inventory__summary-footer">Last movement on {new Date(historySummary.lastUpdated).toLocaleString()}.</p>
-              )}
-            </div>
-          )}
-        </aside>
+            </aside>
           </div>
 
-          <div className="inventory__forms">
-            <form className="card form-grid" onSubmit={handleCreateProduct}>
-              <h3>Create product</h3>
-          <label className="field" data-help="Unique identifier used for scanning, search and integrations.">
-            <span>SKU</span>
-            <input
-              value={productForm.sku}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, sku: e.target.value }))}
-              placeholder="Ex. BATT-IPHONE"
-              required
-            />
-          </label>
-          <label className="field" data-help="Descriptive name your team recognises on pick lists and invoices.">
-            <span>Name</span>
-            <input
-              value={productForm.name}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="iPhone Battery"
-              required
-            />
-          </label>
-          <label className="field" data-help="Base unit for tracking this item (e.g. each, box, pack).">
-            <span>Unit of measure</span>
-            <input
-              value={productForm.uom}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, uom: e.target.value }))}
-              placeholder="ea"
-            />
-          </label>
-          <label className="field" data-help="Quantity at which replenishment reminders should trigger.">
-            <span>Reorder point</span>
-            <input
-              type="number"
-              min="0"
-              value={productForm.reorder_point}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
-            />
-          </label>
-          <label className="field" data-help="Average supplier lead time in days.">
-            <span>Lead time (days)</span>
-            <input
-              type="number"
-              min="0"
-              value={productForm.lead_time_days}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
-            />
-          </label>
-          <label className="field" data-help="Default price applied when adding this product to invoices.">
-            <span>Unit price</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={productForm.unit_price}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, unit_price: e.target.value }))}
-              placeholder={`e.g. ${currencyFormatter.format(99.95)}`}
-            />
-            <small className="muted">Stored in {currencyCode}.</small>
-          </label>
-          <label className="field field--checkbox" data-help="Track individual serial numbers for warranty or traceability.">
-            <input
-              type="checkbox"
-              checked={productForm.track_serial}
-              onChange={(e) => setProductForm((prev) => ({ ...prev, track_serial: e.target.checked }))}
-            />
-            <span>Track serial numbers for this product</span>
-          </label>
-          <div className="form-actions">
-            <button className="button button--primary" type="submit" disabled={createProduct.isLoading}>
-              {createProduct.isLoading ? 'Creating…' : 'Add product'}
-            </button>
-          </div>
-        </form>
-
-            <form className="card form-grid" onSubmit={handleAdjustStock}>
-              <h3>Adjust stock</h3>
-          <label className="field" data-help="Select the item that requires a stock adjustment.">
-            <span>Product</span>
-            <select
-              value={adjustForm.product_id}
-              onChange={(e) => handleProductSelect(e.target.value)}
-              required
-            >
-              <option value="" disabled>Select product</option>
-              {productOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name} · {option.sku}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field" data-help="Bin location receiving or issuing the stock movement.">
-            <span>Bin</span>
-            <select
-              value={adjustForm.bin_id}
-              onChange={(e) => setAdjustForm((prev) => ({ ...prev, bin_id: e.target.value }))}
-              required
-              disabled={!hasBinsAvailable}
-            >
-              {hasBinsAvailable ? null : <option value="">No bins available</option>}
-              {binsForSelection.map((bin) => (
-                <option key={bin.id} value={bin.id}>
-                  {bin.code}{bin.location ? ` · ${bin.location}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field" data-help="Number of units being moved in this adjustment.">
-            <span>Quantity</span>
-            <input
-              type="number"
-              min="1"
-              value={adjustForm.qty}
-              onChange={(e) => setAdjustForm((prev) => ({ ...prev, qty: e.target.value }))}
-              required
-            />
-          </label>
-          <label className="field" data-help="Choose whether inventory is being added or removed.">
-            <span>Action</span>
-            <select
-              value={adjustForm.direction}
-              onChange={(e) => setAdjustForm((prev) => ({ ...prev, direction: e.target.value }))}
-            >
-              <option value="increase">Increase on-hand quantity</option>
-              <option value="decrease">Decrease on-hand quantity</option>
-            </select>
-          </label>
-          <p className="muted field--span">
-            Adjustments will be logged with your user account and reflected in dashboards instantly.
-          </p>
-          <div className="form-actions">
-            <button className="button button--primary" type="submit" disabled={adjustStock.isLoading || !hasBinsAvailable}>
-              {adjustStock.isLoading ? 'Applying…' : 'Update stock'}
-            </button>
-          </div>
-        </form>
-
-          </div>
-
-          <div className="inventory__insights">
-        <div className="card">
-          <h3>Low stock alerts</h3>
-          <p className="muted">Products that are at or below their reorder point.</p>
-          <ul className="timeline">
-            {lowStock.length === 0 && <li className="muted">Everything looks healthy.</li>}
-            {lowStock.map((item) => (
-              <li key={item.id}>
-                <div className="timeline__title">{item.name}</div>
-                <div className="timeline__meta">{item.available} available · reorder at {item.reorder_point}</div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="card">
-          <h3>Serialised inventory</h3>
-          <p className="muted">Most recent serial numbers registered in the system.</p>
-          <div className="table-scroll">
-            <table className="table table--compact">
-              <thead>
-                <tr>
-                  <th>Serial</th>
-                  <th>Product</th>
-                  <th>Status</th>
-                  <th>Bin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {latestSerials.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="muted">No serialised units recorded.</td>
-                  </tr>
-                )}
-                {latestSerials.map((serial) => (
-                  <tr key={serial.id}>
-                    <td><span className="badge badge--muted">{serial.serial}</span></td>
-                    <td>{serial.product?.name || serial.productId}</td>
-                    <td><span className={`badge badge--${serial.status === 'available' ? 'success' : serial.status === 'faulty' ? 'danger' : 'info'}`}>{serial.status}</span></td>
-                    <td>{serial.bin?.code || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="card">
+          <div className="card">
           <h3>Suppliers</h3>
           <p className="muted">Active vendor roster with lead times.</p>
           {canManageProcurement ? (
@@ -1134,7 +1384,6 @@ export default function Inventory() {
             <p className="muted">RMA tracking is reserved for inventory leads.</p>
           )}
         </div>
-          </div>
         </section>
       )}
 
@@ -1166,6 +1415,124 @@ export default function Inventory() {
           </div>
 
           <div className="grid split inventory__bins-view">
+            <section className="card inventory__bins-table">
+              <header className="card__header">
+                <div>
+                  <h3>Registered bins</h3>
+                  <p className="muted">Overview of storage locations and current stock assignments.</p>
+                </div>
+                <span className="badge badge--muted">{binOverview.length} locations</span>
+              </header>
+              {binTableFeedback && (
+                <div className={`banner banner--${binTableFeedback.type === 'error' ? 'danger' : 'info'}`}>
+                  {binTableFeedback.message}
+                </div>
+              )}
+              <div className="table-scroll">
+                <table className="table table--compact">
+                  <thead>
+                    <tr>
+                      <th>Bin</th>
+                      <th>Location</th>
+                      <th>Products</th>
+                      <th>On hand</th>
+                      <th>Available</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {binOverview.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="muted">No bins recorded yet.</td>
+                      </tr>
+                    ) : (
+                      binOverview.map((bin) => (
+                        <React.Fragment key={bin.id}>
+                          <tr>
+                            <td><span className="badge">{bin.code}</span></td>
+                            <td>{bin.location || '—'}</td>
+                            <td>{bin.productCount}</td>
+                            <td>{bin.onHand}</td>
+                            <td>{bin.available}</td>
+                            <td>
+                              <div className="table__actions">
+                                <button
+                                  type="button"
+                                  className="button button--small"
+                                  onClick={() => openBinEditor(bin)}
+                                  disabled={binActionDisabled && editingBinId !== bin.id}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="button button--small button--danger"
+                                  onClick={() => handleDeleteBin(bin)}
+                                  disabled={deleteBin.isLoading}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          {editingBinId === bin.id && (
+                            <tr className="inventory__bin-edit-row">
+                              <td colSpan={6}>
+                                <form className="inventory__bin-edit-form" onSubmit={handleUpdateBinRow}>
+                                  <div className="inventory__bin-edit-grid">
+                                    <label className="field">
+                                      <span>Bin code</span>
+                                      <input
+                                        value={binEditForm.code}
+                                        onChange={(e) => setBinEditForm((prev) => ({ ...prev, code: e.target.value }))}
+                                        required
+                                        disabled={updateBin.isLoading}
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>Location name</span>
+                                      <input
+                                        value={binEditForm.site}
+                                        onChange={(e) => setBinEditForm((prev) => ({ ...prev, site: e.target.value }))}
+                                        placeholder="Main warehouse"
+                                        disabled={updateBin.isLoading}
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>Room / area</span>
+                                      <input
+                                        value={binEditForm.room}
+                                        onChange={(e) => setBinEditForm((prev) => ({ ...prev, room: e.target.value }))}
+                                        placeholder="Aisle 3"
+                                        disabled={updateBin.isLoading}
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="form-actions">
+                                    <button className="button button--primary" type="submit" disabled={updateBin.isLoading}>
+                                      {updateBin.isLoading ? 'Saving…' : 'Save changes'}
+                                    </button>
+                                    <button
+                                      className="button button--ghost button--small"
+                                      type="button"
+                                      onClick={cancelBinEdit}
+                                      disabled={updateBin.isLoading}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </form>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
             <form className="card form-grid" onSubmit={handleCreateBin}>
               <h3>Create storage bin</h3>
               {binFeedback && (
@@ -1205,46 +1572,6 @@ export default function Inventory() {
                 </button>
               </div>
             </form>
-
-            <section className="card inventory__bins-table">
-              <header className="card__header">
-                <div>
-                  <h3>Registered bins</h3>
-                  <p className="muted">Overview of storage locations and current stock assignments.</p>
-                </div>
-                <span className="badge badge--muted">{binOverview.length} locations</span>
-              </header>
-              <div className="table-scroll">
-                <table className="table table--compact">
-                  <thead>
-                    <tr>
-                      <th>Bin</th>
-                      <th>Location</th>
-                      <th>Products</th>
-                      <th>On hand</th>
-                      <th>Available</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {binOverview.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="muted">No bins recorded yet.</td>
-                      </tr>
-                    ) : (
-                      binOverview.map((bin) => (
-                        <tr key={bin.id}>
-                          <td><span className="badge">{bin.code}</span></td>
-                          <td>{bin.location || '—'}</td>
-                          <td>{bin.productCount}</td>
-                          <td>{bin.onHand}</td>
-                          <td>{bin.available}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
           </div>
         </section>
       )}
