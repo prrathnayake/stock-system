@@ -156,7 +156,8 @@ export const User = sequelize.define('user', {
   password_hash: { type: DataTypes.STRING, allowNull: false },
   role: { type: DataTypes.ENUM('admin', 'user'), defaultValue: 'user' },
   must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-  ui_variant: { type: DataTypes.ENUM('pro', 'analytics', 'tabular', 'minimal', 'visual'), defaultValue: 'pro' }
+  ui_variant: { type: DataTypes.ENUM('pro', 'analytics', 'tabular', 'minimal', 'visual'), defaultValue: 'pro' },
+  last_seen_at: { type: DataTypes.DATE, allowNull: true }
 }, {
   indexes: [
     { unique: true, fields: ['organization_id', 'email'] }

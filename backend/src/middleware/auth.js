@@ -1,5 +1,6 @@
 import { verifyAccessToken } from '../services/tokenService.js';
 import { runWithRequestContext } from '../services/requestContext.js';
+import { touchUserPresence } from '../services/userPresence.js';
 
 export function requireAuth(roles = [], options = {}) {
   const { allowIfMustChangePassword = false } = options;
@@ -20,6 +21,9 @@ export function requireAuth(roles = [], options = {}) {
       const organizationId = payload.organization_id ?? payload.organizationId ?? null;
       runWithRequestContext({ userId: payload.id, organizationId }, () => {
         req.user = { ...payload, organization_id: organizationId };
+        touchUserPresence(payload.id, { organizationId }).catch((error) => {
+          console.warn('[presence] unable to update user presence', error);
+        });
         next();
       });
     } catch (e) {

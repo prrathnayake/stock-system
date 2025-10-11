@@ -976,6 +976,7 @@ export default function Settings() {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Role</th>
+                      <th>Status</th>
                       <th>Interface</th>
                       <th>Reset required</th>
                       <th>Created</th>
@@ -985,7 +986,7 @@ export default function Settings() {
                   <tbody>
                     {filteredUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="muted">
+                        <td colSpan={8} className="muted">
                           {users.length === 0
                             ? 'No additional users created yet.'
                             : 'No users match your search.'}
@@ -1000,6 +1001,20 @@ export default function Settings() {
                             <span className={`badge badge--${account.role === 'admin' ? 'info' : 'muted'}`}>
                               {account.role}
                             </span>
+                          </td>
+                          <td>
+                            <div>
+                              <span className={`badge badge--${account.online ? 'success' : 'muted'}`}>
+                                {account.online ? 'Online now' : 'Offline'}
+                              </span>
+                            </div>
+                            {!account.online && (
+                              <div className="muted" style={{ fontSize: '12px', marginTop: '4px' }}>
+                                Last seen {account.last_seen_at
+                                  ? new Date(account.last_seen_at).toLocaleString()
+                                  : 'never'}
+                              </div>
+                            )}
                           </td>
                           <td>{(uiVariants.find((variant) => variant.id === account.ui_variant)?.name) || 'Professional'}</td>
                           <td>{account.must_change_password ? 'Yes' : 'No'}</td>

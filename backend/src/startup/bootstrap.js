@@ -575,6 +575,44 @@ async function ensureWorkOrdersHaveAssigneeColumn() {
   });
 }
 
+async function ensureUsersHaveLastSeenColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+  let tables;
+  try {
+    tables = await queryInterface.showAllTables();
+  } catch (error) {
+    console.warn(`Unable to list tables while ensuring user last seen column: ${error.message}`);
+    return;
+  }
+
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('users')) {
+    return;
+  }
+
+  let columns;
+  try {
+    columns = await queryInterface.describeTable('users');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  if (columns.last_seen_at || columns.lastSeenAt) {
+    return;
+  }
+
+  await queryInterface.addColumn('users', 'last_seen_at', {
+    type: DataTypes.DATE,
+    allowNull: true
+  });
+}
+
 export async function initialiseDatabase() {
   await waitForDatabaseConnection();
   await ensureLegacyProductsHaveOrganization();
@@ -583,6 +621,7 @@ export async function initialiseDatabase() {
   await ensureLegacyBinsHaveOrganization();
   await ensureLegacyStockLevelsHaveOrganization();
   await ensureWorkOrdersHaveAssigneeColumn();
+  await ensureUsersHaveLastSeenColumn();
   await cleanupDuplicateOrganizationSlugIndexes();
   await sequelize.sync({ alter: true });
 
