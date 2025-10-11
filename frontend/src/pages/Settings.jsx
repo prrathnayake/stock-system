@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { api } from '../lib/api'
@@ -57,6 +57,17 @@ export default function Settings() {
     enabled: isAdmin
   })
 
+  const filteredUsers = useMemo(() => {
+    if (!userSearch) return users
+    const term = userSearch.toLowerCase()
+    return users.filter((account) => {
+      const name = (account.full_name || '').toLowerCase()
+      const email = (account.email || '').toLowerCase()
+      const role = (account.role || '').toLowerCase()
+      return name.includes(term) || email.includes(term) || role.includes(term)
+    })
+  }, [users, userSearch])
+
   const { data: backups = [] } = useQuery({
     queryKey: ['backups'],
     queryFn: async () => {
@@ -112,6 +123,7 @@ export default function Settings() {
     must_change_password: false,
     ui_variant: 'pro'
   })
+  const [userSearch, setUserSearch] = useState('')
   const [selectedVariant, setSelectedVariant] = useState(user?.ui_variant || 'pro')
   const [orgBanner, setOrgBanner] = useState(null)
   const [orgForm, setOrgForm] = useState({
@@ -904,7 +916,19 @@ export default function Settings() {
               </form>
 
               <div className="user-management">
-                <h3>Active users</h3>
+                <div className="user-management__header">
+                  <h3>Active users</h3>
+                  <div className="user-management__search">
+                    <label className="field">
+                      <span>Search users</span>
+                      <input
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder="Search by name, email or role"
+                      />
+                    </label>
+                  </div>
+                </div>
                 <table className="table table--compact">
                   <thead>
                     <tr>
@@ -918,42 +942,47 @@ export default function Settings() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.length === 0 && (
+                    {filteredUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="muted">No additional users created yet.</td>
+                        <td colSpan={7} className="muted">
+                          {users.length === 0
+                            ? 'No additional users created yet.'
+                            : 'No users match your search.'}
+                        </td>
                       </tr>
+                    ) : (
+                      filteredUsers.map((account) => (
+                        <tr key={account.id}>
+                          <td>{account.full_name}</td>
+                          <td>{account.email}</td>
+                          <td>
+                            <span className={`badge badge--${account.role === 'admin' ? 'info' : 'muted'}`}>
+                              {account.role}
+                            </span>
+                          </td>
+                          <td>{(uiVariants.find((variant) => variant.id === account.ui_variant)?.name) || 'Professional'}</td>
+                          <td>{account.must_change_password ? 'Yes' : 'No'}</td>
+                          <td>{account.created_at ? new Date(account.created_at).toLocaleDateString() : '—'}</td>
+                          <td className="table__actions">
+                            <button
+                              type="button"
+                              className="button button--ghost button--small"
+                              onClick={() => handleStartEdit(account)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="button button--ghost button--small"
+                              onClick={() => handleDeleteUser(account.id)}
+                              disabled={deleteUserMutation.isLoading}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))
                     )}
-                    {users.map((account) => (
-                      <tr key={account.id}>
-                        <td>{account.full_name}</td>
-                        <td>{account.email}</td>
-                        <td>
-                          <span className={`badge badge--${account.role === 'admin' ? 'info' : 'muted'}`}>
-                            {account.role}
-                          </span>
-                        </td>
-                        <td>{(uiVariants.find((variant) => variant.id === account.ui_variant)?.name) || 'Professional'}</td>
-                        <td>{account.must_change_password ? 'Yes' : 'No'}</td>
-                        <td>{account.created_at ? new Date(account.created_at).toLocaleDateString() : '—'}</td>
-                        <td className="table__actions">
-                          <button
-                            type="button"
-                            className="button button--ghost button--small"
-                            onClick={() => handleStartEdit(account)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--small"
-                            onClick={() => handleDeleteUser(account.id)}
-                            disabled={deleteUserMutation.isLoading}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
 

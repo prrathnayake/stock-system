@@ -663,6 +663,20 @@ input:focus, select:focus, textarea:focus {
 .inventory__table-header {
   padding: 24px 24px 12px;
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.inventory__table-controls {
+  display: flex;
+  align-items: flex-end;
+}
+
+.inventory__table-controls .field {
+  min-width: 240px;
 }
 
 .inventory-table {
@@ -1161,6 +1175,26 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.user-management__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.user-management__header h3 {
+  margin: 0;
+}
+
+.user-management__search {
+  min-width: 220px;
+}
+
+.user-management__search .field {
+  margin: 0;
 }
 
 .scanner {

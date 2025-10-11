@@ -11,7 +11,9 @@ const initialProductForm = {
   reorder_point: '5',
   lead_time_days: '0',
   unit_price: '0',
-  track_serial: false
+  track_serial: false,
+  on_hand: '0',
+  reserved: '0'
 }
 
 const initialAdjustmentForm = {
@@ -230,6 +232,13 @@ export default function Inventory() {
     }
   })
 
+  const updateStockLevels = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      const { data } = await api.patch(`/stock/${id}/levels`, payload)
+      return data
+    }
+  })
+
   const removeProduct = useMutation({
     mutationFn: async (id) => {
       await api.delete(`/products/${id}`)
@@ -324,7 +333,18 @@ export default function Inventory() {
 
   const openEdit = (product) => {
     const meta = productMetaMap.get(product.id) || product
-    setEditingProduct({ id: product.id, name: meta.name, sku: meta.sku })
+    setEditingProduct({
+      id: product.id,
+      name: meta.name ?? product.name ?? '',
+      sku: meta.sku ?? product.sku ?? '',
+      uom: meta.uom ?? product.uom ?? 'ea',
+      reorder_point: Number(meta.reorder_point ?? product.reorder_point ?? 0),
+      lead_time_days: Number(meta.lead_time_days ?? product.lead_time_days ?? 0),
+      unit_price: Number(meta.unit_price ?? product.unit_price ?? 0),
+      track_serial: Boolean(meta.track_serial ?? product.track_serial ?? false),
+      on_hand: Number(product.on_hand ?? 0),
+      reserved: Number(product.reserved ?? 0)
+    })
     setEditForm({
       sku: meta.sku ?? product.sku ?? '',
       name: meta.name ?? product.name ?? '',
@@ -332,7 +352,9 @@ export default function Inventory() {
       reorder_point: String(meta.reorder_point ?? product.reorder_point ?? 0),
       lead_time_days: String(meta.lead_time_days ?? product.lead_time_days ?? 0),
       unit_price: String(meta.unit_price ?? product.unit_price ?? 0),
-      track_serial: Boolean(meta.track_serial ?? product.track_serial ?? false)
+      track_serial: Boolean(meta.track_serial ?? product.track_serial ?? false),
+      on_hand: String(product.on_hand ?? 0),
+      reserved: String(product.reserved ?? 0)
     })
   }
 
@@ -341,36 +363,66 @@ export default function Inventory() {
     setEditForm(initialProductForm)
   }
 
-  const handleUpdateProduct = (event) => {
+  const handleUpdateProduct = async (event) => {
     event.preventDefault()
     if (!editingProduct) return
-    const payload = {
-      sku: editForm.sku.trim(),
-      name: editForm.name.trim(),
-      uom: editForm.uom.trim() || 'ea',
-      reorder_point: Number(editForm.reorder_point) || 0,
-      lead_time_days: Number(editForm.lead_time_days) || 0,
-      unit_price: Math.max(0, Number(editForm.unit_price) || 0),
-      track_serial: Boolean(editForm.track_serial)
-    }
-    if (!payload.sku || !payload.name) {
+
+    setFeedback(null)
+
+    const sku = editForm.sku.trim()
+    const name = editForm.name.trim()
+    const uom = editForm.uom.trim() || 'ea'
+    const reorderPoint = Math.max(0, Number(editForm.reorder_point) || 0)
+    const leadTime = Math.max(0, Number(editForm.lead_time_days) || 0)
+    const unitPrice = Math.max(0, Number(editForm.unit_price) || 0)
+    const trackSerial = Boolean(editForm.track_serial)
+    const desiredOnHand = Math.max(0, Number(editForm.on_hand) || 0)
+    const desiredReserved = Math.max(0, Number(editForm.reserved) || 0)
+
+    if (!sku || !name) {
       setFeedback({ type: 'error', message: 'SKU and product name are required.' })
       return
     }
-    updateProduct.mutate({ id: editingProduct.id, payload }, {
-      onSuccess: () => {
-        setFeedback({ type: 'success', message: 'Product updated successfully.' })
-        closeEdit()
-        refetch()
-        productsQuery.refetch()
-      },
-      onError: (error) => {
-        setFeedback({
-          type: 'error',
-          message: error.response?.data?.error || 'Unable to update this product.'
-        })
+    if (desiredReserved > desiredOnHand) {
+      setFeedback({ type: 'error', message: 'Reserved stock cannot exceed on-hand quantity.' })
+      return
+    }
+
+    const productPayload = {}
+    if (sku !== editingProduct.sku) productPayload.sku = sku
+    if (name !== editingProduct.name) productPayload.name = name
+    if (uom !== editingProduct.uom) productPayload.uom = uom
+    if (reorderPoint !== editingProduct.reorder_point) productPayload.reorder_point = reorderPoint
+    if (leadTime !== editingProduct.lead_time_days) productPayload.lead_time_days = leadTime
+    if (unitPrice !== editingProduct.unit_price) productPayload.unit_price = unitPrice
+    if (trackSerial !== editingProduct.track_serial) productPayload.track_serial = trackSerial
+
+    const stockPayload = {}
+    if (desiredOnHand !== editingProduct.on_hand) stockPayload.on_hand = desiredOnHand
+    if (desiredReserved !== editingProduct.reserved) stockPayload.reserved = desiredReserved
+
+    if (Object.keys(productPayload).length === 0 && Object.keys(stockPayload).length === 0) {
+      setFeedback({ type: 'info', message: 'No changes detected for this product.' })
+      return
+    }
+
+    try {
+      if (Object.keys(productPayload).length > 0) {
+        await updateProduct.mutateAsync({ id: editingProduct.id, payload: productPayload })
       }
-    })
+      if (Object.keys(stockPayload).length > 0) {
+        await updateStockLevels.mutateAsync({ id: editingProduct.id, payload: stockPayload })
+      }
+      setFeedback({ type: 'success', message: 'Product updated successfully.' })
+      closeEdit()
+      refetch()
+      productsQuery.refetch()
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error.response?.data?.error || 'Unable to update this product.'
+      })
+    }
   }
 
   const handleRemoveProduct = (product) => {
@@ -399,7 +451,12 @@ export default function Inventory() {
     })
   }
 
-  const actionDisabled = createProduct.isLoading || updateProduct.isLoading || removeProduct.isLoading
+  const actionDisabled =
+    createProduct.isLoading ||
+    updateProduct.isLoading ||
+    updateStockLevels.isLoading ||
+    removeProduct.isLoading
+  const savingProduct = updateProduct.isLoading || updateStockLevels.isLoading
 
   return (
     <div className="page inventory">
@@ -409,10 +466,6 @@ export default function Inventory() {
           <p className="muted">Search, curate and adjust your catalogue with real-time visibility into stock health.</p>
         </div>
         <div className="inventory__header-actions">
-          <label className="field" data-help="Filter the catalogue by SKU or product name.">
-            <span>Search catalogue</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by SKU or product name" />
-          </label>
           <button className="button" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
@@ -456,8 +509,20 @@ export default function Inventory() {
       <div className="inventory__layout">
         <div className="card inventory__table-card">
           <div className="inventory__table-header">
-            <h3>Catalogue</h3>
-            <p className="muted">Click a row to reveal bin allocations and action shortcuts.</p>
+            <div>
+              <h3>Catalogue</h3>
+              <p className="muted">Click a row to reveal bin allocations and action shortcuts.</p>
+            </div>
+            <div className="inventory__table-controls">
+              <label className="field" data-help="Filter the catalogue by SKU or product name.">
+                <span>Search catalogue</span>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by SKU or product name"
+                />
+              </label>
+            </div>
           </div>
           <table className="table inventory-table">
             <thead>
@@ -477,7 +542,9 @@ export default function Inventory() {
             <tbody>
               {enrichedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="muted">No products found. Try adjusting your filters or add a new item.</td>
+                  <td colSpan={10} className="muted">
+                    {query ? 'No products match your search.' : 'No products found. Try adjusting your filters or add a new item.'}
+                  </td>
                 </tr>
               )}
               {enrichedProducts.map((product) => (
@@ -975,6 +1042,25 @@ export default function Inventory() {
                 />
                 <small className="muted">Stored in {currencyCode}.</small>
               </label>
+              <label className="field" data-help="Adjust the total quantity on hand across all bins.">
+                <span>On-hand quantity</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.on_hand}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, on_hand: e.target.value }))}
+                />
+              </label>
+              <label className="field" data-help="Reserved units are committed to orders or work orders.">
+                <span>Reserved quantity</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.reserved}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, reserved: e.target.value }))}
+                />
+                <small className="muted">Reserved stock cannot exceed on-hand quantity.</small>
+              </label>
               <label className="field field--checkbox" data-help="Keep serial tracking enabled for warranty traceability.">
                 <input
                   type="checkbox"
@@ -984,9 +1070,9 @@ export default function Inventory() {
                 <span>Track serial numbers for this product</span>
               </label>
               <div className="form-actions">
-                <button className="button" type="button" onClick={closeEdit} disabled={updateProduct.isLoading}>Cancel</button>
-                <button className="button button--primary" type="submit" disabled={updateProduct.isLoading}>
-                  {updateProduct.isLoading ? 'Saving…' : 'Save changes'}
+                <button className="button" type="button" onClick={closeEdit} disabled={savingProduct}>Cancel</button>
+                <button className="button button--primary" type="submit" disabled={savingProduct}>
+                  {savingProduct ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             </form>
