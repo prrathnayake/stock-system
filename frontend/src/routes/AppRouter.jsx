@@ -7,6 +7,7 @@ import Inventory from '../pages/Inventory.jsx';
 import Login from '../pages/Login.jsx';
 import Scan from '../pages/Scan.jsx';
 import Settings from '../pages/Settings.jsx';
+import Invoices from '../pages/Invoices.jsx';
 import WorkOrders from '../pages/WorkOrders.jsx';
 import { useAuth } from '../providers/AuthProvider.jsx';
 
@@ -76,6 +77,10 @@ export default function AppRouter() {
         >
           <Route index element={<Dashboard />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route
+            path="invoices"
+            element={<RoleRoute roles={['admin']}><Invoices /></RoleRoute>}
+          />
           <Route
             path="work-orders"
             element={<RoleRoute roles={['admin']}><WorkOrders /></RoleRoute>}

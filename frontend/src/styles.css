@@ -248,6 +248,9 @@ input:focus, select:focus, textarea:focus {
   padding: 24px;
   box-shadow: var(--shadow-lg);
   transition: background-color 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .card__header {
@@ -255,7 +258,7 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .grid {
@@ -269,6 +272,10 @@ input:focus, select:focus, textarea:focus {
 
 .grid.two-columns {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.grid.three-columns {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .grid.split {
@@ -791,6 +798,172 @@ input:focus, select:focus, textarea:focus {
 .banner--danger {
   background: rgba(248, 113, 113, 0.24);
   color: #b91c1c;
+}
+
+.banner--success {
+  background: rgba(134, 239, 172, 0.24);
+  color: #15803d;
+}
+
+.banner--error {
+  background: rgba(248, 113, 113, 0.24);
+  color: #b91c1c;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.form-control > span {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.line-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.line-items__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.line-item {
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.line-item__totals {
+  align-self: flex-end;
+  text-align: right;
+}
+
+.line-item__totals p {
+  margin: 2px 0;
+}
+
+.invoice-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+}
+
+.invoice-summary__total {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.invoice-preview {
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.invoice-preview__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.invoice-preview__meta {
+  text-align: right;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.invoice-preview__customer h4,
+.invoice-preview__notes h4 {
+  margin-bottom: 4px;
+}
+
+.invoice-preview__totals {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.invoice-preview__totals div {
+  display: flex;
+  gap: 24px;
+  font-weight: 500;
+}
+
+.invoice-preview__grand-total {
+  font-size: 18px;
+}
+
+.invoice-preview__footer {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.invoice-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.invoice-detail__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  font-size: 14px;
+}
+
+.payment-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.badge--draft {
+  background: rgba(148, 163, 184, 0.25);
+  color: #475569;
+}
+
+.badge--issued {
+  background: rgba(96, 165, 250, 0.24);
+  color: #1d4ed8;
+}
+
+.badge--payment_processing {
+  background: rgba(251, 191, 36, 0.24);
+  color: #b45309;
+}
+
+.badge--paid {
+  background: rgba(134, 239, 172, 0.24);
+  color: #15803d;
+}
+
+.badge--void {
+  background: rgba(148, 163, 184, 0.2);
+  color: #64748b;
+  text-decoration: line-through;
 }
 
 .form-grid {

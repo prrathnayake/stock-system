@@ -12,7 +12,8 @@ const reasonLabels = {
   return: 'Returned',
   transfer: 'Transferred',
   reserve: 'Reserved',
-  release: 'Released'
+  release: 'Released',
+  invoice_sale: 'Invoice fulfilled'
 }
 
 export default function Dashboard() {

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { User } from '../db.js';
+import { User, UserActivity } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
@@ -11,6 +11,7 @@ import {
   notifyUserAccountDeleted,
   notifyUserAccountUpdated
 } from '../services/notificationService.js';
+import { presentActivity } from '../services/activityLog.js';
 
 const router = Router();
 
@@ -144,6 +145,15 @@ router.delete('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
   }).catch((error) => {
     console.error('[notify] failed to send user deletion email', error);
   });
+}));
+
+router.get('/activities', requireAuth(['admin']), asyncHandler(async (_req, res) => {
+  const entries = await UserActivity.findAll({
+    order: [['createdAt', 'DESC']],
+    limit: 200,
+    include: [{ model: User, attributes: ['id', 'full_name', 'email'] }]
+  });
+  res.json(entries.map(presentActivity));
 }));
 
 router.put('/me/preferences', requireAuth(), asyncHandler(async (req, res) => {
