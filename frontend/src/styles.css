@@ -113,6 +113,15 @@ input:focus, select:focus, textarea:focus {
   display: inline-flex;
 }
 
+.sidebar__logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px;
+}
+
 .sidebar__title {
   font-weight: 600;
   font-size: 18px;
@@ -885,6 +894,13 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   justify-content: space-between;
   gap: 16px;
+}
+
+.invoice-preview__logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  margin-left: auto;
 }
 
 .invoice-preview__meta {

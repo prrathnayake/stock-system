@@ -16,7 +16,7 @@ export function primeOrganizationContact(organization) {
   if (!organization) return;
   cacheOrganizationContact(organization.id, {
     email: organization.contact_email || null,
-    name: organization.name || 'Your Organization'
+    name: organization.legal_name || organization.name || 'Your Organization'
   });
 }
 
@@ -34,7 +34,7 @@ async function getOrganizationContact(organizationId) {
   }
   const details = {
     email: organization.contact_email || null,
-    name: organization.name || 'Your Organization'
+    name: organization.legal_name || organization.name || 'Your Organization'
   };
   cacheOrganizationContact(id, details);
   return details;
@@ -132,7 +132,7 @@ export async function notifySettingsChanged({ organizationId, actor, keys }) {
 export async function notifyOrganizationProfileUpdated({ organization, actor }) {
   primeOrganizationContact(organization);
   const performer = actorLabel(actor);
-  const name = organization?.name || 'Your organization';
+  const name = organization?.legal_name || organization?.name || 'Your organization';
   if (organization?.contact_email) {
     await sendEmail({
       to: organization.contact_email,

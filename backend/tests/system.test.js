@@ -19,6 +19,10 @@ vi.mock('../src/queues/lowStock.js', () => ({
   initLowStockQueue: vi.fn().mockResolvedValue({})
 }));
 
+vi.mock('../src/services/email.js', () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock('../src/services/cache.js', () => ({
   getCachedStockOverview: vi.fn().mockResolvedValue(null),
   cacheStockOverview: vi.fn().mockResolvedValue(undefined),
@@ -136,6 +140,37 @@ describe('End-to-end system workflow', () => {
     });
     authToken = login.access;
     refreshToken = login.refresh;
+
+    await step('Update organization profile with identity data', async () => {
+      const res = await request(app)
+        .put('/organization')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Test Org',
+          legal_name: 'Test Org Pty Ltd',
+          contact_email: 'ops@test.org',
+          timezone: 'Australia/Sydney',
+          abn: '98 765 432 109',
+          tax_id: 'TAX-123',
+          address: '1 Example Road\nSydney NSW 2000',
+          phone: '+61 2 1234 5678',
+          website: 'https://example.org',
+          logo_url: 'https://cdn.example.org/logo.png',
+          invoice_prefix: 'TO-',
+          default_payment_terms: 'Net 14',
+          invoice_notes: 'Thanks for your business.',
+          currency: 'AUD'
+        });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        name: 'Test Org',
+        legal_name: 'Test Org Pty Ltd',
+        abn: '98 765 432 109',
+        invoice_prefix: 'TO-',
+        default_payment_terms: 'Net 14',
+        currency: 'AUD'
+      });
+    });
 
     await step('Refresh access token', async () => {
       const res = await request(app)

@@ -75,7 +75,20 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
       organization: {
         id: organization.id,
         name: organization.name,
-        slug: organization.slug
+        slug: organization.slug,
+        legal_name: organization.legal_name,
+        contact_email: organization.contact_email,
+        timezone: organization.timezone,
+        abn: organization.abn,
+        tax_id: organization.tax_id,
+        address: organization.address,
+        phone: organization.phone,
+        website: organization.website,
+        logo_url: organization.logo_url,
+        invoice_prefix: organization.invoice_prefix,
+        default_payment_terms: organization.default_payment_terms,
+        invoice_notes: organization.invoice_notes,
+        currency: organization.currency
       },
       ui_variant: user.ui_variant
     }
@@ -158,7 +171,20 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
       organization: organization ? {
         id: organization.id,
         name: organization.name,
-        slug: organization.slug
+        slug: organization.slug,
+        legal_name: organization.legal_name,
+        contact_email: organization.contact_email,
+        timezone: organization.timezone,
+        abn: organization.abn,
+        tax_id: organization.tax_id,
+        address: organization.address,
+        phone: organization.phone,
+        website: organization.website,
+        logo_url: organization.logo_url,
+        invoice_prefix: organization.invoice_prefix,
+        default_payment_terms: organization.default_payment_terms,
+        invoice_notes: organization.invoice_notes,
+        currency: organization.currency
       } : null,
       ui_variant: user.ui_variant
     }

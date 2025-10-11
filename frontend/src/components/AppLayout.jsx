@@ -9,6 +9,10 @@ export default function AppLayout() {
   const location = useLocation()
   const variant = user?.ui_variant || 'pro'
 
+  const brandName = organization?.name || user?.organization?.name || 'Repair Center'
+  const brandSubtitle = organization?.legal_name || 'Operations Suite'
+  const brandLogo = organization?.logo_url
+
   const navItems = useMemo(() => ([
     { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
     { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
@@ -27,10 +31,14 @@ export default function AppLayout() {
     <div className={`layout layout--${variant}`}>
       <aside className="sidebar">
         <div className="sidebar__brand">
-          <span className="sidebar__dot" />
+          {brandLogo ? (
+            <img className="sidebar__logo" src={brandLogo} alt={`${brandName} logo`} />
+          ) : (
+            <span className="sidebar__dot" />
+          )}
           <div>
-            <p className="sidebar__title">Repair Center</p>
-            <p className="sidebar__subtitle">Operations Suite</p>
+            <p className="sidebar__title">{brandName}</p>
+            <p className="sidebar__subtitle">{brandSubtitle}</p>
           </div>
         </div>
         <nav className="sidebar__nav">
@@ -55,7 +63,7 @@ export default function AppLayout() {
         <header className="topbar">
           <div>
             <h1 className="topbar__title">{pageTitle}</h1>
-            <p className="topbar__subtitle">{organization?.name || user?.organization?.name || 'Operational insights and control center'}</p>
+            <p className="topbar__subtitle">{organization?.legal_name || organization?.name || user?.organization?.name || 'Operational insights and control center'}</p>
           </div>
           <div className="topbar__actions">
             <button className="button button--ghost" type="button" onClick={toggleTheme}>
