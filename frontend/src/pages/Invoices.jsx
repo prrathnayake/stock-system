@@ -681,10 +681,10 @@ export default function Invoices() {
                 <p><strong>Due date:</strong> {form.due_date || '—'}</p>
                 {form.reference && <p><strong>Reference:</strong> {form.reference}</p>}
               </div>
-              {organization?.logo_url && (
+              {(organization?.logo_asset_url || organization?.logo_url) && (
                 <img
                   className="invoice-preview__logo"
-                  src={organization.logo_url}
+                  src={organization.logo_asset_url || organization.logo_url}
                   alt={`${organization?.name || 'Organization'} logo`}
                 />
               )}

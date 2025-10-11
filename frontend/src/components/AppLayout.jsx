@@ -11,7 +11,7 @@ export default function AppLayout() {
 
   const brandName = organization?.name || user?.organization?.name || 'Repair Center'
   const brandSubtitle = organization?.legal_name || 'Operations Suite'
-  const brandLogo = organization?.logo_url
+  const brandLogo = organization?.logo_asset_url || organization?.logo_url
 
   const navItems = useMemo(() => ([
     { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },

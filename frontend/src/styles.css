@@ -308,6 +308,16 @@ input:focus, select:focus, textarea:focus {
   border-collapse: collapse;
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+  min-width: 520px;
+}
+
 .table thead {
   color: var(--color-text-muted);
   font-size: 13px;
@@ -410,6 +420,59 @@ input:focus, select:focus, textarea:focus {
   font-size: 14px;
 }
 
+.field[data-help] {
+  position: relative;
+}
+
+.field[data-help] > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field[data-help] > span::after {
+  content: 'i';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.field[data-help]::after {
+  content: attr(data-help);
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: clamp(200px, 80%, 320px);
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  z-index: 5;
+}
+
+.field[data-help]:hover::after,
+.field[data-help]:focus-within::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .field small {
   font-size: 12px;
   color: var(--color-text-muted);
@@ -423,6 +486,30 @@ input:focus, select:focus, textarea:focus {
 
 .field textarea {
   resize: vertical;
+}
+
+.field__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logo-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  max-width: 160px;
+  margin-bottom: 6px;
+}
+
+.logo-preview img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .muted {

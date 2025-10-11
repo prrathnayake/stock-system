@@ -54,23 +54,23 @@ export default function FirstLogin() {
           <p>Update the default administrator details before continuing.</p>
         </div>
         <form className="login__form" onSubmit={submit}>
-          <label className="field">
+          <label className="field" data-help="This name will be shown to your team across the app.">
             <span>Full name</span>
             <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} required />
           </label>
-          <label className="field">
+          <label className="field" data-help="Primary email used for login and notifications.">
             <span>Email</span>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
           </label>
-          <label className="field">
+          <label className="field" data-help="Verify the temporary password before setting a new one.">
             <span>Current password</span>
             <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
           </label>
-          <label className="field">
+          <label className="field" data-help="Choose a strong password with at least 8 characters.">
             <span>New password</span>
             <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
           </label>
-          <label className="field">
+          <label className="field" data-help="Confirm the new password to avoid typos.">
             <span>Confirm new password</span>
             <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
           </label>

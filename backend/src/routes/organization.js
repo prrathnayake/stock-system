@@ -1,14 +1,50 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { promises as fs } from 'fs';
+import path from 'path';
+import multer from 'multer';
 import { Organization } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { notifyOrganizationProfileUpdated, primeOrganizationContact } from '../services/notificationService.js';
+import { config } from '../config.js';
+import { logoUpload } from '../middleware/uploads.js';
 
 const router = Router();
 
 const urlSchema = z.string().url('Must be a valid URL');
+const uploadsPublicRoot = config.uploads.publicPath.replace(/\/+$/, '');
+const escapeRegex = (value) => value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+const uploadsPathPattern = new RegExp(`^${escapeRegex(uploadsPublicRoot)}\/[A-Za-z0-9_.-]+$`);
+const logoUrlSchema = z.union([
+  urlSchema,
+  z.literal(''),
+  z.string().regex(uploadsPathPattern, 'Logo must be a valid URL or uploaded file path')
+]);
+
+function resolveStoredLogoPath(value) {
+  if (!value) return null;
+  const prefix = `${uploadsPublicRoot}/`;
+  if (!value.startsWith(prefix)) {
+    return null;
+  }
+  const relative = value.slice(prefix.length).replace(/^\/+/, '');
+  if (!relative || relative.includes('..') || relative.includes('\\')) {
+    return null;
+  }
+  return path.join(config.uploads.directory, relative);
+}
+
+const uploadLogoMiddleware = (req, res, next) => {
+  logoUpload.single('logo')(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      return next(new HttpError(400, err.message));
+    }
+    return next(err);
+  });
+};
 
 const UpdateSchema = z.object({
   name: z.string().min(1, 'Organization name is required'),
@@ -20,7 +56,7 @@ const UpdateSchema = z.object({
   address: z.string().max(2000).optional(),
   phone: z.string().max(32).optional(),
   website: z.union([urlSchema, z.literal('')]).optional(),
-  logo_url: z.union([urlSchema, z.literal('')]).optional(),
+  logo_url: logoUrlSchema.optional(),
   invoice_prefix: z.string().max(16).optional(),
   default_payment_terms: z.string().max(191).optional(),
   invoice_notes: z.string().max(4000).optional(),
@@ -79,6 +115,29 @@ router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   notifyOrganizationProfileUpdated({ organization, actor: req.user }).catch((error) => {
     console.error('[notify] failed to send organization update email', error);
   });
+}));
+
+router.post('/logo', requireAuth(['admin']), uploadLogoMiddleware, asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new HttpError(400, 'Logo file is required');
+  }
+  const organization = await Organization.findByPk(req.user.organization_id, { skipOrganizationScope: true });
+  if (!organization) {
+    throw new HttpError(404, 'Organization not found');
+  }
+
+  const newLogoUrl = `${uploadsPublicRoot}/${req.file.filename}`;
+  const previousLogoPath = resolveStoredLogoPath(organization.logo_url);
+  if (previousLogoPath) {
+    fs.unlink(previousLogoPath).catch((error) => {
+      if (error?.code !== 'ENOENT') {
+        console.warn('[uploads] Failed to remove old logo:', error.message);
+      }
+    });
+  }
+
+  await organization.update({ logo_url: newLogoUrl });
+  res.status(201).json({ logo_url: newLogoUrl });
 }));
 
 export default router;

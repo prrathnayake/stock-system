@@ -174,7 +174,7 @@ export default function WorkOrders() {
                           )}
                         </div>
                         <div className="workorder-controls">
-                          <label className="field">
+                          <label className="field" data-help="Set the current progress stage for this work order.">
                             <span>Status</span>
                             <select
                               value={statusDraft[order.id] || order.status}
@@ -185,7 +185,7 @@ export default function WorkOrders() {
                               ))}
                             </select>
                           </label>
-                          <label className="field">
+                          <label className="field" data-help="Optional note shared with the team when applying the update.">
                             <span>Update note</span>
                             <input
                               value={statusNotes[order.id] || ''}
@@ -202,7 +202,7 @@ export default function WorkOrders() {
                           </button>
                         </div>
                         <div className="workorder-diagnostics">
-                          <label className="field">
+                          <label className="field" data-help="Record fault isolation and test results for future reference.">
                             <span>Diagnostics</span>
                             <textarea
                               rows={3}

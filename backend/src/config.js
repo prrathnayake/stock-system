@@ -47,6 +47,29 @@ const resolveFrontendPath = () => {
   return path.resolve(__dirname, '../../frontend/dist');
 };
 
+const resolveUploadsPath = () => {
+  const configured = process.env.UPLOADS_DIRECTORY;
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.resolve(__dirname, '../../uploads');
+};
+
+const parseFileSize = (value, fallback) => {
+  if (!value) return fallback;
+  const trimmed = String(value).trim().toLowerCase();
+  const directNumber = Number(trimmed);
+  if (!Number.isNaN(directNumber) && directNumber > 0) {
+    return directNumber;
+  }
+  const match = trimmed.match(/^(\d+)(kb|mb|gb)$/);
+  if (!match) return fallback;
+  const size = Number(match[1]);
+  const unit = match[2];
+  const multipliers = { kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
+  return size > 0 ? size * multipliers[unit] : fallback;
+};
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: process.env.PORT || 8080,
@@ -100,11 +123,18 @@ export const config = {
     secure: process.env.MAIL_SECURE === 'true',
     user: process.env.MAIL_USER || '',
     pass: process.env.MAIL_PASS || '',
-    from: process.env.MAIL_FROM || 'no-reply@stock-system.local'
+    from: process.env.MAIL_FROM || 'no-reply@stock-system.local',
+    url: process.env.MAIL_URL || '',
+    rejectUnauthorized: process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== 'false'
   },
   frontend: {
     serve: process.env.SERVE_FRONTEND !== 'false',
     distPath: resolveFrontendPath()
+  },
+  uploads: {
+    directory: resolveUploadsPath(),
+    publicPath: process.env.UPLOADS_PUBLIC_PATH || '/uploads',
+    maxLogoFileSize: parseFileSize(process.env.UPLOAD_MAX_FILE_SIZE, 2 * 1024 * 1024)
   }
 };
 
@@ -123,8 +153,8 @@ if (config.env === 'production') {
     throw new Error('BACKUP_DIRECTORY must be provided when BACKUP_ENABLED=true');
   }
   if (config.mail.enabled) {
-    if (!config.mail.host) {
-      throw new Error('MAIL_HOST must be provided when MAIL_ENABLED=true');
+    if (!config.mail.url && !config.mail.host) {
+      throw new Error('MAIL_HOST or MAIL_URL must be provided when MAIL_ENABLED=true');
     }
     if (!config.mail.from) {
       throw new Error('MAIL_FROM must be provided when MAIL_ENABLED=true');
