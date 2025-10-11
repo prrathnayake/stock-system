@@ -848,31 +848,33 @@ export default function Inventory() {
           <h3>RMA cases</h3>
           <p className="muted">Returns and credits awaiting supplier resolution.</p>
           {canManageProcurement ? (
-            <table className="table table--compact">
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Supplier</th>
-                  <th>Status</th>
-                  <th>Credit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openRmas.length === 0 && (
+            <div className="table-scroll">
+              <table className="table table--compact">
+                <thead>
                   <tr>
-                    <td colSpan={4} className="muted">No RMA activity.</td>
+                    <th>Reference</th>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th>Credit</th>
                   </tr>
-                )}
-                {openRmas.map((rma) => (
-                  <tr key={rma.id}>
-                    <td>{rma.reference}</td>
-                    <td>{rma.supplier?.name || '—'}</td>
-                    <td>{rma.status}</td>
-                    <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {openRmas.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="muted">No RMA activity.</td>
+                    </tr>
+                  )}
+                  {openRmas.map((rma) => (
+                    <tr key={rma.id}>
+                      <td>{rma.reference}</td>
+                      <td>{rma.supplier?.name || '—'}</td>
+                      <td>{rma.status}</td>
+                      <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="muted">RMA tracking is reserved for inventory leads.</p>
           )}
