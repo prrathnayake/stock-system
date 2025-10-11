@@ -237,7 +237,8 @@ export default function Invoices() {
             product_id: value,
             description: line.description || product?.name || '',
             bin_id: '',
-            gst_rate: line.gst_rate ?? 0.1
+            gst_rate: line.gst_rate ?? 0.1,
+            unit_price: product ? Number(product.unit_price ?? 0) : line.unit_price
           }
         }
         if (key === 'gst_rate') {

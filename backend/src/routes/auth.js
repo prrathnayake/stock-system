@@ -35,7 +35,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     where: { email: normalizedEmail },
     include: [{ model: Organization, attributes: [
       'id', 'name', 'slug', 'legal_name', 'contact_email', 'timezone', 'abn', 'tax_id', 'address', 'phone', 'website', 'logo_url',
-      'invoice_prefix', 'default_payment_terms', 'invoice_notes', 'currency'
+      'invoice_prefix', 'default_payment_terms', 'invoice_notes', 'currency', 'invoicing_enabled'
     ] }],
     skipOrganizationScope: true
   });
@@ -87,7 +87,8 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         invoice_prefix: organization.invoice_prefix,
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
-        currency: organization.currency
+        currency: organization.currency,
+        invoicing_enabled: organization.invoicing_enabled
       } : null,
       ui_variant: user.ui_variant
     }
@@ -183,7 +184,8 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
         invoice_prefix: organization.invoice_prefix,
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
-        currency: organization.currency
+        currency: organization.currency,
+        invoicing_enabled: organization.invoicing_enabled
       } : null,
       ui_variant: user.ui_variant
     }

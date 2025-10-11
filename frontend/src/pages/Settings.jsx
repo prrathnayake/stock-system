@@ -128,7 +128,8 @@ export default function Settings() {
     invoice_prefix: organization?.invoice_prefix || '',
     default_payment_terms: organization?.default_payment_terms || '',
     invoice_notes: organization?.invoice_notes || '',
-    currency: organization?.currency || 'AUD'
+    currency: organization?.currency || 'AUD',
+    invoicing_enabled: organization?.invoicing_enabled !== false
   })
   const [logoPreview, setLogoPreview] = useState(resolveAssetUrl(organization?.logo_url || ''))
 
@@ -167,7 +168,8 @@ export default function Settings() {
         invoice_prefix: organizationDetails.invoice_prefix || '',
         default_payment_terms: organizationDetails.default_payment_terms || '',
         invoice_notes: organizationDetails.invoice_notes || '',
-        currency: organizationDetails.currency || 'AUD'
+        currency: organizationDetails.currency || 'AUD',
+        invoicing_enabled: organizationDetails.invoicing_enabled !== false
       })
       setLogoPreview(resolveAssetUrl(organizationDetails.logo_url || ''))
     }
@@ -311,7 +313,8 @@ export default function Settings() {
         invoice_prefix: data.invoice_prefix || '',
         default_payment_terms: data.default_payment_terms || '',
         invoice_notes: data.invoice_notes || '',
-        currency: data.currency || 'AUD'
+        currency: data.currency || 'AUD',
+        invoicing_enabled: data.invoicing_enabled !== false
       })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       setLogoPreview(resolveAssetUrl(data.logo_url || ''))
@@ -343,7 +346,10 @@ export default function Settings() {
       invoice_prefix: data.invoice_prefix ?? user.organization?.invoice_prefix ?? '',
       default_payment_terms: data.default_payment_terms ?? user.organization?.default_payment_terms ?? '',
       invoice_notes: data.invoice_notes ?? user.organization?.invoice_notes ?? '',
-      currency: data.currency ?? user.organization?.currency ?? 'AUD'
+      currency: data.currency ?? user.organization?.currency ?? 'AUD',
+      invoicing_enabled: data.invoicing_enabled !== undefined
+        ? data.invoicing_enabled
+        : (user.organization?.invoicing_enabled !== false)
     }
     const mergedUser = {
       ...user,
@@ -411,6 +417,13 @@ export default function Settings() {
     })
   }
 
+  const toggleInvoicing = () => {
+    setOrgForm((prev) => ({
+      ...prev,
+      invoicing_enabled: !prev.invoicing_enabled
+    }))
+  }
+
   const handleOrganizationSubmit = (event) => {
     event.preventDefault()
     setOrgBanner(null)
@@ -428,7 +441,8 @@ export default function Settings() {
       invoice_prefix: orgForm.invoice_prefix.trim(),
       default_payment_terms: orgForm.default_payment_terms.trim(),
       invoice_notes: orgForm.invoice_notes.trim(),
-      currency: orgForm.currency.trim()
+      currency: orgForm.currency.trim(),
+      invoicing_enabled: Boolean(orgForm.invoicing_enabled)
     }
     if (!payload.name) {
       setOrgBanner({ type: 'error', message: 'Organization name is required.' })
@@ -750,12 +764,30 @@ export default function Settings() {
                     : 'PNG or JPG up to 2 MB. Leave blank to use the default system mark.'}
                 </small>
               </label>
+              <div className="field field--span">
+                <span>Invoicing visibility</span>
+                <div className="field__stack">
+                  <button
+                    type="button"
+                    className={`button ${orgForm.invoicing_enabled ? 'button--ghost' : 'button--primary'}`}
+                    onClick={toggleInvoicing}
+                  >
+                    {orgForm.invoicing_enabled ? 'Disable invoicing' : 'Enable invoicing'}
+                  </button>
+                  <small className="muted">
+                    {orgForm.invoicing_enabled
+                      ? 'Invoices are visible to admins. Disable to hide all invoicing features across the workspace.'
+                      : 'Invoices are hidden for everyone. Enable to restore invoicing screens and defaults.'}
+                  </small>
+                </div>
+              </div>
               <label className="field" data-help="Prefix automatically applied to new invoice numbers.">
                 <span>Invoice prefix</span>
                 <input
                   value={orgForm.invoice_prefix}
                   onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_prefix: e.target.value }))}
                   placeholder="e.g. INV- or JOB-"
+                  disabled={!orgForm.invoicing_enabled}
                 />
               </label>
               <label className="field" data-help="Default credit terms displayed on new invoices.">
@@ -764,6 +796,7 @@ export default function Settings() {
                   value={orgForm.default_payment_terms}
                   onChange={(e) => setOrgForm((prev) => ({ ...prev, default_payment_terms: e.target.value }))}
                   placeholder="e.g. Net 14"
+                  disabled={!orgForm.invoicing_enabled}
                 />
               </label>
               <label className="field" data-help="Currency code used for pricing and billing.">
@@ -772,6 +805,7 @@ export default function Settings() {
                   value={orgForm.currency}
                   onChange={(e) => setOrgForm((prev) => ({ ...prev, currency: e.target.value }))}
                   placeholder="e.g. AUD"
+                  disabled={!orgForm.invoicing_enabled}
                 />
               </label>
               <label className="field field--span" data-help="Standard footer text appended to every invoice.">
@@ -781,6 +815,7 @@ export default function Settings() {
                   value={orgForm.invoice_notes}
                   onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_notes: e.target.value }))}
                   placeholder="Displayed on all invoices by default"
+                  disabled={!orgForm.invoicing_enabled}
                 />
               </label>
               <div className="form-actions">
