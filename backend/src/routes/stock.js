@@ -24,8 +24,10 @@ export default function createStockRoutes(io) {
     }
     const products = await Product.findAll({
       where,
+      distinct: true,
       include: [{
         model: Bin,
+        required: false,
         through: { model: StockLevel },
         include: [Location]
       }]
@@ -33,7 +35,8 @@ export default function createStockRoutes(io) {
     const data = products.map(p => {
       let on_hand = 0, reserved = 0;
       const bins = [];
-      p.bins.forEach(b => {
+      const relatedBins = Array.isArray(p.bins) ? p.bins : [];
+      relatedBins.forEach(b => {
         const lvl = b.stock_level;
         on_hand += lvl.on_hand;
         reserved += lvl.reserved;

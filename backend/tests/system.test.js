@@ -40,6 +40,20 @@ vi.mock('../src/services/backup.js', () => ({
   getBackupOptions: vi.fn().mockReturnValue({ enabled: false, schedule: '0 3 * * *', retainDays: 14 })
 }));
 
+vi.mock('multer', () => {
+  class MulterError extends Error {}
+  const multerMock = () => (req, _res, next) => next();
+  multerMock.MulterError = MulterError;
+  multerMock.memoryStorage = () => ({ storage: 'memory' });
+  multerMock.diskStorage = () => ({ storage: 'disk' });
+  return {
+    default: multerMock,
+    MulterError,
+    memoryStorage: multerMock.memoryStorage,
+    diskStorage: multerMock.diskStorage
+  };
+});
+
 describe('End-to-end system workflow', () => {
   const report = [];
   const io = { emit: vi.fn() };

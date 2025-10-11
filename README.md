@@ -1,132 +1,172 @@
 # Repair Center Stock System
 
-A full-stack inventory and work-order management platform for device repair centers. The solution pairs a hardened Express API with a real-time, offline-capable React dashboard and can be deployed locally or in containers.
+A production-ready inventory, purchasing, and work-order platform tailored for device repair centers. The stack combines a hardened Express API with a responsive React dashboard so technicians, buyers, and managers share a single source of truth for parts, serials, RMAs, and invoicing.
 
-## Table of Contents
-- [Architecture at a Glance](#architecture-at-a-glance)
-  - [Backend (Node.js / Express)](#backend-nodejs--express)
-  - [Frontend (React + Vite)](#frontend-react--vite)
-  - [Infrastructure & Operations](#infrastructure--operations)
-  - [Documentation](#documentation)
-- [Getting Started](#getting-started)
-  - [Quick Start with Docker](#quick-start-with-docker)
-  - [Local Development](#local-development)
-- [Environment Configuration](#environment-configuration)
-  - [Backend `.env`](#backend-env)
-  - [Frontend `.env`](#frontend-env)
-- [Operational Workflows](#operational-workflows)
-- [Quality Checks](#quality-checks)
-- [Next Steps](#next-steps)
+## Key Capabilities
+- **Inventory intelligence** – Track on-hand, reserved, and available quantities per bin with low-stock alerts and adjustment auditing.
+- **Product catalogue management** – Create, update, archive, and search products with tenant-aware scoping and duplicate SKU protection.
+- **Operational workflows** – Coordinate purchasing, serial tracking, RMAs, work orders, and invoicing from a unified interface.
+- **Secure multi-tenant access** – JWT authentication, role-based permissions, rate limiting, and organization-aware data scoping.
+- **Observability & resilience** – Structured logging, caching, backup scheduling, and queue-powered background jobs.
 
-## Architecture at a Glance
+## Use Case Diagram
+```mermaid
+usecaseDiagram
+  actor Admin as Admin
+  actor Technician as Technician
+  actor Buyer as Buyer
+  actor Customer as Customer
 
-### Backend (Node.js / Express)
-- Secure Express application configured with Helmet, CORS, rate limiting, compression and structured error handling to keep APIs production-ready out of the box.
-- Tenant-aware data model and request scoping provide isolation for multiple organizations sharing the same deployment.
-- JWT-based authentication with rotating secrets, refresh token support, and role-aware route protection.
-- Socket.IO server broadcasts live stock and work-order updates, while the API emits low-stock alerts from asynchronous queue workers.
-- Redis-backed caching and BullMQ queue infrastructure drive fast dashboard responses and scheduled low-stock scans.
-- Automated MySQL backups with configurable schedules and retention policies ensure disaster recovery coverage, with runtime controls exposed to administrators.
+  Admin --> (Configure Organization Profile)
+  Admin --> (Manage Users)
+  Admin --> (Manage Product Catalogue)
+  Admin --> (Review System Backups)
 
-### Frontend (React + Vite)
-- React 18 app bootstrapped with Vite and React Router, with React Query powering data fetching and caching.
-- Auth provider and Axios interceptors coordinate token refresh, while failed mutations are queued offline in IndexedDB until connectivity is restored.
-- Progressive Web App enhancements via a service worker deliver shell caching, API response caching, and background queue flushing on reconnect.
-- Built-in QR/Barcode scanning workflow lets technicians scan parts directly from the browser.
-- Admin console exposes organization-scoped settings, backup schedules and user management.
+  Technician --> (Search Inventory)
+  Technician --> (Adjust Stock Levels)
+  Technician --> (Reserve Serial Numbers)
+  Technician --> (Process Work Orders)
 
-### Infrastructure & Operations
-- `docker-compose.yml` provisions MySQL, Redis, backend, and frontend services with shared environment files and live-reload volume mounts for development.
-- Backend and frontend images are also individually buildable through their respective `Dockerfile`s for production pipelines.
+  Buyer --> (Raise Purchase Orders)
+  Buyer --> (Receive Stock)
+  Buyer --> (Log Supplier RMAs)
 
-### Documentation
-- `docs/FEATURE_AUDIT.md` summarises shipped capabilities and areas for future investment.
-- `docs/LEGAL-REQUIREMENTS.md` is a placeholder for jurisdiction-specific compliance and customer-facing policies.
+  Customer --> (Receive Invoice)
+  Customer --> (Approve Work Orders)
+
+  (Manage Product Catalogue) ..> (Search Inventory) : «include»
+  (Raise Purchase Orders) ..> (Receive Stock) : «extend»
+```
+
+## Architecture Overview
+| Layer | Highlights |
+| --- | --- |
+| **Frontend (React + Vite)** | React Query for data caching, Axios interceptors for token refresh, socket-driven realtime updates, offline mutation queue, QR/barcode scanning, and modular UI variants per user. |
+| **Backend (Express + Sequelize)** | Helmet, CORS, rate limiting, compression, async error handling, organization-aware ORM hooks, BullMQ queues, Redis cache, scheduled backups, and Socket.IO broadcasting. |
+| **Data** | MySQL (or SQLite for testing) with scoped associations for products, stock levels, serials, work orders, invoices, suppliers, RMAs, and organizational settings. |
+| **DevOps** | Docker Compose for local orchestration, production Dockerfiles, environment validation, and automated Vitest system coverage.
+
+### API Surface
+| Area | Routes |
+| --- | --- |
+| Authentication | `POST /auth/login`, `POST /auth/refresh` |
+| Products | `GET /products`, `POST /products`, `PATCH /products/:id`, `DELETE /products/:id` |
+| Stock | `GET /stock`, `GET /stock/overview`, `POST /stock/move`, `GET /stock/:id/history` |
+| Users & Organization | `/users`, `/organization`, `/backups`, `/settings`, `/work-orders`, `/serials`, `/purchasing`, `/rma`, `/invoices` |
 
 ## Getting Started
+### Prerequisites
+- Node.js 18+
+- npm 9+
+- MySQL 8.x (or Docker)
+- Redis 6+
+- Optional: Docker Compose for one-command provisioning
 
-### Quick Start with Docker
-1. Create `backend/.env` and `frontend/.env` using the values in [Environment Configuration](#environment-configuration).
-2. Build and start the full stack:
+### Quick Start with Docker Compose
+1. Copy environment templates:
+   ```bash
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
+   ```
+2. Launch the stack:
    ```bash
    docker compose up -d --build
    ```
-3. Access the services:
-   - Frontend: http://localhost:5173
-   - Backend health check: http://localhost:8080/health
-   - MySQL: `localhost:3307` (root/rootpassword)
-   - Redis: `localhost:6379`
+3. Visit the services:
+   - Dashboard: http://localhost:5173
+   - API health: http://localhost:8080/health
+   - MySQL: localhost:3307 (`root` / `rootpassword`)
+   - Redis: localhost:6379
 
 ### Local Development
-
 #### Backend
-1. Install dependencies:
-   ```bash
-   cd backend
-   npm install
-   ```
-2. Run database migrations/seed data if required:
-   ```bash
-   npm run seed
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+```bash
+cd backend
+npm install
+npm run seed   # optional test fixtures
+npm run dev
+```
+The API listens on `http://localhost:8080`.
 
 #### Frontend
-1. Install dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
-2. Launch the Vite dev server:
-   ```bash
-   npm run dev
-   ```
-3. The dashboard runs at http://localhost:5173 with automatic token refresh and live updates when the backend is online.
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The Vite dev server hosts the dashboard at `http://localhost:5173` with live reload and proxying to the API.
 
-Development credentials (for seed data): `admin@example.com / admin123`.
+### Running the Test Suite
+From `backend/`:
+```bash
+npm test
+```
+The Vitest system test provisions an in-memory SQLite database, exercises authentication, product CRUD, stock adjustments, purchasing, RMAs, invoices, and produces `reports/system-test-report.json` summarising the run.
 
 ## Environment Configuration
+### Backend
+Create `backend/.env` (values shown are defaults):
+```
+PORT=8080
+DB_DIALECT=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=repair_center
+DB_USER=appuser
+DB_PASS=appsecret
+JWT_SECRETS=dev
+REFRESH_SECRETS=devrefresh
+JWT_EXPIRES=15m
+REFRESH_EXPIRES=7d
+CORS_ORIGIN=http://localhost:5173
+REDIS_URL=redis://127.0.0.1:6379
+STOCK_OVERVIEW_CACHE_TTL=30
+SERVE_FRONTEND=true
+FRONTEND_DIST_PATH=../frontend/dist
+BACKUP_ENABLED=false
+BACKUP_SCHEDULE=0 3 * * *
+BACKUP_DIRECTORY=backups
+BACKUP_RETAIN_DAYS=14
+UPLOADS_DIRECTORY=../uploads
+UPLOADS_PUBLIC_PATH=/uploads
+UPLOAD_MAX_FILE_SIZE=2mb
+```
 
-### Backend `.env`
-| Variable | Description | Default |
-| --- | --- | --- |
-| `PORT` | API port | `8080` |
-| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASS` | MySQL connection settings | `127.0.0.1` / `3306` / `repair_center` / `appuser` / `appsecret` |
-| `JWT_SECRETS` / `JWT_SECRET_IDS` | Comma-separated secrets & key IDs for signing access tokens | Falls back to `JWT_SECRET` or `dev` |
-| `REFRESH_SECRETS` / `REFRESH_SECRET_IDS` | Secrets & key IDs for refresh token rotation | Falls back to `REFRESH_SECRET` or `devrefresh` |
-| `JWT_EXPIRES` / `REFRESH_EXPIRES` | Token lifetimes | `15m` / `7d` |
-| `CORS_ORIGIN` | Allowed frontend origin(s). Comma separate multiple values or use `*` to reflect any origin. | `http://localhost:5173` |
-| `REDIS_URL` | Redis connection string | `redis://127.0.0.1:6379` |
-| `STOCK_OVERVIEW_CACHE_TTL` | Cache duration (seconds) for stock overview API | `30` |
-| `TLS_ENABLED` / `TLS_KEY_PATH` / `TLS_CERT_PATH` / `TLS_CA_PATH` | Optional HTTPS configuration | Disabled by default |
-| `BACKUP_ENABLED` / `BACKUP_SCHEDULE` / `BACKUP_DIRECTORY` / `BACKUP_RETAIN_DAYS` | Automated backup toggle, cron schedule, storage directory, retention window | Disabled / `0 3 * * *` / `backups` / `14` |
-| `SERVE_FRONTEND` | When not set to `false`, the API will serve the compiled frontend if the assets exist | `true` |
-| `FRONTEND_DIST_PATH` | Override path to the compiled frontend assets served by the API | `../frontend/dist` |
+### Frontend
+Create `frontend/.env`:
+```
+VITE_API_URL=http://localhost:8080
+VITE_SOCKET_URL=http://localhost:8080
+```
 
-Production deployments must supply non-default JWT and refresh secrets. TLS and backup settings are validated when `NODE_ENV=production`.
-
-### Frontend `.env`
-| Variable | Description | Example |
-| --- | --- | --- |
-| `VITE_API_URL` | Base URL for API requests | `http://localhost:8080` |
-| `VITE_SOCKET_URL` | Socket.IO endpoint | `http://localhost:8080` |
+## Deployment Checklist
+1. Prepare production bundles:
+   ```bash
+   (cd backend && npm install --production)
+   (cd frontend && npm install && npm run build)
+   ```
+2. Set strong JWT/refresh secrets, database credentials, and enable HTTPS where required.
+3. Configure automated backups (`BACKUP_ENABLED=true`) and update retention/schedule to match policy.
+4. Provision monitoring (logs, metrics) and alerting for queue backlogs or low-stock events.
+5. Run smoke tests and verify the `/health` endpoint before switching traffic.
 
 ## Operational Workflows
-- **Real-time dashboard updates**: Stock and work-order routes emit Socket.IO events that keep dashboards synchronised without manual refresh.
-- **Low-stock monitoring**: The BullMQ worker performs recurring stock scans and emits alerts when thresholds are breached.
-- **Disaster recovery**: Scheduled MySQL dumps create rolling backups with automatic pruning based on retention rules. Backup cadence and retention can be tuned from the admin console without redeploying.
-- **Offline-ready field operations**: Service worker caching and the offline request queue allow technicians to continue scanning and recording work even when connectivity is intermittent.
+- **Product lifecycle** – Admins create products, technicians adjust stock, and archiving a product clears residual stock and hides it from catalogues while keeping audit trails.
+- **Stock movements** – All adjustments record a `stock_move` entry with actor attribution and optional bin transfers.
+- **Low stock alerts** – Background jobs emit events (and future email/SMS notifications) when `available <= reorder_point`.
+- **Backup governance** – Administrators can trigger immediate backups and download archives from the dashboard.
 
-## Quality Checks
-- Backend scripts: `npm run dev`, `npm start`, `npm run seed`
-- Frontend scripts: `npm run dev`, `npm run build`, `npm run preview`
+## Project Structure
+```
+stock-system/
+├── backend/         # Express API, queues, Sequelize models, Vitest system test
+├── frontend/        # React dashboard (Vite), React Query data layer, UI components
+├── docs/            # Feature audit and compliance placeholders
+├── reports/         # Automated test reports
+├── docker-compose.yml
+└── README.md
+```
 
-Run `npm run build` in both `backend/` and `frontend/` before deploying to verify production builds succeed.
+## License
+This project is released under the [MIT License](./LICENSE). Review the terms before production use.
 
-## Next Steps
-- Extend observability with structured logging, metrics, and alerting.
-- Complete the legal and compliance documents in `docs/` before onboarding customers.
-- Integrate notification channels (email/SMS/Slack) using the existing settings and queue infrastructure.
