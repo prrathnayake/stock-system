@@ -56,15 +56,28 @@ async function notifyOrganization(organizationId, subject, message) {
   });
 }
 
-export async function notifyUserAccountCreated({ organizationId, actor, user }) {
+export async function notifyUserAccountCreated({ organizationId, actor, user, credentials }) {
   const contact = await getOrganizationContact(organizationId);
   const orgName = contact?.name || 'Stock System';
   const performer = actorLabel(actor);
   if (user?.email) {
+    const loginLines = [];
+    if (credentials?.organizationSlug) {
+      loginLines.push(`Organization: ${credentials.organizationSlug}`);
+    }
+    if (credentials?.email) {
+      loginLines.push(`Email: ${credentials.email}`);
+    }
+    if (credentials?.temporaryPassword) {
+      loginLines.push(`Temporary password: ${credentials.temporaryPassword}`);
+    }
+    const loginDetails = loginLines.length
+      ? `You can sign in with the following temporary credentials:\n\n${loginLines.join('\n')}\n\nYou will be asked to set a new password when you first sign in.`
+      : 'Sign in with the temporary password that was provided to you and change it from the security settings.';
     await sendEmail({
       to: user.email,
       subject: `[${orgName}] Your account is ready`,
-      text: `Hello ${user.full_name || user.email},\n\n${performer} just created a new account for you in ${orgName}. Sign in with the temporary password that was provided to you and change it from the security settings.\n\nIf you were not expecting this email please reach out to your administrator.\n\n— ${orgName}`
+      text: `Hello ${user.full_name || user.email},\n\n${performer} just created a new account for you in ${orgName}. ${loginDetails}\n\nIf you were not expecting this email please reach out to your administrator.\n\n— ${orgName}`
     });
   }
   await notifyOrganization(

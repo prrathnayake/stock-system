@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { User, UserActivity } from '../db.js';
+import { Organization, User, UserActivity } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
@@ -23,7 +23,6 @@ const CreateUserSchema = z.object({
   email: z.string().email('Valid email is required'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
   role: RolesEnum.default('user'),
-  must_change_password: z.boolean().optional(),
   ui_variant: UiVariantEnum.optional()
 });
 
@@ -67,7 +66,7 @@ router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
   }
-  const { full_name, email, password, role, must_change_password, ui_variant } = parsed.data;
+  const { full_name, email, password, role, ui_variant } = parsed.data;
   const normalizedEmail = normalizeEmail(email);
   const existing = await User.findOne({ where: { email: normalizedEmail } });
   if (existing) {
@@ -79,15 +78,21 @@ router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
     email: normalizedEmail,
     password_hash,
     role,
-    must_change_password: must_change_password ?? false,
+    must_change_password: true,
     ui_variant: ui_variant ?? 'pro'
   });
   const payload = presentUser(created);
   res.status(201).json(payload);
+  const organization = await Organization.findByPk(req.user.organization_id, { skipOrganizationScope: true });
   notifyUserAccountCreated({
     organizationId: req.user.organization_id,
     actor: req.user,
-    user: payload
+    user: payload,
+    credentials: {
+      organizationSlug: organization?.slug ?? null,
+      email: payload.email,
+      temporaryPassword: password
+    }
   }).catch((error) => {
     console.error('[notify] failed to send user creation email', error);
   });

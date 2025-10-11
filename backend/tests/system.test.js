@@ -57,6 +57,7 @@ describe('End-to-end system workflow', () => {
   let supplierId;
   let models;
   let runAsOrganizationFn;
+  let sendEmailMock;
 
   const step = async (name, fn) => {
     try {
@@ -73,6 +74,7 @@ describe('End-to-end system workflow', () => {
     const { createApp, registerRoutes } = await import('../src/app.js');
     const db = await import('../src/db.js');
     const { runAsOrganization } = await import('../src/services/requestContext.js');
+    sendEmailMock = (await import('../src/services/email.js')).sendEmail;
 
     models = db;
     runAsOrganizationFn = runAsOrganization;
@@ -193,6 +195,11 @@ describe('End-to-end system workflow', () => {
         });
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ email: 'tech@example.com', role: 'user' });
+      expect(res.body.must_change_password).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const userEmailCalls = sendEmailMock.mock.calls.filter(([options]) => options?.to === 'tech@example.com');
+      expect(userEmailCalls.some(([options]) => options.text?.includes('Temporary password: TechPass123!'))).toBe(true);
+      expect(userEmailCalls.some(([options]) => options.text?.includes('Organization: test-org'))).toBe(true);
     });
 
     await step('List users', async () => {
