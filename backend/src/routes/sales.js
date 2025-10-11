@@ -7,6 +7,7 @@ import {
   attemptReserveSale,
   completeSale,
   createSale,
+  cancelSale,
   getSaleById,
   listSales
 } from '../services/sales.js';
@@ -74,6 +75,17 @@ export default function createSalesRoutes(io) {
     const sale = await completeSale(id, req.user);
     await invalidateStockOverviewCache(req.user.organization_id);
     io?.emit('stock:update', { hint: 'sale-complete', sale_id: sale.id, organization_id: req.user.organization_id });
+    res.json(sale);
+  }));
+
+  router.post('/:id/cancel', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new HttpError(400, 'Invalid sale id');
+    }
+    const sale = await cancelSale(id, req.user);
+    await invalidateStockOverviewCache(req.user.organization_id);
+    io?.emit('stock:update', { hint: 'sale-cancel', sale_id: sale.id, organization_id: req.user.organization_id });
     res.json(sale);
   }));
 

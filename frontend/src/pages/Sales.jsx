@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 
@@ -30,6 +30,21 @@ function Banner({ banner, onClose }) {
   )
 }
 
+function TablePagination({ page, totalPages, onPrev, onNext }) {
+  if (totalPages <= 1) return null
+  return (
+    <div className="table-pagination">
+      <button type="button" className="button button--ghost" onClick={onPrev} disabled={page <= 1}>
+        Previous
+      </button>
+      <span>Page {page} of {totalPages}</span>
+      <button type="button" className="button button--ghost" onClick={onNext} disabled={page >= totalPages}>
+        Next
+      </button>
+    </div>
+  )
+}
+
 export default function Sales() {
   const queryClient = useQueryClient()
   const [customerSearch, setCustomerSearch] = useState('')
@@ -40,6 +55,8 @@ export default function Sales() {
   const [saleStatus, setSaleStatus] = useState('')
   const [saleForm, setSaleForm] = useState(createEmptySaleForm)
   const [saleBanner, setSaleBanner] = useState(null)
+  const [customerPage, setCustomerPage] = useState(1)
+  const [salePage, setSalePage] = useState(1)
 
   const { data: customers = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ['customers', customerSearch],
@@ -77,6 +94,24 @@ export default function Sales() {
 
   const saleItems = saleForm.items
   const selectedCustomer = customers.find((customer) => String(customer.id) === String(saleForm.customer_id)) || null
+
+  const PAGE_SIZE = 10
+
+  const customerTotalPages = Math.max(1, Math.ceil(customers.length / PAGE_SIZE))
+  const visibleCustomers = useMemo(() => {
+    const start = (customerPage - 1) * PAGE_SIZE
+    return customers.slice(start, start + PAGE_SIZE)
+  }, [customers, customerPage])
+
+  useEffect(() => {
+    setCustomerPage(1)
+  }, [customerSearch])
+
+  useEffect(() => {
+    if (customerPage > customerTotalPages) {
+      setCustomerPage(customerTotalPages)
+    }
+  }, [customerPage, customerTotalPages])
 
   const resetCustomerForm = () => {
     setCustomerForm(createEmptyCustomerForm())
@@ -184,6 +219,21 @@ export default function Sales() {
     }
   })
 
+  const cancelSaleMutation = useMutation({
+    mutationFn: async (id) => {
+      const { data } = await api.post(`/sales/${id}/cancel`)
+      return data
+    },
+    onSuccess: () => {
+      setSaleBanner({ type: 'success', message: 'Sale canceled and stock released.' })
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+    },
+    onError: (error) => {
+      setSaleBanner({ type: 'error', message: error.response?.data?.error || 'Unable to cancel sale.' })
+    }
+  })
+
   const handleCustomerSubmit = (event) => {
     event.preventDefault()
     const payload = {
@@ -266,6 +316,22 @@ export default function Sales() {
       }
     })
   }, [sales])
+
+  const saleTotalPages = Math.max(1, Math.ceil(saleRows.length / PAGE_SIZE))
+  const visibleSales = useMemo(() => {
+    const start = (salePage - 1) * PAGE_SIZE
+    return saleRows.slice(start, start + PAGE_SIZE)
+  }, [saleRows, salePage])
+
+  useEffect(() => {
+    setSalePage(1)
+  }, [saleStatus])
+
+  useEffect(() => {
+    if (salePage > saleTotalPages) {
+      setSalePage(saleTotalPages)
+    }
+  }, [salePage, saleTotalPages])
 
   return (
     <div className="page">
@@ -375,7 +441,7 @@ export default function Sales() {
                 ) : customers.length === 0 ? (
                   <tr><td colSpan={5}>No customers found.</td></tr>
                 ) : (
-                  customers.map((customer) => (
+                  visibleCustomers.map((customer) => (
                     <tr key={customer.id}>
                       <td>{customer.name}</td>
                       <td>{customer.company || '—'}</td>
@@ -417,6 +483,12 @@ export default function Sales() {
                 )}
               </tbody>
             </table>
+            <TablePagination
+              page={customerPage}
+              totalPages={customerTotalPages}
+              onPrev={() => setCustomerPage((page) => Math.max(1, page - 1))}
+              onNext={() => setCustomerPage((page) => Math.min(customerTotalPages, page + 1))}
+            />
           </div>
         </section>
 
@@ -515,6 +587,7 @@ export default function Sales() {
               <option value="reserved">Reserved</option>
               <option value="backorder">Backorder</option>
               <option value="complete">Complete</option>
+              <option value="canceled">Canceled</option>
             </select>
           </div>
 
@@ -534,7 +607,7 @@ export default function Sales() {
                   <tr><td colSpan={5}>Loading sales…</td></tr>
                 ) : saleRows.length === 0 ? (
                   <tr><td colSpan={5}>No sales recorded yet.</td></tr>
-                ) : saleRows.map((sale) => (
+                ) : visibleSales.map((sale) => (
                   <tr key={sale.id}>
                     <td>
                       <strong>#{sale.id}</strong>
@@ -559,7 +632,7 @@ export default function Sales() {
                       </ul>
                     </td>
                     <td>
-                      <span className={`badge ${sale.status === 'backorder' ? 'badge--muted' : ''}`}>
+                      <span className={`badge ${sale.status === 'backorder' ? 'badge--muted' : ''}${sale.status === 'canceled' ? ' badge--danger' : ''}`}>
                         {sale.status}
                       </span>
                     </td>
@@ -574,7 +647,7 @@ export default function Sales() {
                           Retry reserve
                         </button>
                       )}
-                      {sale.status !== 'complete' && sale.allReserved && (
+                      {sale.status !== 'complete' && sale.status !== 'canceled' && sale.allReserved && (
                         <button
                           className="button button--primary"
                           type="button"
@@ -584,11 +657,31 @@ export default function Sales() {
                           Complete sale
                         </button>
                       )}
+                      {sale.status !== 'complete' && sale.status !== 'canceled' && (
+                        <button
+                          className="button button--ghost"
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Cancel sale #${sale.id}? Reserved stock will be released.`)) {
+                              cancelSaleMutation.mutate(sale.id)
+                            }
+                          }}
+                          disabled={cancelSaleMutation.isLoading}
+                        >
+                          Cancel sale
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <TablePagination
+              page={salePage}
+              totalPages={saleTotalPages}
+              onPrev={() => setSalePage((page) => Math.max(1, page - 1))}
+              onNext={() => setSalePage((page) => Math.min(saleTotalPages, page + 1))}
+            />
           </div>
         </section>
       </div>

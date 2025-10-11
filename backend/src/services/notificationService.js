@@ -80,6 +80,74 @@ async function deliverNotification(context, subject, message) {
   });
 }
 
+function describeSaleItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 'No line items were recorded for this sale.';
+  }
+  const lines = items.map((item) => {
+    const name = item?.product?.name || item?.product?.sku || `Product #${item?.productId ?? item?.product_id ?? '—'}`;
+    const ordered = typeof item?.quantity === 'number' ? item.quantity : item?.qty_ordered;
+    const reserved = typeof item?.qty_reserved === 'number' ? item.qty_reserved : null;
+    const shipped = typeof item?.qty_shipped === 'number' ? item.qty_shipped : null;
+    const details = [
+      ordered !== undefined ? `Ordered ${ordered}` : null,
+      reserved !== null ? `Reserved ${reserved}` : null,
+      shipped !== null ? `Shipped ${shipped}` : null
+    ].filter(Boolean).join(' · ');
+    return `• ${name}${details ? ` (${details})` : ''}`;
+  });
+  return lines.join('\n');
+}
+
+export async function notifySaleStatusChanged({ organizationId, actor, sale, previousStatus }) {
+  if (!sale) return;
+  const context = await getNotificationContext(organizationId);
+  const orgName = context.orgName;
+  const performer = actorLabel(actor);
+  const status = sale.status || 'updated';
+  const reference = sale.reference ? ` (${sale.reference})` : '';
+  const customerName = sale.customer?.name || sale.customer?.company || 'customer';
+  const subject = `[${orgName}] Sale #${sale.id ?? '—'} ${status}`;
+  const statusLine = previousStatus
+    ? `Status changed from ${previousStatus} to ${status}.`
+    : `Status is now ${status}.`;
+  const itemSummary = describeSaleItems(sale.items);
+
+  if (sale.customer?.email) {
+    const customerLines = [
+      `Hello ${customerName},`,
+      '',
+      `${orgName} has an update on your order${reference}.`,
+      statusLine,
+      '',
+      'Order summary:',
+      itemSummary,
+      '',
+      'We will keep you updated as things progress.',
+      '',
+      `— ${orgName}`
+    ];
+    await sendEmail({
+      to: sale.customer.email,
+      subject,
+      text: customerLines.join('\n')
+    });
+  }
+
+  const adminLines = [
+    `${performer} updated sale #${sale.id ?? '—'} for ${customerName}.`,
+    statusLine,
+    sale.reference ? `Reference: ${sale.reference}` : null,
+    sale.notes ? `Notes: ${sale.notes}` : null,
+    `Customer email: ${sale.customer?.email || 'n/a'}`,
+    '',
+    'Line items:',
+    itemSummary
+  ].filter(Boolean).join('\n');
+
+  await deliverNotification(context, subject, adminLines);
+}
+
 export async function notifyUserAccountCreated({ organizationId, actor, user, credentials }) {
   const context = await getNotificationContext(organizationId);
   const orgName = context.orgName;
@@ -204,6 +272,35 @@ export async function notifyProductArchived({ organizationId, actor, product }) 
     context,
     `[${orgName}] Product archived`,
     `${performer} archived ${product?.name || 'a product'} (${product?.sku || 'SKU'}). Remaining stock was written off.`
+  );
+}
+
+export async function notifyDailyActivitySummary({ organizationId, activities, generatedAt = new Date() }) {
+  const context = await getNotificationContext(organizationId);
+  const orgName = context.orgName;
+  const list = Array.isArray(activities) && activities.length > 0
+    ? activities.map((activity) => {
+        const actor = activity.user?.name || activity.user?.full_name || activity.user?.email || 'System';
+        const when = activity.performed_at || activity.createdAt || activity.created_at || activity.occurred_at;
+        const timestamp = when ? new Date(when).toLocaleString() : '—';
+        const description = activity.description || activity.action || 'Activity recorded';
+        return `• ${timestamp}: ${actor} — ${description}`;
+      })
+    : ['No user activity was recorded during this period.'];
+
+  const message = [
+    `Daily activity summary for ${orgName}`,
+    '',
+    ...list,
+    '',
+    `Generated at ${new Date(generatedAt).toLocaleString()}.`,
+    'You can adjust digest delivery from Settings → Operational settings.'
+  ].join('\n');
+
+  await deliverNotification(
+    context,
+    `[${orgName}] Daily activity summary`,
+    message
   );
 }
 

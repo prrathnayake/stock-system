@@ -33,6 +33,21 @@ const uiVariants = [
   }
 ]
 
+function TablePagination({ page, totalPages, onPrev, onNext }) {
+  if (totalPages <= 1) return null
+  return (
+    <div className="table-pagination">
+      <button type="button" className="button button--ghost" onClick={onPrev} disabled={page <= 1}>
+        Previous
+      </button>
+      <span>Page {page} of {totalPages}</span>
+      <button type="button" className="button button--ghost" onClick={onNext} disabled={page >= totalPages}>
+        Next
+      </button>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { user, setUser, organization } = useAuth()
   const queryClient = useQueryClient()
@@ -58,6 +73,7 @@ export default function Settings() {
   })
 
   const [userSearch, setUserSearch] = useState('')
+  const [userPage, setUserPage] = useState(1)
 
   const filteredUsers = useMemo(() => {
     if (!userSearch) return users
@@ -69,6 +85,23 @@ export default function Settings() {
       return name.includes(term) || email.includes(term) || role.includes(term)
     })
   }, [users, userSearch])
+
+  const USERS_PAGE_SIZE = 10
+  const totalUserPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PAGE_SIZE))
+  const visibleUsers = useMemo(() => {
+    const start = (userPage - 1) * USERS_PAGE_SIZE
+    return filteredUsers.slice(start, start + USERS_PAGE_SIZE)
+  }, [filteredUsers, userPage])
+
+  useEffect(() => {
+    setUserPage(1)
+  }, [userSearch])
+
+  useEffect(() => {
+    if (userPage > totalUserPages) {
+      setUserPage(totalUserPages)
+    }
+  }, [userPage, totalUserPages])
 
   const { data: backups = [] } = useQuery({
     queryKey: ['backups'],
@@ -103,7 +136,9 @@ export default function Settings() {
     notification_emails: '',
     backup_enabled: false,
     backup_schedule: '0 3 * * *',
-    backup_retain_days: 14
+    backup_retain_days: 14,
+    daily_digest_enabled: false,
+    daily_digest_time: '18:00'
   })
   const [banner, setBanner] = useState(null)
   const [userBanner, setUserBanner] = useState(null)
@@ -156,7 +191,9 @@ export default function Settings() {
           : '',
         backup_enabled: settingsData.backup_enabled !== false,
         backup_schedule: settingsData.backup_schedule || '0 3 * * *',
-        backup_retain_days: settingsData.backup_retain_days ?? 14
+        backup_retain_days: settingsData.backup_retain_days ?? 14,
+        daily_digest_enabled: settingsData.daily_digest_enabled === true,
+        daily_digest_time: settingsData.daily_digest_time || '18:00'
       })
     }
   }, [settingsData])
@@ -492,7 +529,9 @@ export default function Settings() {
         .filter(Boolean),
       backup_enabled: Boolean(formState.backup_enabled),
       backup_schedule: formState.backup_schedule.trim(),
-      backup_retain_days: Number(formState.backup_retain_days) || 0
+      backup_retain_days: Number(formState.backup_retain_days) || 0,
+      daily_digest_enabled: Boolean(formState.daily_digest_enabled),
+      daily_digest_time: formState.daily_digest_time?.trim() || '18:00'
     }
     settingsMutation.mutate(payload)
   }
@@ -952,7 +991,7 @@ export default function Settings() {
                         </td>
                       </tr>
                     ) : (
-                      filteredUsers.map((account) => (
+                      visibleUsers.map((account) => (
                         <tr key={account.id}>
                           <td>{account.full_name}</td>
                           <td>{account.email}</td>
@@ -986,6 +1025,12 @@ export default function Settings() {
                     )}
                   </tbody>
                 </table>
+                <TablePagination
+                  page={userPage}
+                  totalPages={totalUserPages}
+                  onPrev={() => setUserPage((page) => Math.max(1, page - 1))}
+                  onNext={() => setUserPage((page) => Math.min(totalUserPages, page + 1))}
+                />
 
                 {editingUser && (
                   <form className="form-grid form-grid--inline" onSubmit={handleUpdateUser}>
@@ -1099,6 +1144,28 @@ export default function Settings() {
                   placeholder="ops@example.com, lead@example.com"
                 />
                 <p className="muted">Comma-separated list of recipients notified for SLA breaches.</p>
+              </label>
+              <label className="field" data-help="Send a daily summary of system activity to key contacts.">
+                <span>Daily digest emails</span>
+                <select
+                  value={formState.daily_digest_enabled ? 'enabled' : 'disabled'}
+                  onChange={(e) => setFormState((prev) => ({
+                    ...prev,
+                    daily_digest_enabled: e.target.value === 'enabled'
+                  }))}
+                >
+                  <option value="enabled">Enabled</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </label>
+              <label className="field" data-help="Choose when the daily summary email should be delivered (server time).">
+                <span>Digest send time</span>
+                <input
+                  type="time"
+                  value={formState.daily_digest_time}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, daily_digest_time: e.target.value }))}
+                  required={formState.daily_digest_enabled}
+                />
               </label>
               <label className="field" data-help="Enable scheduled exports of your database for recovery.">
                 <span>Automatic backups</span>

@@ -615,7 +615,29 @@ export default function Inventory() {
                   >
                     <td><span className="badge">{product.sku}</span></td>
                     <td>{product.name}</td>
-                    <td>{product.bins.length}</td>
+                    <td>
+                      {product.bins.length === 0 ? (
+                        <span className="muted">No bins</span>
+                      ) : (
+                        <div
+                          className="inventory-table__bins-cell"
+                          title={product.bins.map((bin) => {
+                            const location = bin.location ? ` · ${bin.location}` : ''
+                            const available = (bin.on_hand - (bin.reserved ?? 0))
+                            return `${bin.bin_code}${location}: ${available} available`
+                          }).join('\n')}
+                        >
+                          {product.bins.slice(0, 2).map((bin) => (
+                            <span key={bin.bin_id} className="badge badge--muted inventory-table__bin-pill">
+                              {bin.bin_code}{bin.location ? ` · ${bin.location}` : ''}
+                            </span>
+                          ))}
+                          {product.bins.length > 2 && (
+                            <span className="muted">+{product.bins.length - 2} more</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td>{product.on_hand}</td>
                     <td>{product.reserved}</td>
                     <td>{product.available}</td>
