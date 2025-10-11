@@ -9,6 +9,8 @@ import {
   withTransaction
 } from '../db.js';
 import { HttpError } from '../utils/httpError.js';
+import { notifySaleStatusChanged } from './notificationService.js';
+import { recordActivity } from './activityLog.js';
 
 const saleInclude = [
   {
@@ -123,6 +125,36 @@ async function consumeReservedStock(productId, quantity, { transaction, saleId, 
   }
 }
 
+async function releaseReservedStock(productId, quantity, { transaction, saleId, performedBy }) {
+  if (quantity <= 0) return;
+  const levels = await StockLevel.findAll({
+    where: { productId },
+    transaction,
+    lock: transaction?.LOCK?.UPDATE
+  });
+  levels.sort((a, b) => b.reserved - a.reserved);
+  let remaining = quantity;
+  for (const level of levels) {
+    if (remaining <= 0) break;
+    const releasable = Math.min(level.reserved, remaining);
+    if (releasable <= 0) continue;
+    level.reserved -= releasable;
+    await level.save({ transaction });
+    await StockMove.create({
+      productId,
+      qty: releasable,
+      from_bin_id: level.binId,
+      reason: 'release',
+      saleId,
+      performed_by: performedBy ?? null
+    }, { transaction });
+    remaining -= releasable;
+  }
+  if (remaining > 0) {
+    throw new HttpError(409, 'Unable to release reserved stock for this product');
+  }
+}
+
 export async function listSales({ status, search } = {}) {
   const where = {};
   if (status) {
@@ -216,7 +248,30 @@ export async function createSale(payload, actor) {
 
     await sale.save({ transaction });
     const fresh = await loadSale(sale.id, { transaction });
-    return toPlainSale(fresh);
+    const plain = toPlainSale(fresh);
+
+    await recordActivity({
+      organizationId: plain.organizationId ?? actor?.organization_id,
+      userId: actor?.id,
+      action: 'sale.created',
+      entityType: 'sale',
+      entityId: sale.id,
+      description: `Sale #${sale.id} created for ${customer.name || customer.company || 'customer'}.`,
+      metadata: { status: sale.status }
+    }, { transaction });
+
+    transaction.afterCommit(() => {
+      notifySaleStatusChanged({
+        organizationId: plain.organizationId ?? actor?.organization_id,
+        actor,
+        sale: plain,
+        previousStatus: null
+      }).catch((error) => {
+        console.error('[notify] failed to send sale creation email', error);
+      });
+    });
+
+    return plain;
   });
 }
 
@@ -233,6 +288,8 @@ export async function attemptReserveSale(id, actor) {
     if (sale.status === 'complete') {
       throw new HttpError(400, 'Completed sales cannot be modified');
     }
+
+    const previousStatus = sale.status;
 
     let allFulfilled = true;
     let anyReserved = false;
@@ -274,7 +331,32 @@ export async function attemptReserveSale(id, actor) {
 
     await sale.save({ transaction });
     const fresh = await loadSale(sale.id, { transaction });
-    return toPlainSale(fresh);
+    const plain = toPlainSale(fresh);
+
+    if (plain.status !== previousStatus) {
+      await recordActivity({
+        organizationId: plain.organizationId ?? actor?.organization_id,
+        userId: actor?.id,
+        action: 'sale.status_change',
+        entityType: 'sale',
+        entityId: sale.id,
+        description: `Sale #${sale.id} status changed from ${previousStatus} to ${plain.status}.`,
+        metadata: { previousStatus, status: plain.status }
+      }, { transaction });
+
+      transaction.afterCommit(() => {
+        notifySaleStatusChanged({
+          organizationId: plain.organizationId ?? actor?.organization_id,
+          actor,
+          sale: plain,
+          previousStatus
+        }).catch((error) => {
+          console.error('[notify] failed to send sale status email', error);
+        });
+      });
+    }
+
+    return plain;
   });
 }
 
@@ -291,6 +373,8 @@ export async function completeSale(id, actor) {
     if (sale.status === 'complete') {
       return toPlainSale(await loadSale(sale.id, { transaction }));
     }
+
+    const previousStatus = sale.status;
 
     for (const item of sale.items) {
       if (item.qty_reserved < item.quantity) {
@@ -319,6 +403,95 @@ export async function completeSale(id, actor) {
     await sale.save({ transaction });
 
     const fresh = await loadSale(sale.id, { transaction });
-    return toPlainSale(fresh);
+    const plain = toPlainSale(fresh);
+
+    await recordActivity({
+      organizationId: plain.organizationId ?? actor?.organization_id,
+      userId: actor?.id,
+      action: 'sale.completed',
+      entityType: 'sale',
+      entityId: sale.id,
+      description: `Sale #${sale.id} marked as complete.`,
+      metadata: { previousStatus, status: plain.status }
+    }, { transaction });
+
+    transaction.afterCommit(() => {
+      notifySaleStatusChanged({
+        organizationId: plain.organizationId ?? actor?.organization_id,
+        actor,
+        sale: plain,
+        previousStatus
+      }).catch((error) => {
+        console.error('[notify] failed to send sale completion email', error);
+      });
+    });
+
+    return plain;
+  });
+}
+
+export async function cancelSale(id, actor) {
+  return withTransaction(async (transaction) => {
+    const sale = await Sale.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+      include: [{ model: SaleItem, as: 'items' }]
+    });
+    if (!sale) {
+      throw new HttpError(404, 'Sale not found');
+    }
+    if (sale.status === 'complete') {
+      throw new HttpError(400, 'Completed sales cannot be canceled');
+    }
+    if (sale.status === 'canceled') {
+      return toPlainSale(await loadSale(sale.id, { transaction }));
+    }
+
+    const previousStatus = sale.status;
+
+    for (const item of sale.items) {
+      if (item.qty_reserved > 0) {
+        await releaseReservedStock(item.productId, item.qty_reserved, {
+          transaction,
+          saleId: sale.id,
+          performedBy: actor?.id ?? null
+        });
+        item.qty_reserved = 0;
+      }
+      await item.save({ transaction });
+    }
+
+    sale.status = 'canceled';
+    sale.backordered_at = null;
+    sale.reserved_at = null;
+    sale.completed_at = null;
+    sale.completed_by = null;
+    await sale.save({ transaction });
+
+    const fresh = await loadSale(sale.id, { transaction });
+    const plain = toPlainSale(fresh);
+
+    await recordActivity({
+      organizationId: plain.organizationId ?? actor?.organization_id,
+      userId: actor?.id,
+      action: 'sale.canceled',
+      entityType: 'sale',
+      entityId: sale.id,
+      description: `Sale #${sale.id} was canceled.`,
+      metadata: { previousStatus, status: plain.status }
+    }, { transaction });
+
+    transaction.afterCommit(() => {
+      notifySaleStatusChanged({
+        organizationId: plain.organizationId ?? actor?.organization_id,
+        actor,
+        sale: plain,
+        previousStatus
+      }).catch((error) => {
+        console.error('[notify] failed to send sale cancellation email', error);
+      });
+    });
+
+    return plain;
   });
 }

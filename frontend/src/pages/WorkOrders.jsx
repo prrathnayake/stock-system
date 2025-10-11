@@ -32,6 +32,15 @@ const priorityLabels = {
   urgent: 'Urgent'
 }
 
+const emptyCreateForm = {
+  customer_name: '',
+  device_info: '',
+  device_serial: '',
+  priority: 'normal',
+  intake_notes: '',
+  assigned_to: ''
+}
+
 function SerialList({ assignments }) {
   if (!assignments || assignments.length === 0) return null
   return (
@@ -79,6 +88,8 @@ export default function WorkOrders() {
   const [statusNotes, setStatusNotes] = useState({})
   const [diagnosticDraft, setDiagnosticDraft] = useState({})
   const [banner, setBanner] = useState(null)
+  const [createForm, setCreateForm] = useState(emptyCreateForm)
+  const [createBanner, setCreateBanner] = useState(null)
 
   const { data = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ['work-orders', user?.role, user?.id],
@@ -87,6 +98,45 @@ export default function WorkOrders() {
       return data
     },
     enabled: Boolean(user)
+  })
+
+  const { data: assignableUsers = [] } = useQuery({
+    queryKey: ['work-order-users'],
+    queryFn: async () => {
+      const { data } = await api.get('/users')
+      return data
+    },
+    enabled: isAdmin
+  })
+
+  const defaultAssignee = useMemo(() => {
+    if (!isAdmin) return ''
+    if (assignableUsers.length > 0) return String(assignableUsers[0].id)
+    if (user?.id) return String(user.id)
+    return ''
+  }, [assignableUsers, isAdmin, user?.id])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    if (createForm.assigned_to) return
+    if (defaultAssignee) {
+      setCreateForm((prev) => ({ ...prev, assigned_to: defaultAssignee }))
+    }
+  }, [defaultAssignee, isAdmin, createForm.assigned_to])
+
+  const createWorkOrderMutation = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.post('/work-orders', payload)
+      return data
+    },
+    onSuccess: (created) => {
+      setCreateBanner({ type: 'success', message: `Work order #${created?.id ?? ''} created.` })
+      setCreateForm({ ...emptyCreateForm, assigned_to: defaultAssignee })
+      refetch()
+    },
+    onError: (error) => {
+      setCreateBanner({ type: 'error', message: error.response?.data?.error || 'Unable to create work order.' })
+    }
   })
 
   const updateMutation = useMutation({
@@ -119,6 +169,27 @@ export default function WorkOrders() {
     }, Object.fromEntries(statusOrder.map((status) => [status, []])))
   }, [data])
 
+  const handleCreateWorkOrder = (event) => {
+    event.preventDefault()
+    if (!createForm.customer_name || !createForm.device_info) {
+      setCreateBanner({ type: 'error', message: 'Customer name and device information are required.' })
+      return
+    }
+    const payload = {
+      customer_name: createForm.customer_name,
+      device_info: createForm.device_info,
+      device_serial: createForm.device_serial?.trim() ? createForm.device_serial.trim() : undefined,
+      priority: createForm.priority,
+      intake_notes: createForm.intake_notes?.trim() ? createForm.intake_notes.trim() : undefined
+    }
+    const assignedId = Number(createForm.assigned_to)
+    if (isAdmin && Number.isInteger(assignedId) && assignedId > 0) {
+      payload.assigned_to = assignedId
+    }
+    setCreateBanner(null)
+    createWorkOrderMutation.mutate(payload)
+  }
+
   const handleStatusSubmit = (order) => {
     if (!isAdmin) return
     const nextStatus = statusDraft[order.id] || order.status
@@ -135,21 +206,106 @@ export default function WorkOrders() {
 
   return (
     <div className="page">
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <h2>{isAdmin ? 'Work orders' : 'My work orders'}</h2>
-            <p className="muted">
-              {isAdmin
-                ? 'Track repairs from intake through completion, including SLA and warranty insights.'
-                : 'View the repairs assigned to you and monitor progress across each stage.'}
-            </p>
-          </div>
-          <button className="button" onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <h2>{isAdmin ? 'Work orders' : 'My work orders'}</h2>
+          <p className="muted">
+            {isAdmin
+              ? 'Track repairs from intake through completion, including SLA and warranty insights.'
+              : 'View the repairs assigned to you and monitor progress across each stage.'}
+          </p>
         </div>
-        {banner && <div className="banner banner--warning">{banner}</div>}
+        <button className="button" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+      {isAdmin && (
+        <form className="form-grid form-grid--inline workorder-create" onSubmit={handleCreateWorkOrder}>
+          <h3>Create work order</h3>
+          {createBanner && (
+            <div className={`banner banner--${createBanner.type || 'info'}`}>
+              {createBanner.message}
+            </div>
+          )}
+          <label className="field" data-help="Customer or account requesting service.">
+            <span>Customer name</span>
+            <input
+              value={createForm.customer_name}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, customer_name: e.target.value }))}
+              required
+              placeholder="Acme Industries"
+            />
+          </label>
+          <label className="field" data-help="Describe the product received for repair.">
+            <span>Device information</span>
+            <input
+              value={createForm.device_info}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, device_info: e.target.value }))}
+              required
+              placeholder="Model, asset tag or unit type"
+            />
+          </label>
+          <label className="field" data-help="Optional serial or IMEI for tracking.">
+            <span>Device serial</span>
+            <input
+              value={createForm.device_serial}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, device_serial: e.target.value }))}
+              placeholder="Serial number (optional)"
+            />
+          </label>
+          <label className="field" data-help="Helps the team triage urgent jobs first.">
+            <span>Priority</span>
+            <select
+              value={createForm.priority}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, priority: e.target.value }))}
+            >
+              {Object.entries(priorityLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field" data-help="Assign the job to a technician.">
+            <span>Assigned to</span>
+            <select
+              value={createForm.assigned_to}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, assigned_to: e.target.value }))}
+            >
+              <option value="">Select teammate</option>
+              {assignableUsers.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.full_name || account.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field--span" data-help="Capture fault description, accessories and initial findings.">
+            <span>Intake notes</span>
+            <textarea
+              rows={2}
+              value={createForm.intake_notes}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, intake_notes: e.target.value }))}
+              placeholder="Symptoms, accessories received, damage reports"
+            />
+          </label>
+          <div className="form-actions">
+            <button className="button button--primary" type="submit" disabled={createWorkOrderMutation.isLoading}>
+              {createWorkOrderMutation.isLoading ? 'Creating…' : 'Create work order'}
+            </button>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={() => {
+                setCreateForm({ ...emptyCreateForm, assigned_to: defaultAssignee })
+                setCreateBanner(null)
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </form>
+      )}
+      {banner && <div className="banner banner--warning">{banner}</div>}
         {isLoading && <p className="muted">Loading work orders…</p>}
         <div className="kanban">
           {statusOrder.map((status) => {

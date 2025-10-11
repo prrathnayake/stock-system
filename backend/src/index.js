@@ -7,6 +7,7 @@ import { createApp, registerRoutes } from './app.js';
 import { initialiseDatabase } from './startup/bootstrap.js';
 import { initLowStockQueue } from './queues/lowStock.js';
 import { scheduleBackups } from './services/backup.js';
+import { scheduleDailyDigest } from './services/dailyDigest.js';
 
 const app = createApp();
 const server = config.tls.enabled
@@ -35,6 +36,7 @@ registerRoutes(app, io);
   await initialiseDatabase();
   await initLowStockQueue(io);
   scheduleBackups();
+  scheduleDailyDigest();
   server.listen(config.port, () => console.log(`API listening on :${config.port}`));
 })().catch(err => {
   console.error(err);
