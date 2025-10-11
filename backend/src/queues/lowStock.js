@@ -4,6 +4,7 @@ import { Organization, Product, Bin, StockLevel } from '../db.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
 import { getSetting } from '../services/settings.js';
 import { runAsOrganization } from '../services/requestContext.js';
+import { notifyLowStockAlert } from '../services/notificationService.js';
 
 const { Queue, Worker } = BullMQ;
 
@@ -83,8 +84,13 @@ export async function initLowStockQueue(io) {
       const count = await runAsOrganization(orgId, async () => {
         const snapshot = await calculateLowStockSnapshot();
         const alertsEnabled = await getSetting('low_stock_alerts_enabled', true, orgId);
-        if (snapshot.length > 0 && ioRef && alertsEnabled !== false) {
-          ioRef.emit('alerts:low-stock', { organization_id: orgId, snapshot });
+        if (snapshot.length > 0 && alertsEnabled !== false) {
+          if (ioRef) {
+            ioRef.emit('alerts:low-stock', { organization_id: orgId, snapshot });
+          }
+          notifyLowStockAlert({ organizationId: orgId, snapshot }).catch((error) => {
+            console.error('[notify] failed to send low stock email', error);
+          });
         }
         await invalidateStockOverviewCache(orgId);
         return snapshot.length;

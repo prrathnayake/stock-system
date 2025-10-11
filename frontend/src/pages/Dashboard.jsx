@@ -13,7 +13,10 @@ const reasonLabels = {
   transfer: 'Transferred',
   reserve: 'Reserved',
   release: 'Released',
-  invoice_sale: 'Invoice fulfilled'
+  invoice_sale: 'Invoice fulfilled',
+  receive_po: 'Purchase order received',
+  rma_out: 'RMA dispatched',
+  rma_return: 'RMA returned'
 }
 
 export default function Dashboard() {
@@ -180,12 +183,35 @@ export default function Dashboard() {
           </div>
           <ul className="timeline">
             {(overview?.recentActivity?.length ?? 0) === 0 && <li className="muted">Awaiting first transactions.</li>}
-            {overview?.recentActivity?.map((event) => (
-              <li key={event.id}>
-                <div className="timeline__title">{reasonLabels[event.reason] || event.reason} · {event.sku}</div>
-                <div className="timeline__meta">{event.qty} units · {new Date(event.occurredAt).toLocaleString()}</div>
-              </li>
-            ))}
+            {overview?.recentActivity?.map((event) => {
+              const action = reasonLabels[event.reason] || event.reason
+              const labelParts = [action]
+              if (event.sku) {
+                labelParts.push(event.sku)
+              }
+              if (event.productName) {
+                labelParts.push(event.productName)
+              }
+              const movement = event.fromBin && event.toBin
+                ? `${event.fromBin} → ${event.toBin}`
+                : event.fromBin
+                  ? `from ${event.fromBin}`
+                  : event.toBin
+                    ? `to ${event.toBin}`
+                    : null
+              const metaParts = [
+                `${event.qty} units`,
+                event.performedBy ? `by ${event.performedBy}` : null,
+                movement,
+                new Date(event.occurredAt).toLocaleString()
+              ].filter(Boolean)
+              return (
+                <li key={event.id}>
+                  <div className="timeline__title">{labelParts.join(' · ')}</div>
+                  <div className="timeline__meta">{metaParts.join(' · ')}</div>
+                </li>
+              )
+            })}
           </ul>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import StockHistoryChart from '../components/StockHistoryChart.jsx'
@@ -30,9 +30,13 @@ export default function Inventory() {
   const [productForm, setProductForm] = useState(initialProductForm)
   const [adjustForm, setAdjustForm] = useState(initialAdjustmentForm)
   const [feedback, setFeedback] = useState(null)
+  const [binFeedback, setBinFeedback] = useState(null)
   const [selectedProductId, setSelectedProductId] = useState(null)
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm, setEditForm] = useState(initialProductForm)
+  const [binForm, setBinForm] = useState({ code: '', site: '', room: '' })
+
+  const queryClient = useQueryClient()
 
   const currencyCode = (organization?.currency || user?.organization?.currency || 'AUD').toUpperCase()
   const currencyFormatter = useMemo(
@@ -88,6 +92,15 @@ export default function Inventory() {
     enabled: canManageProcurement
   })
   const rmaCases = rmaQuery.data ?? []
+
+  const binsQuery = useQuery({
+    queryKey: ['bins'],
+    queryFn: async () => {
+      const { data } = await api.get('/bins')
+      return data
+    }
+  })
+  const bins = binsQuery.data ?? []
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -165,6 +178,13 @@ export default function Inventory() {
 
   const allBins = useMemo(() => {
     const map = new Map()
+    bins.forEach((bin) => {
+      map.set(bin.id, {
+        id: bin.id,
+        code: bin.code,
+        location: bin.location?.site || null
+      })
+    })
     stock.forEach((product) => {
       product.bins.forEach((bin) => {
         if (!map.has(bin.bin_id)) {
@@ -177,7 +197,7 @@ export default function Inventory() {
       })
     })
     return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
-  }, [stock])
+  }, [bins, stock])
 
   const productForAdjustment = useMemo(
     () => stock.find((item) => String(item.id) === adjustForm.product_id) || null,
@@ -249,6 +269,13 @@ export default function Inventory() {
   const adjustStock = useMutation({
     mutationFn: async (payload) => {
       const { data } = await api.post('/stock/move', payload)
+      return data
+    }
+  })
+
+  const createBin = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.post('/bins', payload)
       return data
     }
   })
@@ -329,6 +356,39 @@ export default function Inventory() {
       }
     })
     setSelectedProductId(value || null)
+  }
+
+  const handleCreateBin = (event) => {
+    event.preventDefault()
+    setBinFeedback(null)
+    const code = binForm.code.trim()
+    if (!code) {
+      setBinFeedback({ type: 'error', message: 'Bin code is required.' })
+      return
+    }
+    const payload = { code }
+    const site = binForm.site.trim()
+    const room = binForm.room.trim()
+    if (site) {
+      payload.location = { site }
+      if (room) {
+        payload.location.room = room
+      }
+    }
+    createBin.mutate(payload, {
+      onSuccess: () => {
+        setBinFeedback({ type: 'success', message: 'Bin created successfully.' })
+        setBinForm({ code: '', site: '', room: '' })
+        queryClient.invalidateQueries({ queryKey: ['bins'] })
+        refetch()
+      },
+      onError: (error) => {
+        setBinFeedback({
+          type: 'error',
+          message: error.response?.data?.error || 'Unable to create bin right now.'
+        })
+      }
+    })
   }
 
   const openEdit = (product) => {
@@ -831,6 +891,46 @@ export default function Inventory() {
           <div className="form-actions">
             <button className="button button--primary" type="submit" disabled={adjustStock.isLoading || !hasBinsAvailable}>
               {adjustStock.isLoading ? 'Applying…' : 'Update stock'}
+            </button>
+          </div>
+        </form>
+
+        <form className="card form-grid" onSubmit={handleCreateBin}>
+          <h3>Create storage bin</h3>
+          {binFeedback && (
+            <div className={`banner banner--${binFeedback.type === 'error' ? 'danger' : 'info'}`}>
+              {binFeedback.message}
+            </div>
+          )}
+          <label className="field" data-help="Unique identifier used when allocating or picking stock.">
+            <span>Bin code</span>
+            <input
+              value={binForm.code}
+              onChange={(e) => setBinForm((prev) => ({ ...prev, code: e.target.value }))}
+              placeholder="e.g. A-01"
+              required
+            />
+          </label>
+          <label className="field" data-help="Optional location name to help your team locate the bin.">
+            <span>Location</span>
+            <input
+              value={binForm.site}
+              onChange={(e) => setBinForm((prev) => ({ ...prev, site: e.target.value }))}
+              placeholder="Main warehouse"
+            />
+          </label>
+          <label className="field" data-help="Optional zone, aisle or room information.">
+            <span>Room / area</span>
+            <input
+              value={binForm.room}
+              onChange={(e) => setBinForm((prev) => ({ ...prev, room: e.target.value }))}
+              placeholder="Aisle 3"
+            />
+          </label>
+          <p className="muted field--span">Bins can be assigned to products later from the stock adjustment tools.</p>
+          <div className="form-actions">
+            <button className="button button--primary" type="submit" disabled={createBin.isLoading}>
+              {createBin.isLoading ? 'Creating…' : 'Create bin'}
             </button>
           </div>
         </form>

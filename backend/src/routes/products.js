@@ -5,6 +5,11 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
+import {
+  notifyProductArchived,
+  notifyProductCreated,
+  notifyProductUpdated
+} from '../services/notificationService.js';
 
 const router = Router();
 
@@ -39,7 +44,15 @@ router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) =>
   }
   const created = await Product.create(parse.data);
   await invalidateStockOverviewCache(created.organizationId);
+  const payload = created.get({ plain: true });
   res.status(201).json(created);
+  notifyProductCreated({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    product: payload
+  }).catch((error) => {
+    console.error('[notify] failed to send product creation email', error);
+  });
 }));
 
 router.patch('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
@@ -74,6 +87,15 @@ router.patch('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res
   await product.save();
   await invalidateStockOverviewCache(product.organizationId);
   res.json(product);
+  const after = product.get({ plain: true });
+  notifyProductUpdated({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    product: after,
+    changes: Object.keys(parsed.data)
+  }).catch((error) => {
+    console.error('[notify] failed to send product update email', error);
+  });
 }));
 
 router.delete('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
@@ -86,6 +108,8 @@ router.delete('/:id', requireAuth(['admin','user']), asyncHandler(async (req, re
   if (!product) {
     throw new HttpError(404, 'Product not found');
   }
+
+  const snapshot = product.get({ plain: true });
 
   await sequelize.transaction(async (t) => {
     const levels = await StockLevel.findAll({
@@ -119,6 +143,13 @@ router.delete('/:id', requireAuth(['admin','user']), asyncHandler(async (req, re
 
   await invalidateStockOverviewCache(product.organizationId);
   res.status(204).send();
+  notifyProductArchived({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    product: snapshot
+  }).catch((error) => {
+    console.error('[notify] failed to send product archive email', error);
+  });
 }));
 
 export default router;
