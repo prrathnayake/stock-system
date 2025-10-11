@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-11T03:04:15.232Z",
+  "generatedAt": "2025-10-11T22:48:33.788Z",
   "steps": [
     {
       "name": "Health check",
@@ -67,6 +67,62 @@
     },
     {
       "name": "Receive purchase order items",
+      "status": "passed"
+    },
+    {
+      "name": "Create customer record",
+      "status": "passed"
+    },
+    {
+      "name": "Search customers by keyword",
+      "status": "passed"
+    },
+    {
+      "name": "Update customer contact details",
+      "status": "passed"
+    },
+    {
+      "name": "Inspect available stock before sale",
+      "status": "passed"
+    },
+    {
+      "name": "Create sale and reserve stock",
+      "status": "passed"
+    },
+    {
+      "name": "Complete sale and deduct inventory",
+      "status": "passed"
+    },
+    {
+      "name": "Verify stock level decreased after sale",
+      "status": "passed"
+    },
+    {
+      "name": "Create sale resulting in backorder",
+      "status": "passed"
+    },
+    {
+      "name": "Top up inventory for backorder sale",
+      "status": "passed"
+    },
+    {
+      "name": "Retry reservation after replenishment",
+      "status": "passed"
+    },
+    {
+      "name": "Complete backordered sale",
+      "status": "passed"
+    },
+    {
+      "name": "Prevent deleting customer with sale history",
+      "status": "passed"
+    },
+    {
+      "name": "Create disposable customer",
+      "status": "passed"
+    },
+    {
+      "name": "Delete disposable customer",
       "status": "passed"
     },
     {

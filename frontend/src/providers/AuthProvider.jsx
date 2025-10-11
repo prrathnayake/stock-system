@@ -25,7 +25,10 @@ function normalizeOrganization(value) {
     default_payment_terms: value.default_payment_terms || '',
     invoice_notes: value.invoice_notes || '',
     currency: value.currency || 'AUD',
-    invoicing_enabled: value.invoicing_enabled !== false
+    invoicing_enabled: value.invoicing_enabled !== false,
+    banner_images: Array.isArray(value.banner_images)
+      ? value.banner_images.filter((item) => typeof item === 'string' && item.trim().length > 0)
+      : []
   };
 }
 

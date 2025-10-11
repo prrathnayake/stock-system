@@ -10,6 +10,7 @@ import { HttpError } from '../utils/httpError.js';
 import { notifyOrganizationProfileUpdated, primeOrganizationContact } from '../services/notificationService.js';
 import { config } from '../config.js';
 import { logoUpload } from '../middleware/uploads.js';
+import { getSetting, upsertSettings } from '../services/settings.js';
 
 const router = Router();
 
@@ -46,6 +47,8 @@ const uploadLogoMiddleware = (req, res, next) => {
   });
 };
 
+const bannerSchema = z.array(urlSchema).max(10, 'Provide up to 10 banner images');
+
 const UpdateSchema = z.object({
   name: z.string().min(1, 'Organization name is required'),
   legal_name: z.string().max(191).optional(),
@@ -61,10 +64,19 @@ const UpdateSchema = z.object({
   default_payment_terms: z.string().max(191).optional(),
   invoice_notes: z.string().max(4000).optional(),
   currency: z.string().max(8).optional(),
-  invoicing_enabled: z.boolean().optional()
+  invoicing_enabled: z.boolean().optional(),
+  banner_images: bannerSchema.optional()
 });
 
-function serializeOrganization(org) {
+function normaliseBannerImages(value) {
+  if (!value) return [];
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function serializeOrganization(org, extras = {}) {
   return {
     id: org.id,
     name: org.name,
@@ -82,7 +94,8 @@ function serializeOrganization(org) {
     default_payment_terms: org.default_payment_terms,
     invoice_notes: org.invoice_notes,
     currency: org.currency,
-    invoicing_enabled: org.invoicing_enabled
+    invoicing_enabled: org.invoicing_enabled,
+    banner_images: normaliseBannerImages(extras.bannerImages ?? extras.banner_images ?? org.banner_images)
   };
 }
 
@@ -92,7 +105,8 @@ router.get('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
     throw new HttpError(404, 'Organization not found');
   }
   primeOrganizationContact(organization);
-  res.json(serializeOrganization(organization));
+  const bannerImages = await getSetting('organization_banner_images', [], organization.id);
+  res.json(serializeOrganization(organization, { bannerImages }));
 }));
 
 router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
@@ -111,9 +125,19 @@ router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
     }
   };
   ['contact_email', 'legal_name', 'abn', 'tax_id', 'address', 'phone', 'website', 'logo_url', 'invoice_prefix', 'default_payment_terms', 'invoice_notes', 'currency', 'timezone'].forEach(normaliseEmpty);
+  const bannerImagesUpdate = parsed.data.banner_images !== undefined
+    ? normaliseBannerImages(parsed.data.banner_images)
+    : undefined;
+
   await organization.update(updates);
+  if (bannerImagesUpdate !== undefined) {
+    await upsertSettings({ organization_banner_images: bannerImagesUpdate }, organization.id);
+  }
   primeOrganizationContact(organization);
-  res.json(serializeOrganization(organization));
+  const bannerImages = bannerImagesUpdate !== undefined
+    ? bannerImagesUpdate
+    : await getSetting('organization_banner_images', [], organization.id);
+  res.json(serializeOrganization(organization, { bannerImages }));
   notifyOrganizationProfileUpdated({ organization, actor: req.user }).catch((error) => {
     console.error('[notify] failed to send organization update email', error);
   });

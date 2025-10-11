@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { io } from 'socket.io-client'
@@ -92,6 +92,34 @@ export default function Dashboard() {
 
   const maxStackTotal = chartData.reduce((max, row) => Math.max(max, row.available + row.reserved), 0) || 1
 
+  const banners = useMemo(() => {
+    const orgBanners = Array.isArray(organization?.banner_images)
+      ? organization.banner_images.filter((item) => typeof item === 'string' && item.trim().length > 0)
+      : []
+    if (orgBanners.length > 0) {
+      return orgBanners
+    }
+    return [
+      'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1515165562835-c4c2b1c9d0e2?auto=format&fit=crop&w=1200&q=80'
+    ]
+  }, [organization?.banner_images])
+
+  const [activeBanner, setActiveBanner] = useState(0)
+
+  useEffect(() => {
+    setActiveBanner(0)
+  }, [banners])
+
+  const nextBanner = () => {
+    setActiveBanner((prev) => (prev + 1) % banners.length)
+  }
+
+  const prevBanner = () => {
+    setActiveBanner((prev) => (prev - 1 + banners.length) % banners.length)
+  }
+
   return (
     <div className="page">
       <div className="card dashboard__intro">
@@ -101,6 +129,46 @@ export default function Dashboard() {
         </div>
         {timezoneSummary && <span className="badge badge--muted">{timezoneSummary}</span>}
       </div>
+
+      {banners.length > 0 && (
+        <section className="card dashboard__banner" aria-label="Organization highlights">
+          <div className="dashboard__banner-slider">
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={prevBanner}
+              aria-label="Previous banner"
+            >
+              ‹
+            </button>
+            <div className="dashboard__banner-frame">
+              <img src={banners[activeBanner]} alt="Organization showcase" />
+            </div>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={nextBanner}
+              aria-label="Next banner"
+            >
+              ›
+            </button>
+          </div>
+          <div className="dashboard__banner-dots" role="tablist" aria-label="Select banner image">
+            {banners.map((_, index) => (
+              <button
+                key={index}
+                type="button"
+                role="tab"
+                aria-selected={index === activeBanner}
+                className={`dashboard__banner-dot${index === activeBanner ? ' dashboard__banner-dot--active' : ''}`}
+                onClick={() => setActiveBanner(index)}
+              >
+                <span className="sr-only">Banner {index + 1}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="grid stats">
         <div className="card stat-card">

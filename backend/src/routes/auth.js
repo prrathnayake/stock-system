@@ -10,6 +10,7 @@ import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/tokenService.js';
 import { recordActivity } from '../services/activityLog.js';
 import { touchUserPresence } from '../services/userPresence.js';
+import { getSetting } from '../services/settings.js';
 
 const router = Router();
 
@@ -63,6 +64,8 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     entityId: user.id,
     description: `User ${user.full_name} signed in`
   }).catch(() => {});
+  const bannerImages = await getSetting('organization_banner_images', [], organization.id);
+
   res.json({
     access,
     refresh,
@@ -90,7 +93,8 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
         currency: organization.currency,
-        invoicing_enabled: organization.invoicing_enabled
+        invoicing_enabled: organization.invoicing_enabled,
+        banner_images: Array.isArray(bannerImages) ? bannerImages : []
       } : null,
       ui_variant: user.ui_variant
     }
@@ -156,6 +160,9 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
   });
 
   const organization = await Organization.findByPk(user.organizationId, { skipOrganizationScope: true });
+  const bannerImages = organization
+    ? await getSetting('organization_banner_images', [], organization.id)
+    : [];
 
   const access = signAccessToken(user);
   const refresh = signRefreshToken(user.id);
@@ -187,7 +194,8 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
         currency: organization.currency,
-        invoicing_enabled: organization.invoicing_enabled
+        invoicing_enabled: organization.invoicing_enabled,
+        banner_images: Array.isArray(bannerImages) ? bannerImages : []
       } : null,
       ui_variant: user.ui_variant
     }

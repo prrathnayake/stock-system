@@ -16,7 +16,10 @@ const UpdateSchema = z.object({
   backup_schedule: z.string().min(1).optional(),
   backup_retain_days: z.number().int().nonnegative().optional(),
   daily_digest_enabled: z.boolean().optional(),
-  daily_digest_time: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Provide a time in HH:MM format').optional()
+  daily_digest_time: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Provide a time in HH:MM format').optional(),
+  auto_product_sku: z.boolean().optional(),
+  auto_customer_id: z.boolean().optional(),
+  auto_warehouse_id: z.boolean().optional()
 });
 
 const router = Router();
