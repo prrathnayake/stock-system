@@ -12,9 +12,7 @@ import { notifyInventoryAdjustment } from '../services/notificationService.js';
 export default function createStockRoutes(io) {
   const router = Router();
 
-  // Summaries per product (joins bins)
-  router.get('/', requireAuth(), asyncHandler(async (req, res) => {
-    const sku = req.query.sku;
+  const buildProductSummaries = async ({ sku, status } = {}) => {
     const where = { active: true };
     if (sku) {
       where[Op.or] = [
@@ -22,6 +20,7 @@ export default function createStockRoutes(io) {
         { name: { [Op.like]: `%${sku}%` } }
       ];
     }
+
     const products = await Product.findAll({
       where,
       distinct: true,
@@ -32,8 +31,10 @@ export default function createStockRoutes(io) {
         include: [Location]
       }]
     });
-    const data = products.map(p => {
-      let on_hand = 0, reserved = 0;
+
+    let summaries = products.map(p => {
+      let on_hand = 0;
+      let reserved = 0;
       const bins = [];
       const relatedBins = Array.isArray(p.bins) ? p.bins : [];
       relatedBins.forEach(b => {
@@ -45,9 +46,11 @@ export default function createStockRoutes(io) {
           bin_code: b.code,
           location: b.location?.site || null,
           on_hand: lvl.on_hand,
-          reserved: lvl.reserved
+          reserved: lvl.reserved,
+          available: lvl.on_hand - lvl.reserved
         });
       });
+      const available = on_hand - reserved;
       return {
         id: p.id,
         sku: p.sku,
@@ -56,11 +59,83 @@ export default function createStockRoutes(io) {
         lead_time_days: p.lead_time_days,
         on_hand,
         reserved,
-        available: on_hand - reserved,
+        available,
         bins
       };
     });
+
+    if (status === 'low') {
+      summaries = summaries.filter((summary) => {
+        if (typeof summary.reorder_point !== 'number') {
+          return false;
+        }
+        return summary.available <= summary.reorder_point;
+      });
+    }
+
+    return summaries;
+  };
+
+  const csvEscape = (value) => {
+    if (value === null || typeof value === 'undefined') {
+      return '';
+    }
+    let stringValue = String(value);
+    if (stringValue.includes('"')) {
+      stringValue = stringValue.replace(/"/g, '""');
+    }
+    if (/[",\n\r]/.test(stringValue)) {
+      return `"${stringValue}"`;
+    }
+    return stringValue;
+  };
+
+  // Summaries per product (joins bins)
+  router.get('/', requireAuth(), asyncHandler(async (req, res) => {
+    const status = req.query.status === 'low' ? 'low' : undefined;
+    const data = await buildProductSummaries({ sku: req.query.sku, status });
     res.json(data);
+  }));
+
+  router.get('/export', requireAuth(), asyncHandler(async (req, res) => {
+    const status = req.query.status ? String(req.query.status).toLowerCase() : 'all';
+    if (!['all', 'low'].includes(status)) {
+      throw new HttpError(400, 'Invalid status filter. Expected "all" or "low".');
+    }
+
+    const summaries = await buildProductSummaries({ sku: req.query.sku, status: status === 'low' ? 'low' : undefined });
+
+    const header = ['Product SKU', 'Product Name', 'Bin Code', 'Location', 'On Hand', 'Reserved', 'Available'];
+    const rows = [header.map(csvEscape).join(',')];
+
+    summaries.forEach((summary) => {
+      const bins = summary.bins.length > 0 ? summary.bins : [{
+        bin_id: null,
+        bin_code: '',
+        location: '',
+        on_hand: 0,
+        reserved: 0,
+        available: summary.available
+      }];
+
+      bins.forEach((bin) => {
+        rows.push([
+          csvEscape(summary.sku),
+          csvEscape(summary.name),
+          csvEscape(bin.bin_code || ''),
+          csvEscape(bin.location || ''),
+          csvEscape(bin.on_hand ?? 0),
+          csvEscape(bin.reserved ?? 0),
+          csvEscape(bin.available ?? (bin.on_hand ?? 0) - (bin.reserved ?? 0))
+        ].join(','));
+      });
+    });
+
+    const csvContent = `${rows.join('\r\n')}\r\n`;
+    const dateStamp = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="stock-export-${dateStamp}.csv"`);
+    res.send(csvContent);
   }));
 
   router.get('/overview', requireAuth(), asyncHandler(async (req, res) => {

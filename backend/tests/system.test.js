@@ -250,6 +250,28 @@ describe('End-to-end system workflow', () => {
       expect(Array.isArray(res.body)).toBe(true);
     });
 
+    await step('Export stock summary as CSV', async () => {
+      const res = await request(app)
+        .get('/stock/export')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/csv');
+      expect(res.headers['content-disposition']).toMatch(/attachment/);
+      expect(res.text).toContain('Product SKU,Product Name');
+      expect(res.text).toContain('WIDGET-01');
+      expect(res.text).toContain('BIN-A1');
+    });
+
+    await step('Export low stock items as CSV', async () => {
+      const res = await request(app)
+        .get('/stock/export')
+        .query({ status: 'low' })
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('NEW-100');
+      expect(res.text).not.toContain('WIDGET-01');
+    });
+
     await step('Move stock between bins', async () => {
       const res = await request(app)
         .post('/stock/move')

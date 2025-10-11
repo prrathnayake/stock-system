@@ -6,6 +6,7 @@ A production-ready inventory, purchasing, and work-order platform tailored for d
 - **Inventory intelligence** – Track on-hand, reserved, and available quantities per bin with low-stock alerts and adjustment auditing.
 - **Product catalogue management** – Create, update, archive, and search products with tenant-aware scoping and duplicate SKU protection.
 - **Operational workflows** – Coordinate purchasing, serial tracking, RMAs, work orders, and invoicing from a unified interface.
+- **Data exports** – Download stock positions and low-stock exceptions as CSV for offline analysis or sharing.
 - **Secure multi-tenant access** – JWT authentication, role-based permissions, rate limiting, and organization-aware data scoping.
 - **Observability & resilience** – Structured logging, caching, backup scheduling, and queue-powered background jobs.
 
