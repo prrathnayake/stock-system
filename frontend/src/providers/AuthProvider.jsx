@@ -4,11 +4,33 @@ import { clearTokens, getAccessToken, getUserProfile, setTokens, setUserProfile 
 
 const AuthContext = createContext(null);
 
+function normalizeOrganization(value) {
+  if (!value) return null;
+  return {
+    ...value,
+    name: value.name || '',
+    legal_name: value.legal_name || '',
+    contact_email: value.contact_email || '',
+    timezone: value.timezone || '',
+    abn: value.abn || '',
+    tax_id: value.tax_id || '',
+    address: value.address || '',
+    phone: value.phone || '',
+    website: value.website || '',
+    logo_url: value.logo_url || '',
+    invoice_prefix: value.invoice_prefix || '',
+    default_payment_terms: value.default_payment_terms || '',
+    invoice_notes: value.invoice_notes || '',
+    currency: value.currency || 'AUD'
+  };
+}
+
 function normalizeUser(value) {
   if (!value) return null;
   return {
     ...value,
-    ui_variant: value.ui_variant || 'pro'
+    ui_variant: value.ui_variant || 'pro',
+    organization: normalizeOrganization(value.organization)
   };
 }
 

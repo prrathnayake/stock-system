@@ -83,8 +83,19 @@ export const Organization = sequelize.define('organization', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   name: { type: DataTypes.STRING(191), allowNull: false },
   slug: { type: DataTypes.STRING(64), allowNull: false },
+  legal_name: { type: DataTypes.STRING(191), allowNull: true },
   timezone: { type: DataTypes.STRING(64), allowNull: true },
-  contact_email: { type: DataTypes.STRING(191), allowNull: true }
+  contact_email: { type: DataTypes.STRING(191), allowNull: true },
+  abn: { type: DataTypes.STRING(32), allowNull: true },
+  tax_id: { type: DataTypes.STRING(64), allowNull: true },
+  address: { type: DataTypes.TEXT, allowNull: true },
+  phone: { type: DataTypes.STRING(32), allowNull: true },
+  website: { type: DataTypes.STRING(191), allowNull: true },
+  logo_url: { type: DataTypes.STRING(512), allowNull: true },
+  invoice_prefix: { type: DataTypes.STRING(16), allowNull: true },
+  default_payment_terms: { type: DataTypes.STRING(191), allowNull: true },
+  invoice_notes: { type: DataTypes.TEXT, allowNull: true },
+  currency: { type: DataTypes.STRING(8), allowNull: true }
 }, {
   indexes: [
     { unique: true, fields: ['slug'], name: 'organizations_slug_unique' }
@@ -98,8 +109,41 @@ Organization.addHook('beforeValidate', (org) => {
   if (org.name) {
     org.name = org.name.trim();
   }
+  if (org.legal_name) {
+    org.legal_name = org.legal_name.trim();
+  }
   if (org.contact_email) {
     org.contact_email = org.contact_email.trim().toLowerCase();
+  }
+  if (org.abn) {
+    org.abn = org.abn.trim();
+  }
+  if (org.tax_id) {
+    org.tax_id = org.tax_id.trim();
+  }
+  if (org.address) {
+    org.address = org.address.trim();
+  }
+  if (org.phone) {
+    org.phone = org.phone.trim();
+  }
+  if (org.website) {
+    org.website = org.website.trim();
+  }
+  if (org.logo_url) {
+    org.logo_url = org.logo_url.trim();
+  }
+  if (org.invoice_prefix) {
+    org.invoice_prefix = org.invoice_prefix.trim();
+  }
+  if (org.default_payment_terms) {
+    org.default_payment_terms = org.default_payment_terms.trim();
+  }
+  if (org.invoice_notes) {
+    org.invoice_notes = org.invoice_notes.trim();
+  }
+  if (org.currency) {
+    org.currency = org.currency.trim().toUpperCase();
   }
 });
 

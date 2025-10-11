@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../providers/AuthProvider.jsx'
@@ -74,31 +74,82 @@ export default function Invoices() {
   const [errorBanner, setErrorBanner] = useState(null)
   const [activeInvoiceId, setActiveInvoiceId] = useState(null)
 
+  const initialOrgDefaults = {
+    supplier_name: organization?.legal_name || organization?.name || '',
+    supplier_abn: organization?.abn || '',
+    supplier_address: organization?.address || '',
+    payment_terms: organization?.default_payment_terms || '',
+    currency: organization?.currency || 'AUD',
+    notes: organization?.invoice_notes || ''
+  }
+
+  const defaultsRef = useRef(initialOrgDefaults)
+
   const [form, setForm] = useState({
     customer_name: '',
     customer_email: '',
     customer_address: '',
     customer_abn: '',
-    supplier_name: organization?.name || '',
-    supplier_abn: '',
-    supplier_address: '',
-    payment_terms: 'Due on receipt',
+    supplier_name: initialOrgDefaults.supplier_name,
+    supplier_abn: initialOrgDefaults.supplier_abn,
+    supplier_address: initialOrgDefaults.supplier_address,
+    payment_terms: initialOrgDefaults.payment_terms,
     reference: '',
     issue_date: toDateInput(new Date()),
     due_date: defaultDueDate(),
-    currency: 'AUD',
-    notes: '',
+    currency: initialOrgDefaults.currency,
+    notes: initialOrgDefaults.notes,
     status: 'issued',
     lines: [{ ...defaultLine }]
   })
 
   useEffect(() => {
+    const nextDefaults = {
+      supplier_name: organization?.legal_name || organization?.name || '',
+      supplier_abn: organization?.abn || '',
+      supplier_address: organization?.address || '',
+      payment_terms: organization?.default_payment_terms || '',
+      currency: organization?.currency || 'AUD',
+      notes: organization?.invoice_notes || ''
+    }
+
     setForm((prev) => ({
       ...prev,
-      supplier_name: organization?.name || prev.supplier_name || '',
-      supplier_address: organization?.address || prev.supplier_address || ''
+      supplier_name:
+        prev.supplier_name && prev.supplier_name !== defaultsRef.current.supplier_name
+          ? prev.supplier_name
+          : (nextDefaults.supplier_name || prev.supplier_name || ''),
+      supplier_abn:
+        prev.supplier_abn && prev.supplier_abn !== defaultsRef.current.supplier_abn
+          ? prev.supplier_abn
+          : (nextDefaults.supplier_abn || prev.supplier_abn || ''),
+      supplier_address:
+        prev.supplier_address && prev.supplier_address !== defaultsRef.current.supplier_address
+          ? prev.supplier_address
+          : (nextDefaults.supplier_address || prev.supplier_address || ''),
+      payment_terms:
+        prev.payment_terms && prev.payment_terms !== defaultsRef.current.payment_terms
+          ? prev.payment_terms
+          : (nextDefaults.payment_terms || prev.payment_terms || 'Due on receipt'),
+      currency:
+        prev.currency && prev.currency !== defaultsRef.current.currency
+          ? prev.currency
+          : (nextDefaults.currency || prev.currency || 'AUD'),
+      notes:
+        prev.notes && prev.notes !== defaultsRef.current.notes
+          ? prev.notes
+          : (nextDefaults.notes || prev.notes || '')
     }))
-  }, [organization?.name, organization?.address])
+    defaultsRef.current = nextDefaults
+  }, [
+    organization?.legal_name,
+    organization?.name,
+    organization?.abn,
+    organization?.address,
+    organization?.default_payment_terms,
+    organization?.currency,
+    organization?.invoice_notes
+  ])
 
   const totals = useMemo(() => {
     const rawTotals = calculateTotals(form.lines)
@@ -215,12 +266,12 @@ export default function Invoices() {
         supplier_name: form.supplier_name || undefined,
         supplier_abn: form.supplier_abn || undefined,
         supplier_address: form.supplier_address || undefined,
-        payment_terms: form.payment_terms || undefined,
+        payment_terms: form.payment_terms || organization?.default_payment_terms || undefined,
         reference: form.reference || undefined,
         issue_date: form.issue_date || undefined,
         due_date: form.due_date || undefined,
-        currency: form.currency || 'AUD',
-        notes: form.notes || undefined,
+        currency: form.currency || organization?.currency || 'AUD',
+        notes: form.notes || organization?.invoice_notes || undefined,
         status: form.status,
         lines: form.lines
           .filter((line) => line.description && Number(line.quantity) > 0 && line.product_id)
@@ -630,6 +681,13 @@ export default function Invoices() {
                 <p><strong>Due date:</strong> {form.due_date || '—'}</p>
                 {form.reference && <p><strong>Reference:</strong> {form.reference}</p>}
               </div>
+              {organization?.logo_url && (
+                <img
+                  className="invoice-preview__logo"
+                  src={organization.logo_url}
+                  alt={`${organization?.name || 'Organization'} logo`}
+                />
+              )}
             </header>
             <section className="invoice-preview__customer">
               <h4>Bill to</h4>

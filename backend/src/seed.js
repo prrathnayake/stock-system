@@ -6,7 +6,18 @@ import { runAsOrganization } from './services/requestContext.js';
   await sequelize.sync({ force: true });
   const [organization] = await Organization.findOrCreate({
     where: { slug: 'default' },
-    defaults: { name: 'Default Organization', contact_email: 'operations@example.com' }
+    defaults: {
+      name: 'Default Organization',
+      legal_name: 'Default Organization Pty Ltd',
+      contact_email: 'operations@example.com',
+      abn: '12 345 678 901',
+      address: '123 Example Street\nSydney NSW 2000',
+      timezone: 'Australia/Sydney',
+      default_payment_terms: 'Due within 14 days',
+      invoice_notes: 'Please remit payment to Default Organization within the agreed terms.',
+      invoice_prefix: 'INV-',
+      currency: 'AUD'
+    }
   });
 
   await runAsOrganization(organization.id, async () => {

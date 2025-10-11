@@ -11,6 +11,7 @@ import {
   Bin,
   User,
   UserActivity,
+  Organization,
   sequelize
 } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -43,7 +44,7 @@ const BaseInvoiceSchema = z.object({
   supplier_abn: z.string().max(32).optional(),
   supplier_address: z.string().optional(),
   payment_terms: z.string().max(191).optional(),
-  currency: z.string().max(8).default('AUD'),
+  currency: z.string().max(8).optional(),
   notes: z.string().optional(),
   status: InvoiceStatusEnum.default('draft'),
   lines: z.array(InvoiceLineSchema).min(1)
@@ -73,22 +74,39 @@ function toAmount(value) {
   return Number.parseFloat(Number(value).toFixed(2));
 }
 
+async function resolveInvoicePrefix(organizationId, transaction) {
+  const organization = await Organization.findByPk(organizationId, { transaction, skipOrganizationScope: true });
+  const prefix = organization?.invoice_prefix;
+  if (typeof prefix === 'string') {
+    return prefix.trim();
+  }
+  return 'INV-';
+}
+
 async function generateInvoiceNumber(organizationId, transaction) {
+  const prefix = await resolveInvoicePrefix(organizationId, transaction);
+  const where = { organizationId };
+  if (prefix) {
+    where.invoice_number = { [Op.like]: `${prefix}%` };
+  }
   const latest = await Invoice.findOne({
-    where: { organizationId },
+    where,
     order: [['createdAt', 'DESC']],
     transaction
   });
-  if (!latest || !latest.invoice_number) {
-    return 'INV-0001';
+  const padLength = latest?.invoice_number?.match(/\d+/)?.[0]?.length ?? 4;
+  if (!latest || !latest.invoice_number || (prefix && !latest.invoice_number.startsWith(prefix))) {
+    const numeric = String(1).padStart(Math.max(padLength, 4), '0');
+    return `${prefix || ''}${numeric}`;
   }
   const match = latest.invoice_number.match(/^(.*?)(\d{1,})$/);
   if (!match) {
     return `${latest.invoice_number}-1`;
   }
-  const [, prefix, numeric] = match;
+  const [, detectedPrefix, numeric] = match;
+  const effectivePrefix = prefix ?? detectedPrefix;
   const next = String(Number.parseInt(numeric, 10) + 1).padStart(numeric.length, '0');
-  return `${prefix}${next}`;
+  return `${effectivePrefix}${next}`;
 }
 
 function presentLine(line) {
@@ -298,6 +316,15 @@ export default function createInvoiceRoutes(io) {
     }
     const data = parsed.data;
     await sequelize.transaction(async (transaction) => {
+      const organization = await Organization.findByPk(req.user.organization_id, { transaction, skipOrganizationScope: true });
+      const orgDefaults = {
+        supplier_name: organization?.legal_name ?? organization?.name ?? null,
+        supplier_abn: organization?.abn ?? null,
+        supplier_address: organization?.address ?? null,
+        payment_terms: organization?.default_payment_terms ?? null,
+        currency: organization?.currency ?? 'AUD',
+        notes: organization?.invoice_notes ?? null
+      };
       const { totals, computedLines } = await calculateTotals(data.lines, transaction);
       const invoiceNumber = data.invoice_number || await generateInvoiceNumber(req.user.organization_id, transaction);
       const invoice = await Invoice.create({
@@ -310,12 +337,12 @@ export default function createInvoiceRoutes(io) {
         customer_email: data.customer_email ?? null,
         customer_address: data.customer_address ?? null,
         customer_abn: data.customer_abn ?? null,
-        supplier_name: data.supplier_name ?? null,
-        supplier_abn: data.supplier_abn ?? null,
-        supplier_address: data.supplier_address ?? null,
-        payment_terms: data.payment_terms ?? null,
-        currency: data.currency ?? 'AUD',
-        notes: data.notes ?? null,
+        supplier_name: data.supplier_name ?? orgDefaults.supplier_name,
+        supplier_abn: data.supplier_abn ?? orgDefaults.supplier_abn,
+        supplier_address: data.supplier_address ?? orgDefaults.supplier_address,
+        payment_terms: data.payment_terms ?? orgDefaults.payment_terms,
+        currency: data.currency ?? orgDefaults.currency,
+        notes: data.notes ?? orgDefaults.notes,
         subtotal: totals.subtotal,
         gst_total: totals.gst,
         total: totals.total,
@@ -377,6 +404,15 @@ export default function createInvoiceRoutes(io) {
       if (!invoice) {
         throw new HttpError(404, 'Invoice not found');
       }
+      const organization = await Organization.findByPk(req.user.organization_id, { transaction, skipOrganizationScope: true });
+      const orgDefaults = {
+        supplier_name: organization?.legal_name ?? organization?.name ?? null,
+        supplier_abn: organization?.abn ?? null,
+        supplier_address: organization?.address ?? null,
+        payment_terms: organization?.default_payment_terms ?? null,
+        currency: organization?.currency ?? 'AUD',
+        notes: organization?.invoice_notes ?? null
+      };
       const previousStatus = invoice.status;
       const { totals, computedLines } = await calculateTotals(data.lines, transaction);
       await InvoiceLine.destroy({ where: { invoiceId: invoice.id }, transaction });
@@ -399,12 +435,12 @@ export default function createInvoiceRoutes(io) {
         customer_email: data.customer_email ?? null,
         customer_address: data.customer_address ?? null,
         customer_abn: data.customer_abn ?? null,
-        supplier_name: data.supplier_name ?? null,
-        supplier_abn: data.supplier_abn ?? null,
-        supplier_address: data.supplier_address ?? null,
-        payment_terms: data.payment_terms ?? null,
-        currency: data.currency ?? 'AUD',
-        notes: data.notes ?? null,
+        supplier_name: data.supplier_name ?? invoice.supplier_name ?? orgDefaults.supplier_name,
+        supplier_abn: data.supplier_abn ?? invoice.supplier_abn ?? orgDefaults.supplier_abn,
+        supplier_address: data.supplier_address ?? invoice.supplier_address ?? orgDefaults.supplier_address,
+        payment_terms: data.payment_terms ?? invoice.payment_terms ?? orgDefaults.payment_terms,
+        currency: data.currency ?? invoice.currency ?? orgDefaults.currency,
+        notes: data.notes ?? invoice.notes ?? orgDefaults.notes,
         subtotal: totals.subtotal,
         gst_total: totals.gst,
         total: totals.total,

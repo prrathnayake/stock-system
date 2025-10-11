@@ -116,7 +116,18 @@ export default function Settings() {
   const [orgForm, setOrgForm] = useState({
     name: organization?.name || user?.organization?.name || '',
     contact_email: organization?.contact_email || '',
-    timezone: organization?.timezone || ''
+    legal_name: organization?.legal_name || '',
+    timezone: organization?.timezone || '',
+    abn: organization?.abn || '',
+    tax_id: organization?.tax_id || '',
+    address: organization?.address || '',
+    phone: organization?.phone || '',
+    website: organization?.website || '',
+    logo_url: organization?.logo_url || '',
+    invoice_prefix: organization?.invoice_prefix || '',
+    default_payment_terms: organization?.default_payment_terms || '',
+    invoice_notes: organization?.invoice_notes || '',
+    currency: organization?.currency || 'AUD'
   })
 
   useEffect(() => {
@@ -142,8 +153,19 @@ export default function Settings() {
     if (organizationDetails) {
       setOrgForm({
         name: organizationDetails.name || '',
+        legal_name: organizationDetails.legal_name || '',
         contact_email: organizationDetails.contact_email || '',
-        timezone: organizationDetails.timezone || ''
+        timezone: organizationDetails.timezone || '',
+        abn: organizationDetails.abn || '',
+        tax_id: organizationDetails.tax_id || '',
+        address: organizationDetails.address || '',
+        phone: organizationDetails.phone || '',
+        website: organizationDetails.website || '',
+        logo_url: organizationDetails.logo_url || '',
+        invoice_prefix: organizationDetails.invoice_prefix || '',
+        default_payment_terms: organizationDetails.default_payment_terms || '',
+        invoice_notes: organizationDetails.invoice_notes || '',
+        currency: organizationDetails.currency || 'AUD'
       })
     }
   }, [organizationDetails])
@@ -270,16 +292,62 @@ export default function Settings() {
       setOrgBanner({ type: 'success', message: 'Organization profile updated.' })
       setOrgForm({
         name: data.name || '',
+        legal_name: data.legal_name || '',
         contact_email: data.contact_email || '',
-        timezone: data.timezone || ''
+        timezone: data.timezone || '',
+        abn: data.abn || '',
+        tax_id: data.tax_id || '',
+        address: data.address || '',
+        phone: data.phone || '',
+        website: data.website || '',
+        logo_url: data.logo_url || '',
+        invoice_prefix: data.invoice_prefix || '',
+        default_payment_terms: data.default_payment_terms || '',
+        invoice_notes: data.invoice_notes || '',
+        currency: data.currency || 'AUD'
       })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       if (user) {
         const updatedUser = {
           ...user,
           organization: user.organization
-            ? { ...user.organization, name: data.name, slug: data.slug, id: data.id, contact_email: data.contact_email, timezone: data.timezone }
-            : { id: data.id, name: data.name, slug: data.slug, contact_email: data.contact_email, timezone: data.timezone }
+            ? {
+              ...user.organization,
+              name: data.name,
+              slug: data.slug,
+              id: data.id,
+              contact_email: data.contact_email,
+              timezone: data.timezone,
+              legal_name: data.legal_name,
+              abn: data.abn,
+              tax_id: data.tax_id,
+              address: data.address,
+              phone: data.phone,
+              website: data.website,
+              logo_url: data.logo_url,
+              invoice_prefix: data.invoice_prefix,
+              default_payment_terms: data.default_payment_terms,
+              invoice_notes: data.invoice_notes,
+              currency: data.currency
+            }
+            : {
+              id: data.id,
+              name: data.name,
+              slug: data.slug,
+              contact_email: data.contact_email,
+              timezone: data.timezone,
+              legal_name: data.legal_name,
+              abn: data.abn,
+              tax_id: data.tax_id,
+              address: data.address,
+              phone: data.phone,
+              website: data.website,
+              logo_url: data.logo_url,
+              invoice_prefix: data.invoice_prefix,
+              default_payment_terms: data.default_payment_terms,
+              invoice_notes: data.invoice_notes,
+              currency: data.currency
+            }
         }
         setUser(updatedUser)
         persistUserProfile(updatedUser)
@@ -315,14 +383,40 @@ export default function Settings() {
     const payload = {
       name: orgForm.name.trim(),
       contact_email: orgForm.contact_email.trim(),
-      timezone: orgForm.timezone.trim()
+      legal_name: orgForm.legal_name.trim(),
+      timezone: orgForm.timezone.trim(),
+      abn: orgForm.abn.trim(),
+      tax_id: orgForm.tax_id.trim(),
+      address: orgForm.address.trim(),
+      phone: orgForm.phone.trim(),
+      website: orgForm.website.trim(),
+      logo_url: orgForm.logo_url.trim(),
+      invoice_prefix: orgForm.invoice_prefix.trim(),
+      default_payment_terms: orgForm.default_payment_terms.trim(),
+      invoice_notes: orgForm.invoice_notes.trim(),
+      currency: orgForm.currency.trim()
     }
     if (!payload.name) {
       setOrgBanner({ type: 'error', message: 'Organization name is required.' })
       return
     }
     if (!payload.contact_email) delete payload.contact_email
+    if (!payload.legal_name) delete payload.legal_name
     if (!payload.timezone) delete payload.timezone
+    if (!payload.abn) delete payload.abn
+    if (!payload.tax_id) delete payload.tax_id
+    if (!payload.address) delete payload.address
+    if (!payload.phone) delete payload.phone
+    if (!payload.website) delete payload.website
+    if (!payload.logo_url) delete payload.logo_url
+    if (!payload.invoice_prefix) delete payload.invoice_prefix
+    if (!payload.default_payment_terms) delete payload.default_payment_terms
+    if (!payload.invoice_notes) delete payload.invoice_notes
+    if (!payload.currency) {
+      delete payload.currency
+    } else {
+      payload.currency = payload.currency.toUpperCase()
+    }
     organizationMutation.mutate(payload)
   }
 
@@ -512,7 +606,7 @@ export default function Settings() {
             <div className="card__header">
               <div>
                 <h2>Organization profile</h2>
-                <p className="muted">Update contact information and timezone for compliance notices.</p>
+                <p className="muted">Manage branding, legal and invoicing defaults for this organization.</p>
               </div>
             </div>
             {orgBanner && (
@@ -527,6 +621,14 @@ export default function Settings() {
                   value={orgForm.name}
                   onChange={(e) => setOrgForm((prev) => ({ ...prev, name: e.target.value }))}
                   required
+                />
+              </label>
+              <label className="field">
+                <span>Legal name</span>
+                <input
+                  value={orgForm.legal_name}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, legal_name: e.target.value }))}
+                  placeholder="Registered business name"
                 />
               </label>
               <label className="field">
@@ -545,6 +647,89 @@ export default function Settings() {
                   value={orgForm.timezone}
                   onChange={(e) => setOrgForm((prev) => ({ ...prev, timezone: e.target.value }))}
                   placeholder="e.g. America/New_York"
+                />
+              </label>
+              <label className="field">
+                <span>ABN / business number</span>
+                <input
+                  value={orgForm.abn}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, abn: e.target.value }))}
+                  placeholder="e.g. 12 345 678 901"
+                />
+              </label>
+              <label className="field">
+                <span>Tax registration</span>
+                <input
+                  value={orgForm.tax_id}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, tax_id: e.target.value }))}
+                  placeholder="VAT, GST or other tax ID"
+                />
+              </label>
+              <label className="field field--span">
+                <span>Registered address</span>
+                <textarea
+                  rows={3}
+                  value={orgForm.address}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, address: e.target.value }))}
+                  placeholder="Street, city, state and postcode"
+                />
+              </label>
+              <label className="field">
+                <span>Support phone</span>
+                <input
+                  value={orgForm.phone}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="e.g. +61 2 1234 5678"
+                />
+              </label>
+              <label className="field">
+                <span>Website</span>
+                <input
+                  value={orgForm.website}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, website: e.target.value }))}
+                  placeholder="https://example.com"
+                />
+              </label>
+              <label className="field field--span">
+                <span>Logo URL</span>
+                <input
+                  value={orgForm.logo_url}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, logo_url: e.target.value }))}
+                  placeholder="Link to hosted logo image"
+                />
+                <small className="muted">Used across the dashboard and invoice preview when provided.</small>
+              </label>
+              <label className="field">
+                <span>Invoice prefix</span>
+                <input
+                  value={orgForm.invoice_prefix}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_prefix: e.target.value }))}
+                  placeholder="e.g. INV- or JOB-"
+                />
+              </label>
+              <label className="field">
+                <span>Default payment terms</span>
+                <input
+                  value={orgForm.default_payment_terms}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, default_payment_terms: e.target.value }))}
+                  placeholder="e.g. Net 14"
+                />
+              </label>
+              <label className="field">
+                <span>Default currency</span>
+                <input
+                  value={orgForm.currency}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, currency: e.target.value }))}
+                  placeholder="e.g. AUD"
+                />
+              </label>
+              <label className="field field--span">
+                <span>Default invoice notes</span>
+                <textarea
+                  rows={3}
+                  value={orgForm.invoice_notes}
+                  onChange={(e) => setOrgForm((prev) => ({ ...prev, invoice_notes: e.target.value }))}
+                  placeholder="Displayed on all invoices by default"
                 />
               </label>
               <div className="form-actions">
