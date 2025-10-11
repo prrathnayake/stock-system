@@ -184,6 +184,19 @@ export default function Invoices() {
     }
   })
 
+  const activeProducts = useMemo(
+    () => products.filter((product) => product.active !== false),
+    [products]
+  )
+
+  const productLabelMap = useMemo(() => {
+    const map = new Map()
+    products.forEach((product) => {
+      map.set(product.id, `${product.sku} — ${product.name}`)
+    })
+    return map
+  }, [products])
+
   const { data: activeInvoice } = useQuery({
     queryKey: ['invoice-detail', activeInvoiceId],
     queryFn: async () => {
@@ -344,6 +357,15 @@ export default function Invoices() {
       setErrorBanner('Select a product for each line item to ensure inventory is updated correctly.')
       return
     }
+    const hasInactiveSelection = form.lines.some((line) => {
+      const numericId = Number(line.product_id)
+      if (!numericId) return false
+      return !activeProducts.some((product) => product.id === numericId)
+    })
+    if (hasInactiveSelection) {
+      setErrorBanner('One or more line items reference a product that has been archived. Please choose an active product before generating the invoice.')
+      return
+    }
     createInvoiceMutation.mutate()
   }
 
@@ -368,11 +390,22 @@ export default function Invoices() {
     statusMutation.mutate({ id: activeInvoice.id, payload })
   }
 
-  function productOptions() {
-    return products.map((product) => ({
+  function productOptions(currentProductId) {
+    const options = activeProducts.map((product) => ({
       value: product.id,
-      label: `${product.sku} — ${product.name}`
+      label: productLabelMap.get(product.id) || product.name
     }))
+    const numericId = Number(currentProductId)
+    if (numericId > 0) {
+      const isActive = activeProducts.some((product) => product.id === numericId)
+      if (!isActive && productLabelMap.has(numericId)) {
+        options.push({
+          value: numericId,
+          label: `${productLabelMap.get(numericId)} (inactive)`
+        })
+      }
+    }
+    return options
   }
 
   function binsForProduct(productId) {
@@ -536,7 +569,7 @@ export default function Invoices() {
                           required
                         >
                           <option value="">Select product</option>
-                          {productOptions().map((option) => (
+                          {productOptions(line.product_id).map((option) => (
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
