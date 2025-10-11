@@ -37,6 +37,7 @@ router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) =>
     throw new HttpError(409, 'A product with that SKU already exists');
   }
   const created = await Product.create(parse.data);
+  await invalidateStockOverviewCache(created.organizationId);
   res.status(201).json(created);
 }));
 
