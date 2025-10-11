@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { io } from 'socket.io-client'
 import { useAuth } from '../providers/AuthProvider.jsx'
+import { ORGANIZATION_TYPES } from '../lib/appInfo.js'
+import TablePagination from '../components/TablePagination.jsx'
 
 const socket = io(import.meta.env.VITE_SOCKET_URL, { autoConnect: false })
 const reasonLabels = {
@@ -25,10 +27,14 @@ export default function Dashboard() {
   const organizationId = user?.organization?.id
 
   const orgName = organization?.legal_name || organization?.name || user?.organization?.name || null
+  const typeInfo = useMemo(() => {
+    const activeType = organization?.type || user?.organization?.type || ''
+    return ORGANIZATION_TYPES.find((item) => item.id === activeType) || null
+  }, [organization?.type, user?.organization?.type])
   const headerTitle = orgName ? `${orgName} inventory pulse` : 'Inventory control center'
   const headerSubtitle = orgName
-    ? `Search, curate and adjust your catalogue for ${orgName}.`
-    : 'Search, curate and adjust your catalogue with real-time visibility into stock health.'
+    ? `${typeInfo?.description ? `${typeInfo.description} ` : ''}Search, curate and adjust your catalogue for ${orgName}.`
+    : typeInfo?.description || 'Search, curate and adjust your catalogue with real-time visibility into stock health.'
   const timezoneSummary = useMemo(() => {
     if (!organization?.timezone) return null
     return `Timezone: ${organization.timezone}`
@@ -77,7 +83,6 @@ export default function Dashboard() {
       ...bin
     })))
     .sort((a, b) => b.on_hand - a.on_hand)
-    .slice(0, 5)
 
   const chartData = stock
     .slice()
@@ -91,6 +96,32 @@ export default function Dashboard() {
     }))
 
   const maxStackTotal = chartData.reduce((max, row) => Math.max(max, row.available + row.reserved), 0) || 1
+
+  const TABLE_PAGE_SIZE = 10
+
+  const lowStockTotalPages = Math.max(1, Math.ceil(lowStock.length / TABLE_PAGE_SIZE))
+  const visibleLowStock = useMemo(() => {
+    const start = (lowStockPage - 1) * TABLE_PAGE_SIZE
+    return lowStock.slice(start, start + TABLE_PAGE_SIZE)
+  }, [lowStock, lowStockPage])
+
+  const topBinsTotalPages = Math.max(1, Math.ceil(topBins.length / TABLE_PAGE_SIZE))
+  const visibleTopBins = useMemo(() => {
+    const start = (topBinsPage - 1) * TABLE_PAGE_SIZE
+    return topBins.slice(start, start + TABLE_PAGE_SIZE)
+  }, [topBins, topBinsPage])
+
+  useEffect(() => {
+    if (lowStockPage > lowStockTotalPages) {
+      setLowStockPage(lowStockTotalPages)
+    }
+  }, [lowStockPage, lowStockTotalPages])
+
+  useEffect(() => {
+    if (topBinsPage > topBinsTotalPages) {
+      setTopBinsPage(topBinsTotalPages)
+    }
+  }, [topBinsPage, topBinsTotalPages])
 
   const banners = useMemo(() => {
     const orgBanners = Array.isArray(organization?.banner_images)
@@ -107,6 +138,8 @@ export default function Dashboard() {
   }, [organization?.banner_images])
 
   const [activeBanner, setActiveBanner] = useState(0)
+  const [lowStockPage, setLowStockPage] = useState(1)
+  const [topBinsPage, setTopBinsPage] = useState(1)
 
   useEffect(() => {
     setActiveBanner(0)
@@ -233,6 +266,13 @@ export default function Dashboard() {
               <p className="muted">Prioritise replenishment for these parts.</p>
             </div>
           </div>
+          <TablePagination
+            page={lowStockPage}
+            totalPages={lowStockTotalPages}
+            onPrev={() => setLowStockPage((page) => Math.max(1, page - 1))}
+            onNext={() => setLowStockPage((page) => Math.min(lowStockTotalPages, page + 1))}
+            className="table-pagination--inline"
+          />
           <table className="table">
             <thead>
               <tr>
@@ -248,7 +288,7 @@ export default function Dashboard() {
                   <td colSpan={4} className="muted">No items require attention right now.</td>
                 </tr>
               )}
-              {lowStock.map((item) => (
+              {visibleLowStock.map((item) => (
                 <tr key={item.id}>
                   <td><span className="badge">{item.sku}</span></td>
                   <td>{item.name}</td>
@@ -258,6 +298,12 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          <TablePagination
+            page={lowStockPage}
+            totalPages={lowStockTotalPages}
+            onPrev={() => setLowStockPage((page) => Math.max(1, page - 1))}
+            onNext={() => setLowStockPage((page) => Math.min(lowStockTotalPages, page + 1))}
+          />
         </div>
 
         <div className="card">
@@ -305,6 +351,13 @@ export default function Dashboard() {
       <div className="card">
         <h3>Top stocked bins</h3>
         <p className="muted">Understand where inventory is concentrated across your network.</p>
+        <TablePagination
+          page={topBinsPage}
+          totalPages={topBinsTotalPages}
+          onPrev={() => setTopBinsPage((page) => Math.max(1, page - 1))}
+          onNext={() => setTopBinsPage((page) => Math.min(topBinsTotalPages, page + 1))}
+          className="table-pagination--inline"
+        />
         <table className="table">
           <thead>
             <tr>
@@ -317,7 +370,12 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {topBins.map((bin) => (
+            {topBins.length === 0 && (
+              <tr>
+                <td colSpan={6} className="muted">No bin allocations recorded.</td>
+              </tr>
+            )}
+            {visibleTopBins.map((bin) => (
               <tr key={`${bin.bin_id}-${bin.sku}`}>
                 <td>{bin.bin_code}</td>
                 <td>{bin.location || '—'}</td>
@@ -329,6 +387,12 @@ export default function Dashboard() {
             ))}
           </tbody>
         </table>
+        <TablePagination
+          page={topBinsPage}
+          totalPages={topBinsTotalPages}
+          onPrev={() => setTopBinsPage((page) => Math.max(1, page - 1))}
+          onNext={() => setTopBinsPage((page) => Math.min(topBinsTotalPages, page + 1))}
+        />
       </div>
     </div>
   )

@@ -7,6 +7,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { HttpError } from '../utils/httpError.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { createPasswordSchema } from '../utils/passwordPolicy.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/tokenService.js';
 import { recordActivity } from '../services/activityLog.js';
 import { touchUserPresence } from '../services/userPresence.js';
@@ -89,11 +90,13 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         phone: organization.phone,
         website: organization.website,
         logo_url: organization.logo_url,
+        type: organization.type,
         invoice_prefix: organization.invoice_prefix,
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
         currency: organization.currency,
         invoicing_enabled: organization.invoicing_enabled,
+        logo_updated_at: organization.updatedAt ? organization.updatedAt.toISOString?.() || new Date(organization.updatedAt).toISOString() : null,
         banner_images: Array.isArray(bannerImages) ? bannerImages : []
       } : null,
       ui_variant: user.ui_variant
@@ -119,10 +122,12 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   }
 }));
 
+const StrongPasswordSchema = createPasswordSchema(z);
+
 const CredentialUpdateSchema = z.object({
   full_name: z.string().min(1, 'Full name is required'),
   email: z.string().email('Valid email is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters long'),
+  password: StrongPasswordSchema,
   current_password: z.string().min(6, 'Current password is required')
 });
 
@@ -190,11 +195,13 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
         phone: organization.phone,
         website: organization.website,
         logo_url: organization.logo_url,
+        type: organization.type,
         invoice_prefix: organization.invoice_prefix,
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
         currency: organization.currency,
         invoicing_enabled: organization.invoicing_enabled,
+        logo_updated_at: organization.updatedAt ? organization.updatedAt.toISOString?.() || new Date(organization.updatedAt).toISOString() : null,
         banner_images: Array.isArray(bannerImages) ? bannerImages : []
       } : null,
       ui_variant: user.ui_variant

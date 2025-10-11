@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { setTokens, setUserProfile } from '../lib/auth'
 import { useAuth } from '../providers/AuthProvider.jsx'
+import { PASSWORD_REQUIREMENTS, STRONG_PASSWORD_PATTERN } from '../lib/appInfo.js'
 
 export default function FirstLogin() {
   const navigate = useNavigate()
@@ -21,6 +22,10 @@ export default function FirstLogin() {
 
     if (newPassword !== confirmPassword) {
       setError('New password and confirmation must match')
+      return
+    }
+    if (!STRONG_PASSWORD_PATTERN.test(newPassword)) {
+      setError(PASSWORD_REQUIREMENTS)
       return
     }
 
@@ -66,9 +71,10 @@ export default function FirstLogin() {
             <span>Current password</span>
             <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
           </label>
-          <label className="field" data-help="Choose a strong password with at least 8 characters.">
+          <label className="field" data-help={`Choose a strong password. ${PASSWORD_REQUIREMENTS}`}>
             <span>New password</span>
             <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+            <small className="muted">{PASSWORD_REQUIREMENTS}</small>
           </label>
           <label className="field" data-help="Confirm the new password to avoid typos.">
             <span>Confirm new password</span>

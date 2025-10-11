@@ -58,6 +58,7 @@ const bootstrapDefaults = {
     address: process.env.DEFAULT_ORG_ADDRESS || '123 Example Street\nSydney NSW 2000',
     phone: process.env.DEFAULT_ORG_PHONE || '',
     website: process.env.DEFAULT_ORG_WEBSITE || '',
+    type: process.env.DEFAULT_ORG_TYPE || 'service',
     invoicePrefix: process.env.DEFAULT_ORG_INVOICE_PREFIX || 'INV-',
     defaultPaymentTerms: process.env.DEFAULT_ORG_PAYMENT_TERMS || 'Due within 14 days',
     invoiceNotes: process.env.DEFAULT_ORG_INVOICE_NOTES || 'Please remit payment within the agreed terms.',

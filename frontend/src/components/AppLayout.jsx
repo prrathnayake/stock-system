@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { useTheme } from '../providers/ThemeProvider.jsx'
+import { APP_NAME, ORGANIZATION_TYPES } from '../lib/appInfo.js'
 
 export default function AppLayout() {
   const { user, logout, organization } = useAuth()
@@ -64,8 +65,10 @@ export default function AppLayout() {
     logout()
   }
 
-  const brandName = organization?.name || user?.organization?.name || 'Repair Center'
-  const brandSubtitle = organization?.legal_name || 'Operations Suite'
+  const activeType = organization?.type || user?.organization?.type || ''
+  const typeInfo = ORGANIZATION_TYPES.find((item) => item.id === activeType)
+  const brandName = organization?.name || user?.organization?.name || APP_NAME
+  const brandSubtitle = organization?.legal_name || typeInfo?.label || 'Operations Suite'
   const brandLogo = organization?.logo_asset_url || organization?.logo_url
 
   const navItems = useMemo(() => {
@@ -143,7 +146,7 @@ export default function AppLayout() {
           )}
           <div>
             <p className="sidebar__title">{brandName}</p>
-            <p className="sidebar__subtitle">{brandSubtitle}</p>
+            <p className="sidebar__subtitle" title={typeInfo?.description || brandSubtitle}>{brandSubtitle}</p>
           </div>
         </div>
         <nav className="sidebar__nav">

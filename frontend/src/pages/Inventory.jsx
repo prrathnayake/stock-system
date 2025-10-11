@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import StockHistoryChart from '../components/StockHistoryChart.jsx'
+import TablePagination from '../components/TablePagination.jsx'
 
 const initialProductForm = {
   sku: '',
@@ -35,6 +36,12 @@ export default function Inventory() {
   const [editForm, setEditForm] = useState(initialProductForm)
   const [activeStockTool, setActiveStockTool] = useState('history')
   const [notificationsOpen, setNotificationsOpen] = useState(true)
+  const [catalogPage, setCatalogPage] = useState(1)
+  const [serialsPage, setSerialsPage] = useState(1)
+  const [purchaseOrdersPage, setPurchaseOrdersPage] = useState(1)
+  const [rmaPage, setRmaPage] = useState(1)
+
+  const CATALOG_PAGE_SIZE = 10
 
   const queryClient = useQueryClient()
 
@@ -141,16 +148,37 @@ export default function Inventory() {
     })
   ), [filteredProducts, productMetaMap])
 
+  const catalogTotalPages = Math.max(1, Math.ceil(enrichedProducts.length / CATALOG_PAGE_SIZE))
+  const visibleProducts = useMemo(() => {
+    const start = (catalogPage - 1) * CATALOG_PAGE_SIZE
+    return enrichedProducts.slice(start, start + CATALOG_PAGE_SIZE)
+  }, [enrichedProducts, catalogPage])
+
+  useEffect(() => {
+    if (catalogPage > catalogTotalPages) {
+      setCatalogPage(catalogTotalPages)
+    }
+  }, [catalogPage, catalogTotalPages])
+
   useEffect(() => {
     if (!enrichedProducts.length) {
       setSelectedProductId(null)
       return
     }
-    const exists = enrichedProducts.some((row) => String(row.id) === selectedProductId)
-    if (!exists) {
+    const existsInList = enrichedProducts.some((row) => String(row.id) === String(selectedProductId))
+    if (!existsInList) {
       setSelectedProductId(String(enrichedProducts[0].id))
+      return
     }
-  }, [enrichedProducts, selectedProductId])
+    const existsInPage = visibleProducts.some((row) => String(row.id) === String(selectedProductId))
+    if (!existsInPage && visibleProducts.length > 0) {
+      setSelectedProductId(String(visibleProducts[0].id))
+    }
+  }, [enrichedProducts, visibleProducts, selectedProductId])
+
+  useEffect(() => {
+    setCatalogPage(1)
+  }, [query])
 
   const selectedProduct = useMemo(
     () => enrichedProducts.find((row) => String(row.id) === String(selectedProductId)) ?? null,
@@ -234,9 +262,47 @@ export default function Inventory() {
     [stock]
   )
 
-  const latestSerials = serials.slice(0, 8)
-  const openPurchaseOrders = purchaseOrders.slice(0, 5)
-  const openRmas = rmaCases.slice(0, 5)
+  const latestSerials = serials
+  const openPurchaseOrders = purchaseOrders
+  const openRmas = rmaCases
+
+  const AUX_PAGE_SIZE = 10
+
+  const serialsTotalPages = Math.max(1, Math.ceil(latestSerials.length / AUX_PAGE_SIZE))
+  const visibleSerials = useMemo(() => {
+    const start = (serialsPage - 1) * AUX_PAGE_SIZE
+    return latestSerials.slice(start, start + AUX_PAGE_SIZE)
+  }, [latestSerials, serialsPage])
+
+  const purchaseOrdersTotalPages = Math.max(1, Math.ceil(openPurchaseOrders.length / AUX_PAGE_SIZE))
+  const visiblePurchaseOrders = useMemo(() => {
+    const start = (purchaseOrdersPage - 1) * AUX_PAGE_SIZE
+    return openPurchaseOrders.slice(start, start + AUX_PAGE_SIZE)
+  }, [openPurchaseOrders, purchaseOrdersPage])
+
+  const rmaTotalPages = Math.max(1, Math.ceil(openRmas.length / AUX_PAGE_SIZE))
+  const visibleRmas = useMemo(() => {
+    const start = (rmaPage - 1) * AUX_PAGE_SIZE
+    return openRmas.slice(start, start + AUX_PAGE_SIZE)
+  }, [openRmas, rmaPage])
+
+  useEffect(() => {
+    if (serialsPage > serialsTotalPages) {
+      setSerialsPage(serialsTotalPages)
+    }
+  }, [serialsPage, serialsTotalPages])
+
+  useEffect(() => {
+    if (purchaseOrdersPage > purchaseOrdersTotalPages) {
+      setPurchaseOrdersPage(purchaseOrdersTotalPages)
+    }
+  }, [purchaseOrdersPage, purchaseOrdersTotalPages])
+
+  useEffect(() => {
+    if (rmaPage > rmaTotalPages) {
+      setRmaPage(rmaTotalPages)
+    }
+  }, [rmaPage, rmaTotalPages])
 
   const createProduct = useMutation({
     mutationFn: async (payload) => {
@@ -558,6 +624,13 @@ export default function Inventory() {
                     </label>
                   </div>
                 </div>
+                <TablePagination
+                  page={catalogPage}
+                  totalPages={catalogTotalPages}
+                  onPrev={() => setCatalogPage((page) => Math.max(1, page - 1))}
+                  onNext={() => setCatalogPage((page) => Math.min(catalogTotalPages, page + 1))}
+                  className="table-pagination--inline"
+                />
                 <table className="table inventory-table">
                   <thead>
                     <tr>
@@ -581,7 +654,7 @@ export default function Inventory() {
                         </td>
                       </tr>
                     )}
-                    {enrichedProducts.map((product) => (
+                    {visibleProducts.map((product) => (
                       <React.Fragment key={product.id}>
                         <tr
                           className={`inventory-table__row${String(product.id) === String(selectedProductId) ? ' inventory-table__row--active' : ''}`}
@@ -682,6 +755,12 @@ export default function Inventory() {
                     ))}
                   </tbody>
                 </table>
+                <TablePagination
+                  page={catalogPage}
+                  totalPages={catalogTotalPages}
+                  onPrev={() => setCatalogPage((page) => Math.max(1, page - 1))}
+                  onNext={() => setCatalogPage((page) => Math.min(catalogTotalPages, page + 1))}
+                />
               </div>
 
               <section className="card inventory__tools-card">
@@ -730,6 +809,19 @@ export default function Inventory() {
                           </div>
                           {historySummary && (
                             <span className="badge badge--muted">{historySummary.totalMoves} movements</span>
+                          )}
+                        </div>
+                        <div className="inventory__history-summary">
+                          {historySummary ? (
+                            <>
+                              <span><strong>Last update:</strong> {historySummary.lastUpdated ? new Date(historySummary.lastUpdated).toLocaleString() : '—'}</span>
+                              <span><strong>Total moves:</strong> {historySummary.totalMoves}</span>
+                              <span><strong>Current level:</strong> {historySummary.currentLevel}</span>
+                            </>
+                          ) : historyQuery.isFetching ? (
+                            <span className="muted">Loading history…</span>
+                          ) : (
+                            <span className="muted">Select a product to review stock movements.</span>
                           )}
                         </div>
                         {historyQuery.isFetching ? (
@@ -968,6 +1060,13 @@ export default function Inventory() {
                 <div className="card inventory__notification-card">
                   <h4>Serialised inventory</h4>
                   <p className="muted">Most recent serial numbers registered in the system.</p>
+                  <TablePagination
+                    page={serialsPage}
+                    totalPages={serialsTotalPages}
+                    onPrev={() => setSerialsPage((page) => Math.max(1, page - 1))}
+                    onNext={() => setSerialsPage((page) => Math.min(serialsTotalPages, page + 1))}
+                    className="table-pagination--inline"
+                  />
                   <div className="table-scroll">
                     <table className="table table--compact">
                       <thead>
@@ -984,7 +1083,7 @@ export default function Inventory() {
                             <td colSpan={4} className="muted">No serialised units recorded.</td>
                           </tr>
                         )}
-                        {latestSerials.map((serial) => (
+                        {visibleSerials.map((serial) => (
                           <tr key={serial.id}>
                             <td><span className="badge badge--muted">{serial.serial}</span></td>
                             <td>{serial.product?.name || serial.productId}</td>
@@ -995,6 +1094,12 @@ export default function Inventory() {
                       </tbody>
                     </table>
                   </div>
+                  <TablePagination
+                    page={serialsPage}
+                    totalPages={serialsTotalPages}
+                    onPrev={() => setSerialsPage((page) => Math.max(1, page - 1))}
+                    onNext={() => setSerialsPage((page) => Math.min(serialsTotalPages, page + 1))}
+                  />
                 </div>
 
                 <div className="card inventory__notification-card">
@@ -1020,33 +1125,48 @@ export default function Inventory() {
                 <div className="card inventory__notification-card">
                   <h4>Purchase orders</h4>
                   {canManageProcurement ? (
-                    <div className="table-scroll">
-                      <table className="table table--compact">
-                        <thead>
-                          <tr>
-                            <th>Reference</th>
-                            <th>Supplier</th>
-                            <th>Status</th>
-                            <th>Expected</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {openPurchaseOrders.length === 0 && (
+                    <>
+                      <TablePagination
+                        page={purchaseOrdersPage}
+                        totalPages={purchaseOrdersTotalPages}
+                        onPrev={() => setPurchaseOrdersPage((page) => Math.max(1, page - 1))}
+                        onNext={() => setPurchaseOrdersPage((page) => Math.min(purchaseOrdersTotalPages, page + 1))}
+                        className="table-pagination--inline"
+                      />
+                      <div className="table-scroll">
+                        <table className="table table--compact">
+                          <thead>
                             <tr>
-                              <td colSpan={4} className="muted">No purchase orders yet.</td>
+                              <th>Reference</th>
+                              <th>Supplier</th>
+                              <th>Status</th>
+                              <th>Expected</th>
                             </tr>
-                          )}
-                          {openPurchaseOrders.map((po) => (
-                            <tr key={po.id}>
-                              <td>{po.reference}</td>
-                              <td>{po.supplier?.name || '—'}</td>
-                              <td><span className="badge badge--info">{po.status}</span></td>
-                              <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {openPurchaseOrders.length === 0 && (
+                              <tr>
+                                <td colSpan={4} className="muted">No purchase orders yet.</td>
+                              </tr>
+                            )}
+                            {visiblePurchaseOrders.map((po) => (
+                              <tr key={po.id}>
+                                <td>{po.reference}</td>
+                                <td>{po.supplier?.name || '—'}</td>
+                                <td><span className="badge badge--info">{po.status}</span></td>
+                                <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <TablePagination
+                        page={purchaseOrdersPage}
+                        totalPages={purchaseOrdersTotalPages}
+                        onPrev={() => setPurchaseOrdersPage((page) => Math.max(1, page - 1))}
+                        onNext={() => setPurchaseOrdersPage((page) => Math.min(purchaseOrdersTotalPages, page + 1))}
+                      />
+                    </>
                   ) : (
                     <p className="muted">Purchase orders are available to inventory coordinators.</p>
                   )}
@@ -1055,33 +1175,48 @@ export default function Inventory() {
                 <div className="card inventory__notification-card">
                   <h4>RMA cases</h4>
                   {canManageProcurement ? (
-                    <div className="table-scroll">
-                      <table className="table table--compact">
-                        <thead>
-                          <tr>
-                            <th>Reference</th>
-                            <th>Supplier</th>
-                            <th>Status</th>
-                            <th>Credit</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {openRmas.length === 0 && (
+                    <>
+                      <TablePagination
+                        page={rmaPage}
+                        totalPages={rmaTotalPages}
+                        onPrev={() => setRmaPage((page) => Math.max(1, page - 1))}
+                        onNext={() => setRmaPage((page) => Math.min(rmaTotalPages, page + 1))}
+                        className="table-pagination--inline"
+                      />
+                      <div className="table-scroll">
+                        <table className="table table--compact">
+                          <thead>
                             <tr>
-                              <td colSpan={4} className="muted">No RMA activity.</td>
+                              <th>Reference</th>
+                              <th>Supplier</th>
+                              <th>Status</th>
+                              <th>Credit</th>
                             </tr>
-                          )}
-                          {openRmas.map((rma) => (
-                            <tr key={rma.id}>
-                              <td>{rma.reference}</td>
-                              <td>{rma.supplier?.name || '—'}</td>
-                              <td>{rma.status}</td>
-                              <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {openRmas.length === 0 && (
+                              <tr>
+                                <td colSpan={4} className="muted">No RMA activity.</td>
+                              </tr>
+                            )}
+                            {visibleRmas.map((rma) => (
+                              <tr key={rma.id}>
+                                <td>{rma.reference}</td>
+                                <td>{rma.supplier?.name || '—'}</td>
+                                <td>{rma.status}</td>
+                                <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <TablePagination
+                        page={rmaPage}
+                        totalPages={rmaTotalPages}
+                        onPrev={() => setRmaPage((page) => Math.max(1, page - 1))}
+                        onNext={() => setRmaPage((page) => Math.min(rmaTotalPages, page + 1))}
+                      />
+                    </>
                   ) : (
                     <p className="muted">RMA tracking is reserved for inventory leads.</p>
                   )}
@@ -1115,33 +1250,48 @@ export default function Inventory() {
           <h3>Purchase orders</h3>
           <p className="muted">Open procurement activity awaiting receipt.</p>
           {canManageProcurement ? (
-            <div className="table-scroll">
-              <table className="table table--compact">
-                <thead>
-                  <tr>
-                    <th>Reference</th>
-                    <th>Supplier</th>
-                    <th>Status</th>
-                    <th>Expected</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {openPurchaseOrders.length === 0 && (
+            <>
+              <TablePagination
+                page={purchaseOrdersPage}
+                totalPages={purchaseOrdersTotalPages}
+                onPrev={() => setPurchaseOrdersPage((page) => Math.max(1, page - 1))}
+                onNext={() => setPurchaseOrdersPage((page) => Math.min(purchaseOrdersTotalPages, page + 1))}
+                className="table-pagination--inline"
+              />
+              <div className="table-scroll">
+                <table className="table table--compact">
+                  <thead>
                     <tr>
-                      <td colSpan={4} className="muted">No purchase orders yet.</td>
+                      <th>Reference</th>
+                      <th>Supplier</th>
+                      <th>Status</th>
+                      <th>Expected</th>
                     </tr>
-                  )}
-                  {openPurchaseOrders.map((po) => (
-                    <tr key={po.id}>
-                      <td>{po.reference}</td>
-                      <td>{po.supplier?.name || '—'}</td>
-                      <td><span className="badge badge--info">{po.status}</span></td>
-                      <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {openPurchaseOrders.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="muted">No purchase orders yet.</td>
+                      </tr>
+                    )}
+                    {visiblePurchaseOrders.map((po) => (
+                      <tr key={po.id}>
+                        <td>{po.reference}</td>
+                        <td>{po.supplier?.name || '—'}</td>
+                        <td><span className="badge badge--info">{po.status}</span></td>
+                        <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <TablePagination
+                page={purchaseOrdersPage}
+                totalPages={purchaseOrdersTotalPages}
+                onPrev={() => setPurchaseOrdersPage((page) => Math.max(1, page - 1))}
+                onNext={() => setPurchaseOrdersPage((page) => Math.min(purchaseOrdersTotalPages, page + 1))}
+              />
+            </>
           ) : (
             <p className="muted">Purchase orders are available to inventory coordinators.</p>
           )}
@@ -1151,33 +1301,48 @@ export default function Inventory() {
           <h3>RMA cases</h3>
           <p className="muted">Returns and credits awaiting supplier resolution.</p>
           {canManageProcurement ? (
-            <div className="table-scroll">
-              <table className="table table--compact">
-                <thead>
-                  <tr>
-                    <th>Reference</th>
-                    <th>Supplier</th>
-                    <th>Status</th>
-                    <th>Credit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {openRmas.length === 0 && (
+            <>
+              <TablePagination
+                page={rmaPage}
+                totalPages={rmaTotalPages}
+                onPrev={() => setRmaPage((page) => Math.max(1, page - 1))}
+                onNext={() => setRmaPage((page) => Math.min(rmaTotalPages, page + 1))}
+                className="table-pagination--inline"
+              />
+              <div className="table-scroll">
+                <table className="table table--compact">
+                  <thead>
                     <tr>
-                      <td colSpan={4} className="muted">No RMA activity.</td>
+                      <th>Reference</th>
+                      <th>Supplier</th>
+                      <th>Status</th>
+                      <th>Credit</th>
                     </tr>
-                  )}
-                  {openRmas.map((rma) => (
-                    <tr key={rma.id}>
-                      <td>{rma.reference}</td>
-                      <td>{rma.supplier?.name || '—'}</td>
-                      <td>{rma.status}</td>
-                      <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {openRmas.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="muted">No RMA activity.</td>
+                      </tr>
+                    )}
+                    {visibleRmas.map((rma) => (
+                      <tr key={rma.id}>
+                        <td>{rma.reference}</td>
+                        <td>{rma.supplier?.name || '—'}</td>
+                        <td>{rma.status}</td>
+                        <td>{rma.credit_amount ? `$${Number(rma.credit_amount).toFixed(2)}` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <TablePagination
+                page={rmaPage}
+                totalPages={rmaTotalPages}
+                onPrev={() => setRmaPage((page) => Math.max(1, page - 1))}
+                onNext={() => setRmaPage((page) => Math.min(rmaTotalPages, page + 1))}
+              />
+            </>
           ) : (
             <p className="muted">RMA tracking is reserved for inventory leads.</p>
           )}

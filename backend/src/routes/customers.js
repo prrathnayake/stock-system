@@ -18,6 +18,14 @@ const UpdateSchema = CustomerSchema.partial().refine((payload) => Object.keys(pa
   message: 'At least one field must be provided for an update.'
 });
 
+function normalizePhone(value) {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/[^\d+]/g, '');
+  return digits.length ? digits : null;
+}
+
 function sanitizeCustomerPayload(payload) {
   const result = {};
   for (const [key, value] of Object.entries(payload)) {
@@ -35,6 +43,9 @@ function sanitizeCustomerPayload(payload) {
   }
   if (typeof result.email === 'string') {
     result.email = result.email.toLowerCase();
+  }
+  if (typeof result.phone === 'string') {
+    result.phone = normalizePhone(result.phone);
   }
   return result;
 }
@@ -68,6 +79,18 @@ export default function createCustomerRoutes() {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
     }
     const payload = sanitizeCustomerPayload(parsed.data);
+    if (payload.email) {
+      const existingEmail = await Customer.findOne({ where: { email: payload.email } });
+      if (existingEmail) {
+        throw new HttpError(409, 'A customer with that email already exists');
+      }
+    }
+    if (payload.phone) {
+      const existingPhone = await Customer.findOne({ where: { phone: payload.phone } });
+      if (existingPhone) {
+        throw new HttpError(409, 'A customer with that phone number already exists');
+      }
+    }
     const customer = await Customer.create(payload);
     res.status(201).json(customer);
   }));
@@ -86,6 +109,18 @@ export default function createCustomerRoutes() {
       throw new HttpError(404, 'Customer not found');
     }
     const payload = sanitizeCustomerPayload(parsed.data);
+    if (payload.email) {
+      const existingEmail = await Customer.findOne({ where: { email: payload.email } });
+      if (existingEmail && existingEmail.id !== customer.id) {
+        throw new HttpError(409, 'Another customer is already using that email');
+      }
+    }
+    if (payload.phone) {
+      const existingPhone = await Customer.findOne({ where: { phone: payload.phone } });
+      if (existingPhone && existingPhone.id !== customer.id) {
+        throw new HttpError(409, 'Another customer is already using that phone number');
+      }
+    }
     Object.assign(customer, payload);
     await customer.save();
     res.json(customer);

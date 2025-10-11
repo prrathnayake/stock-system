@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../providers/AuthProvider.jsx'
+import TablePagination from '../components/TablePagination.jsx'
 
 const statusOptions = [
   { id: 'draft', label: 'Draft' },
@@ -73,6 +74,11 @@ export default function Invoices() {
   const [banner, setBanner] = useState(null)
   const [errorBanner, setErrorBanner] = useState(null)
   const [activeInvoiceId, setActiveInvoiceId] = useState(null)
+  const [previewPage, setPreviewPage] = useState(1)
+  const [invoicePage, setInvoicePage] = useState(1)
+  const [detailLinesPage, setDetailLinesPage] = useState(1)
+
+  const TABLE_PAGE_SIZE = 10
 
   const initialOrgDefaults = {
     supplier_name: organization?.legal_name || organization?.name || '',
@@ -160,6 +166,18 @@ export default function Invoices() {
     }
   }, [form.lines])
 
+  const previewTotalPages = Math.max(1, Math.ceil(form.lines.length / TABLE_PAGE_SIZE))
+  const visiblePreviewLines = useMemo(() => {
+    const start = (previewPage - 1) * TABLE_PAGE_SIZE
+    return form.lines.slice(start, start + TABLE_PAGE_SIZE)
+  }, [form.lines, previewPage])
+
+  useEffect(() => {
+    if (previewPage > previewTotalPages) {
+      setPreviewPage(previewTotalPages)
+    }
+  }, [previewPage, previewTotalPages])
+
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {
@@ -184,6 +202,18 @@ export default function Invoices() {
     }
   })
 
+  const invoiceTotalPages = Math.max(1, Math.ceil(invoices.length / TABLE_PAGE_SIZE))
+  const visibleInvoices = useMemo(() => {
+    const start = (invoicePage - 1) * TABLE_PAGE_SIZE
+    return invoices.slice(start, start + TABLE_PAGE_SIZE)
+  }, [invoices, invoicePage])
+
+  useEffect(() => {
+    if (invoicePage > invoiceTotalPages) {
+      setInvoicePage(invoiceTotalPages)
+    }
+  }, [invoicePage, invoiceTotalPages])
+
   const activeProducts = useMemo(
     () => products.filter((product) => product.active !== false),
     [products]
@@ -205,6 +235,23 @@ export default function Invoices() {
     },
     enabled: Boolean(activeInvoiceId)
   })
+
+  const activeInvoiceLines = activeInvoice?.lines ?? []
+  const detailTotalPages = Math.max(1, Math.ceil(activeInvoiceLines.length / TABLE_PAGE_SIZE))
+  const visibleDetailLines = useMemo(() => {
+    const start = (detailLinesPage - 1) * TABLE_PAGE_SIZE
+    return activeInvoiceLines.slice(start, start + TABLE_PAGE_SIZE)
+  }, [activeInvoiceLines, detailLinesPage])
+
+  useEffect(() => {
+    if (detailLinesPage > detailTotalPages) {
+      setDetailLinesPage(detailTotalPages)
+    }
+  }, [detailLinesPage, detailTotalPages])
+
+  useEffect(() => {
+    setDetailLinesPage(1)
+  }, [activeInvoiceId])
 
   const [statusForm, setStatusForm] = useState({
     status: 'draft',
@@ -739,6 +786,13 @@ export default function Invoices() {
                 </p>
               )}
             </section>
+            <TablePagination
+              page={previewPage}
+              totalPages={previewTotalPages}
+              onPrev={() => setPreviewPage((page) => Math.max(1, page - 1))}
+              onNext={() => setPreviewPage((page) => Math.min(previewTotalPages, page + 1))}
+              className="table-pagination--inline"
+            />
             <table className="table">
               <thead>
                 <tr>
@@ -755,10 +809,10 @@ export default function Invoices() {
                     <td colSpan={5} className="muted">Add products or services to populate the invoice.</td>
                   </tr>
                 )}
-                {form.lines.map((line, index) => {
+                {visiblePreviewLines.map((line, index) => {
                   const { line_subtotal, line_gst, line_total } = calculateLineTotals(line)
                   return (
-                    <tr key={index}>
+                    <tr key={`${index}-${line.product_id || line.description || 'line'}`}>
                       <td>{line.description || '—'}</td>
                       <td>{line.quantity}</td>
                       <td>{formatCurrency(line.unit_price, form.currency)}</td>
@@ -769,6 +823,12 @@ export default function Invoices() {
                 })}
               </tbody>
             </table>
+            <TablePagination
+              page={previewPage}
+              totalPages={previewTotalPages}
+              onPrev={() => setPreviewPage((page) => Math.max(1, page - 1))}
+              onNext={() => setPreviewPage((page) => Math.min(previewTotalPages, page + 1))}
+            />
             <div className="invoice-preview__totals">
               <div>
                 <span>Subtotal</span>
@@ -809,6 +869,13 @@ export default function Invoices() {
             <p className="muted">Track outstanding balances and progress invoices through payment stages.</p>
           </div>
         </div>
+        <TablePagination
+          page={invoicePage}
+          totalPages={invoiceTotalPages}
+          onPrev={() => setInvoicePage((page) => Math.max(1, page - 1))}
+          onNext={() => setInvoicePage((page) => Math.min(invoiceTotalPages, page + 1))}
+          className="table-pagination--inline"
+        />
         <table className="table">
           <thead>
             <tr>
@@ -827,7 +894,7 @@ export default function Invoices() {
                 <td colSpan={7} className="muted">No invoices created yet.</td>
               </tr>
             )}
-            {invoices.map((invoice) => (
+            {visibleInvoices.map((invoice) => (
               <tr key={invoice.id}>
                 <td>{invoice.invoice_number}</td>
                 <td>{invoice.customer_name}</td>
@@ -844,6 +911,12 @@ export default function Invoices() {
             ))}
           </tbody>
         </table>
+        <TablePagination
+          page={invoicePage}
+          totalPages={invoiceTotalPages}
+          onPrev={() => setInvoicePage((page) => Math.max(1, page - 1))}
+          onNext={() => setInvoicePage((page) => Math.min(invoiceTotalPages, page + 1))}
+        />
       </div>
 
       {activeInvoice && (
@@ -865,6 +938,13 @@ export default function Invoices() {
               <p><strong>Due:</strong> {activeInvoice.due_date ? new Date(activeInvoice.due_date).toLocaleDateString() : '—'}</p>
             </div>
 
+            <TablePagination
+              page={detailLinesPage}
+              totalPages={detailTotalPages}
+              onPrev={() => setDetailLinesPage((page) => Math.max(1, page - 1))}
+              onNext={() => setDetailLinesPage((page) => Math.min(detailTotalPages, page + 1))}
+              className="table-pagination--inline"
+            />
             <table className="table table--compact">
               <thead>
                 <tr>
@@ -876,7 +956,12 @@ export default function Invoices() {
                 </tr>
               </thead>
               <tbody>
-                {activeInvoice.lines.map((line) => (
+                {activeInvoiceLines.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="muted">No line items recorded for this invoice.</td>
+                  </tr>
+                )}
+                {visibleDetailLines.map((line) => (
                   <tr key={line.id}>
                     <td>{line.description}</td>
                     <td>{line.quantity}</td>
@@ -887,6 +972,12 @@ export default function Invoices() {
                 ))}
               </tbody>
             </table>
+            <TablePagination
+              page={detailLinesPage}
+              totalPages={detailTotalPages}
+              onPrev={() => setDetailLinesPage((page) => Math.max(1, page - 1))}
+              onNext={() => setDetailLinesPage((page) => Math.min(detailTotalPages, page + 1))}
+            />
 
             <section>
               <h3>Payments</h3>

@@ -1,4 +1,4 @@
-# Repair Center Stock System – Capability Audit
+# Stock System – Capability Audit
 
 This audit cross-checks the repository against the requested capabilities and highlights the highest-impact additions.
 
@@ -18,7 +18,7 @@ This audit cross-checks the repository against the requested capabilities and hi
 | Purchasing flow | ✅ Present | Suppliers, purchase orders, and receiving APIs update stock levels, emit stock moves, and surface in the operations dashboard for inventory managers.【F:backend/src/db.js†L151-L213】【F:backend/src/routes/purchasing.js†L1-L171】【F:frontend/src/pages/Inventory.jsx†L1000-L1158】 |
 | Security hardening | ✅ Present | Optional TLS bootstrapping, rotating JWT/refresh secrets, and a scheduled backup service with admin download endpoints close the previous gaps in transport security, secret rotation, and disaster recovery.【F:backend/src/index.js†L1-L32】【F:backend/src/config.js†L1-L71】【F:backend/src/services/tokenService.js†L1-L52】【F:backend/src/services/backup.js†L1-L73】【F:backend/src/routes/backups.js†L1-L36】 |
 
-## Repair Center Workflows
+## Stock Workflows
 
 | Workflow | Status | Evidence & Notes |
 | --- | --- | --- |

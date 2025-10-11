@@ -9,7 +9,8 @@ import {
   createSale,
   cancelSale,
   getSaleById,
-  listSales
+  listSales,
+  updateSaleDetails
 } from '../services/sales.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
 
@@ -25,6 +26,14 @@ const CreateSaleSchema = z.object({
 });
 
 const StatusQuery = z.enum(['reserved', 'backorder', 'complete', 'canceled']).optional();
+
+const UpdateSaleSchema = z.object({
+  reference: z.string().max(64).optional(),
+  notes: z.string().max(2000).optional(),
+  customer_id: z.number().int().positive().optional()
+}).refine((payload) => Object.keys(payload).length > 0, {
+  message: 'Provide at least one field to update.'
+});
 
 export default function createSalesRoutes(io) {
   const router = Router();
@@ -86,6 +95,19 @@ export default function createSalesRoutes(io) {
     const sale = await cancelSale(id, req.user);
     await invalidateStockOverviewCache(req.user.organization_id);
     io?.emit('stock:update', { hint: 'sale-cancel', sale_id: sale.id, organization_id: req.user.organization_id });
+    res.json(sale);
+  }));
+
+  router.patch('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new HttpError(400, 'Invalid sale id');
+    }
+    const parsed = UpdateSaleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
+    }
+    const sale = await updateSaleDetails(id, parsed.data, req.user);
     res.json(sale);
   }));
 

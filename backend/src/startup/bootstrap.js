@@ -43,6 +43,7 @@ async function ensureDefaultOrganization(transaction) {
     address: defaults.address || null,
     phone: defaults.phone || null,
     website: defaults.website || null,
+    type: defaults.type || null,
     default_payment_terms: defaults.defaultPaymentTerms,
     invoice_notes: defaults.invoiceNotes,
     invoice_prefix: defaults.invoicePrefix,

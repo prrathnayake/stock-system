@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
+import { APP_NAME, PASSWORD_REQUIREMENTS } from '../lib/appInfo.js'
 
 export default function Login() {
   const [email, setEmail] = useState('admin@example.com')
@@ -34,15 +35,15 @@ export default function Login() {
       <div className="login__panel">
         <div className="login__brand">
           <span className="sidebar__dot" />
-          <h1>Repair Center OS</h1>
-          <p>Authenticate to access the unified inventory dashboard.</p>
+          <h1>{APP_NAME}</h1>
+          <p>Authenticate to access your centralized stock workspace.</p>
         </div>
         <form className="login__form" onSubmit={submit}>
-          <label className="field" data-help="Email address associated with your Stock System user account.">
+          <label className="field" data-help={`Email address associated with your ${APP_NAME} user account.`}>
             <span>Email</span>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required />
           </label>
-          <label className="field" data-help="Your secure account password. It is case sensitive.">
+          <label className="field" data-help={`Your secure account password. ${PASSWORD_REQUIREMENTS}`}>
             <span>Password</span>
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required />
           </label>

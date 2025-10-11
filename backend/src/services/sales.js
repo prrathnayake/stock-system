@@ -495,3 +495,61 @@ export async function cancelSale(id, actor) {
     return plain;
   });
 }
+
+export async function updateSaleDetails(id, updates, actor) {
+  return withTransaction(async (transaction) => {
+    const sale = await loadSale(id, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!sale) {
+      throw new HttpError(404, 'Sale not found');
+    }
+
+    const changes = {};
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'reference')) {
+      const nextReference = normalizeText(updates.reference);
+      if (nextReference !== sale.reference) {
+        sale.reference = nextReference;
+        changes.reference = nextReference ?? null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'notes')) {
+      const nextNotes = normalizeText(updates.notes);
+      if (nextNotes !== sale.notes) {
+        sale.notes = nextNotes;
+        changes.notes = nextNotes ?? null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'customer_id')) {
+      const nextCustomer = await Customer.findByPk(updates.customer_id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!nextCustomer) {
+        throw new HttpError(404, 'Customer not found');
+      }
+      if (sale.customerId !== nextCustomer.id) {
+        sale.customerId = nextCustomer.id;
+        changes.customer_id = nextCustomer.id;
+      }
+    }
+
+    if (Object.keys(changes).length === 0) {
+      return toPlainSale(sale);
+    }
+
+    await sale.save({ transaction });
+    const fresh = await loadSale(sale.id, { transaction });
+    const plain = toPlainSale(fresh);
+
+    await recordActivity({
+      organizationId: plain.organizationId ?? actor?.organization_id,
+      userId: actor?.id,
+      action: 'sale.updated',
+      entityType: 'sale',
+      entityId: sale.id,
+      description: `Sale #${sale.id} details updated`,
+      metadata: { updates: changes }
+    }, { transaction }).catch(() => {});
+
+    return plain;
+  });
+}
