@@ -43,6 +43,10 @@ export function createApp() {
   app.use(express.urlencoded({ extended: false }));
   app.use(rateLimit({ windowMs: 60_000, limit: 120, legacyHeaders: false }));
   app.use(morgan(config.env === 'production' ? 'combined' : 'dev'));
+  app.use(config.uploads.publicPath, express.static(config.uploads.directory, {
+    fallthrough: false,
+    maxAge: '7d'
+  }));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
 

@@ -398,7 +398,7 @@ export default function Inventory() {
           <p className="muted">Search, curate and adjust your catalogue with real-time visibility into stock health.</p>
         </div>
         <div className="inventory__header-actions">
-          <label className="field">
+          <label className="field" data-help="Filter the catalogue by SKU or product name.">
             <span>Search catalogue</span>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by SKU or product name" />
           </label>
@@ -617,7 +617,7 @@ export default function Inventory() {
       <div className="inventory__forms">
         <form className="card form-grid" onSubmit={handleCreateProduct}>
           <h3>Create product</h3>
-          <label className="field">
+          <label className="field" data-help="Unique identifier used for scanning, search and integrations.">
             <span>SKU</span>
             <input
               value={productForm.sku}
@@ -626,7 +626,7 @@ export default function Inventory() {
               required
             />
           </label>
-          <label className="field">
+          <label className="field" data-help="Descriptive name your team recognises on pick lists and invoices.">
             <span>Name</span>
             <input
               value={productForm.name}
@@ -635,7 +635,7 @@ export default function Inventory() {
               required
             />
           </label>
-          <label className="field">
+          <label className="field" data-help="Base unit for tracking this item (e.g. each, box, pack).">
             <span>Unit of measure</span>
             <input
               value={productForm.uom}
@@ -643,7 +643,7 @@ export default function Inventory() {
               placeholder="ea"
             />
           </label>
-          <label className="field">
+          <label className="field" data-help="Quantity at which replenishment reminders should trigger.">
             <span>Reorder point</span>
             <input
               type="number"
@@ -652,7 +652,7 @@ export default function Inventory() {
               onChange={(e) => setProductForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
             />
           </label>
-          <label className="field">
+          <label className="field" data-help="Average supplier lead time in days.">
             <span>Lead time (days)</span>
             <input
               type="number"
@@ -661,7 +661,7 @@ export default function Inventory() {
               onChange={(e) => setProductForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
             />
           </label>
-          <label className="field field--checkbox">
+          <label className="field field--checkbox" data-help="Track individual serial numbers for warranty or traceability.">
             <input
               type="checkbox"
               checked={productForm.track_serial}
@@ -678,7 +678,7 @@ export default function Inventory() {
 
         <form className="card form-grid" onSubmit={handleAdjustStock}>
           <h3>Adjust stock</h3>
-          <label className="field">
+          <label className="field" data-help="Select the item that requires a stock adjustment.">
             <span>Product</span>
             <select
               value={adjustForm.product_id}
@@ -693,7 +693,7 @@ export default function Inventory() {
               ))}
             </select>
           </label>
-          <label className="field">
+          <label className="field" data-help="Bin location receiving or issuing the stock movement.">
             <span>Bin</span>
             <select
               value={adjustForm.bin_id}
@@ -709,7 +709,7 @@ export default function Inventory() {
               ))}
             </select>
           </label>
-          <label className="field">
+          <label className="field" data-help="Number of units being moved in this adjustment.">
             <span>Quantity</span>
             <input
               type="number"
@@ -719,7 +719,7 @@ export default function Inventory() {
               required
             />
           </label>
-          <label className="field">
+          <label className="field" data-help="Choose whether inventory is being added or removed.">
             <span>Action</span>
             <select
               value={adjustForm.direction}
@@ -758,31 +758,33 @@ export default function Inventory() {
         <div className="card">
           <h3>Serialised inventory</h3>
           <p className="muted">Most recent serial numbers registered in the system.</p>
-          <table className="table table--compact">
-            <thead>
-              <tr>
-                <th>Serial</th>
-                <th>Product</th>
-                <th>Status</th>
-                <th>Bin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {latestSerials.length === 0 && (
+          <div className="table-scroll">
+            <table className="table table--compact">
+              <thead>
                 <tr>
-                  <td colSpan={4} className="muted">No serialised units recorded.</td>
+                  <th>Serial</th>
+                  <th>Product</th>
+                  <th>Status</th>
+                  <th>Bin</th>
                 </tr>
-              )}
-              {latestSerials.map((serial) => (
-                <tr key={serial.id}>
-                  <td><span className="badge badge--muted">{serial.serial}</span></td>
-                  <td>{serial.product?.name || serial.productId}</td>
-                  <td><span className={`badge badge--${serial.status === 'available' ? 'success' : serial.status === 'faulty' ? 'danger' : 'info'}`}>{serial.status}</span></td>
-                  <td>{serial.bin?.code || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {latestSerials.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="muted">No serialised units recorded.</td>
+                  </tr>
+                )}
+                {latestSerials.map((serial) => (
+                  <tr key={serial.id}>
+                    <td><span className="badge badge--muted">{serial.serial}</span></td>
+                    <td>{serial.product?.name || serial.productId}</td>
+                    <td><span className={`badge badge--${serial.status === 'available' ? 'success' : serial.status === 'faulty' ? 'danger' : 'info'}`}>{serial.status}</span></td>
+                    <td>{serial.bin?.code || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="card">
@@ -810,31 +812,33 @@ export default function Inventory() {
           <h3>Purchase orders</h3>
           <p className="muted">Open procurement activity awaiting receipt.</p>
           {canManageProcurement ? (
-            <table className="table table--compact">
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Supplier</th>
-                  <th>Status</th>
-                  <th>Expected</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openPurchaseOrders.length === 0 && (
+            <div className="table-scroll">
+              <table className="table table--compact">
+                <thead>
                   <tr>
-                    <td colSpan={4} className="muted">No purchase orders yet.</td>
+                    <th>Reference</th>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th>Expected</th>
                   </tr>
-                )}
-                {openPurchaseOrders.map((po) => (
-                  <tr key={po.id}>
-                    <td>{po.reference}</td>
-                    <td>{po.supplier?.name || '—'}</td>
-                    <td><span className="badge badge--info">{po.status}</span></td>
-                    <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {openPurchaseOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="muted">No purchase orders yet.</td>
+                    </tr>
+                  )}
+                  {openPurchaseOrders.map((po) => (
+                    <tr key={po.id}>
+                      <td>{po.reference}</td>
+                      <td>{po.supplier?.name || '—'}</td>
+                      <td><span className="badge badge--info">{po.status}</span></td>
+                      <td>{po.expected_at ? new Date(po.expected_at).toLocaleDateString() : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="muted">Purchase orders are available to inventory coordinators.</p>
           )}
@@ -888,7 +892,7 @@ export default function Inventory() {
               </button>
             </div>
             <form className="form-grid" onSubmit={handleUpdateProduct}>
-              <label className="field">
+              <label className="field" data-help="Update the product's unique identifier.">
                 <span>SKU</span>
                 <input
                   value={editForm.sku}
@@ -896,7 +900,7 @@ export default function Inventory() {
                   required
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Friendly name used across the app and exports.">
                 <span>Name</span>
                 <input
                   value={editForm.name}
@@ -904,14 +908,14 @@ export default function Inventory() {
                   required
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Measurement unit for this item.">
                 <span>Unit of measure</span>
                 <input
                   value={editForm.uom}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, uom: e.target.value }))}
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Stock threshold that triggers reorder workflows.">
                 <span>Reorder point</span>
                 <input
                   type="number"
@@ -920,7 +924,7 @@ export default function Inventory() {
                   onChange={(e) => setEditForm((prev) => ({ ...prev, reorder_point: e.target.value }))}
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Current supplier lead time in days.">
                 <span>Lead time (days)</span>
                 <input
                   type="number"
@@ -929,7 +933,7 @@ export default function Inventory() {
                   onChange={(e) => setEditForm((prev) => ({ ...prev, lead_time_days: e.target.value }))}
                 />
               </label>
-              <label className="field field--checkbox">
+              <label className="field field--checkbox" data-help="Keep serial tracking enabled for warranty traceability.">
                 <input
                   type="checkbox"
                   checked={editForm.track_serial}

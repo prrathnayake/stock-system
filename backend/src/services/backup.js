@@ -1,7 +1,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import cron from 'node-cron';
-import mysqldump from 'mysqldump';
+import mysql from 'mysql2/promise';
+import { escape as mysqlEscape } from 'mysql2';
 import { config } from '../config.js';
 
 const RESOLVED_DIR = path.resolve(process.cwd(), config.backup.directory);
@@ -34,19 +35,63 @@ export async function ensureBackupDir() {
 export async function runBackup() {
   await ensureBackupDir();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dialect = (config.db.dialect || 'mysql').toLowerCase();
+  if (dialect !== 'mysql') {
+    throw new Error(`Database backups are only supported for MySQL connections (received ${dialect}).`);
+  }
   const file = path.join(RESOLVED_DIR, `${config.db.name}-${timestamp}.sql`);
-  await mysqldump({
-    connection: {
-      host: config.db.host,
-      port: config.db.port,
-      user: config.db.user,
-      password: config.db.pass,
-      database: config.db.name
-    },
-    dumpToFile: file
-  });
+  await generateMysqlDump(file);
   await purgeExpiredBackups();
   return file;
+}
+
+async function generateMysqlDump(targetPath) {
+  const header = [
+    '-- Stock System SQL backup',
+    `-- Generated at ${new Date().toISOString()}`,
+    'SET FOREIGN_KEY_CHECKS=0;'
+  ];
+  const connection = await mysql.createConnection({
+    host: config.db.host,
+    port: config.db.port,
+    user: config.db.user,
+    password: config.db.pass,
+    database: config.db.name
+  });
+  try {
+    const [tables] = await connection.query('SHOW FULL TABLES WHERE Table_type = "BASE TABLE"');
+    const lines = [...header];
+    for (const row of tables) {
+      const values = Object.values(row);
+      if (!values.length) continue;
+      const tableName = String(values[0]);
+      const [createRows] = await connection.query(`SHOW CREATE TABLE \`${tableName}\``);
+      const createStatement = createRows?.[0]?.['Create Table'];
+      if (!createStatement) continue;
+      lines.push(`\n-- Table structure for \`${tableName}\``);
+      lines.push(`DROP TABLE IF EXISTS \`${tableName}\`;`);
+      lines.push(`${createStatement};`);
+
+      const [rows] = await connection.query(`SELECT * FROM \`${tableName}\``);
+      if (!rows.length) continue;
+      const columns = Object.keys(rows[0]);
+      const columnList = columns.map((col) => `\`${col}\``).join(', ');
+      const batchSize = 250;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const slice = rows.slice(i, i + batchSize);
+        const valuesList = slice.map((record) => {
+          const valueParts = columns.map((col) => mysqlEscape(record[col]));
+          return `(${valueParts.join(', ')})`;
+        });
+        lines.push(`INSERT INTO \`${tableName}\` (${columnList}) VALUES`);
+        lines.push(`${valuesList.join(',\n')};`);
+      }
+    }
+    lines.push('\nSET FOREIGN_KEY_CHECKS=1;');
+    await fs.writeFile(targetPath, lines.join('\n'), 'utf8');
+  } finally {
+    await connection.end();
+  }
 }
 
 export async function listBackups() {

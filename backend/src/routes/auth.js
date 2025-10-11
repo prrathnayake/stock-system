@@ -13,7 +13,6 @@ import { recordActivity } from '../services/activityLog.js';
 const router = Router();
 
 const LoginSchema = z.object({
-  organization: z.string().min(1, 'Organization is required'),
   email: z.string().email(),
   password: z.string().min(6)
 });
@@ -30,21 +29,21 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   if (!parse.success) {
     throw new HttpError(400, 'Invalid request payload', parse.error.flatten());
   }
-  const { organization: orgSlug, email, password } = parse.data;
-  const slug = orgSlug.trim().toLowerCase();
-  const organization = await Organization.findOne({
-    where: { slug },
-    skipOrganizationScope: true
-  });
-  if (!organization) {
-    throw new HttpError(401, 'Invalid credentials');
-  }
+  const { email, password } = parse.data;
   const normalizedEmail = normalizeEmail(email);
   const user = await User.findOne({
-    where: { email: normalizedEmail, organizationId: organization.id },
+    where: { email: normalizedEmail },
+    include: [{ model: Organization, attributes: [
+      'id', 'name', 'slug', 'legal_name', 'contact_email', 'timezone', 'abn', 'tax_id', 'address', 'phone', 'website', 'logo_url',
+      'invoice_prefix', 'default_payment_terms', 'invoice_notes', 'currency'
+    ] }],
     skipOrganizationScope: true
   });
   if (!user) {
+    throw new HttpError(401, 'Invalid credentials');
+  }
+  const organization = user.organization;
+  if (!organization) {
     throw new HttpError(401, 'Invalid credentials');
   }
   const ok = await bcrypt.compare(password, user.password_hash);
@@ -72,7 +71,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
       role: user.role,
       email: user.email,
       must_change_password: user.must_change_password,
-      organization: {
+      organization: organization ? {
         id: organization.id,
         name: organization.name,
         slug: organization.slug,
@@ -89,7 +88,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         default_payment_terms: organization.default_payment_terms,
         invoice_notes: organization.invoice_notes,
         currency: organization.currency
-      },
+      } : null,
       ui_variant: user.ui_variant
     }
   });

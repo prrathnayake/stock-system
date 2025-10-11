@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { api } from '../lib/api'
 import { getAccessToken, setUserProfile as persistUserProfile } from '../lib/auth'
+import { resolveAssetUrl } from '../lib/urls'
 
 const uiVariants = [
   {
@@ -129,6 +130,7 @@ export default function Settings() {
     invoice_notes: organization?.invoice_notes || '',
     currency: organization?.currency || 'AUD'
   })
+  const [logoPreview, setLogoPreview] = useState(resolveAssetUrl(organization?.logo_url || ''))
 
   useEffect(() => {
     if (settingsData) {
@@ -167,8 +169,13 @@ export default function Settings() {
         invoice_notes: organizationDetails.invoice_notes || '',
         currency: organizationDetails.currency || 'AUD'
       })
+      setLogoPreview(resolveAssetUrl(organizationDetails.logo_url || ''))
     }
   }, [organizationDetails])
+
+  useEffect(() => {
+    setLogoPreview(resolveAssetUrl(orgForm.logo_url || ''))
+  }, [orgForm.logo_url])
 
   const settingsMutation = useMutation({
     mutationFn: async (payload) => {
@@ -307,54 +314,64 @@ export default function Settings() {
         currency: data.currency || 'AUD'
       })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
-      if (user) {
-        const updatedUser = {
-          ...user,
-          organization: user.organization
-            ? {
-              ...user.organization,
-              name: data.name,
-              slug: data.slug,
-              id: data.id,
-              contact_email: data.contact_email,
-              timezone: data.timezone,
-              legal_name: data.legal_name,
-              abn: data.abn,
-              tax_id: data.tax_id,
-              address: data.address,
-              phone: data.phone,
-              website: data.website,
-              logo_url: data.logo_url,
-              invoice_prefix: data.invoice_prefix,
-              default_payment_terms: data.default_payment_terms,
-              invoice_notes: data.invoice_notes,
-              currency: data.currency
-            }
-            : {
-              id: data.id,
-              name: data.name,
-              slug: data.slug,
-              contact_email: data.contact_email,
-              timezone: data.timezone,
-              legal_name: data.legal_name,
-              abn: data.abn,
-              tax_id: data.tax_id,
-              address: data.address,
-              phone: data.phone,
-              website: data.website,
-              logo_url: data.logo_url,
-              invoice_prefix: data.invoice_prefix,
-              default_payment_terms: data.default_payment_terms,
-              invoice_notes: data.invoice_notes,
-              currency: data.currency
-            }
-        }
-        setUser(updatedUser)
-        persistUserProfile(updatedUser)
-      }
+      setLogoPreview(resolveAssetUrl(data.logo_url || ''))
+      updateCachedOrganization(data)
     },
     onError: (error) => {
       setOrgBanner({ type: 'error', message: error.response?.data?.error || 'Unable to update organization.' })
+    }
+  })
+
+  const updateCachedOrganization = (data) => {
+    if (!user) return
+    const logoUrl = data.logo_url || ''
+    const mergedOrg = {
+      ...(user.organization || {}),
+      id: data.id ?? user.organization?.id ?? null,
+      name: data.name ?? user.organization?.name ?? '',
+      slug: data.slug ?? user.organization?.slug ?? '',
+      contact_email: data.contact_email ?? user.organization?.contact_email ?? '',
+      timezone: data.timezone ?? user.organization?.timezone ?? '',
+      legal_name: data.legal_name ?? user.organization?.legal_name ?? '',
+      abn: data.abn ?? user.organization?.abn ?? '',
+      tax_id: data.tax_id ?? user.organization?.tax_id ?? '',
+      address: data.address ?? user.organization?.address ?? '',
+      phone: data.phone ?? user.organization?.phone ?? '',
+      website: data.website ?? user.organization?.website ?? '',
+      logo_url: logoUrl,
+      logo_asset_url: resolveAssetUrl(logoUrl),
+      invoice_prefix: data.invoice_prefix ?? user.organization?.invoice_prefix ?? '',
+      default_payment_terms: data.default_payment_terms ?? user.organization?.default_payment_terms ?? '',
+      invoice_notes: data.invoice_notes ?? user.organization?.invoice_notes ?? '',
+      currency: data.currency ?? user.organization?.currency ?? 'AUD'
+    }
+    const mergedUser = {
+      ...user,
+      organization: mergedOrg
+    }
+    setUser(mergedUser)
+    persistUserProfile(mergedUser)
+  }
+
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file) => {
+      const formData = new FormData()
+      formData.append('logo', file)
+      const { data } = await api.post('/organization/logo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      return data
+    },
+    onSuccess: (data) => {
+      const nextLogo = data.logo_url || ''
+      setOrgForm((prev) => ({ ...prev, logo_url: nextLogo }))
+      setLogoPreview(resolveAssetUrl(nextLogo))
+      setOrgBanner({ type: 'info', message: 'Logo updated successfully.' })
+      queryClient.invalidateQueries({ queryKey: ['organization'] })
+      updateCachedOrganization(data)
+    },
+    onError: (error) => {
+      setOrgBanner({ type: 'error', message: error.response?.data?.error || 'Unable to upload logo.' })
     }
   })
 
@@ -375,6 +392,23 @@ export default function Settings() {
     event.preventDefault()
     setPreferencesBanner(null)
     preferencesMutation.mutate({ ui_variant: selectedVariant })
+  }
+
+  const handleLogoUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      setOrgBanner({ type: 'error', message: 'Please upload a PNG or JPG image.' })
+      event.target.value = ''
+      return
+    }
+    const input = event.target
+    setOrgBanner(null)
+    uploadLogoMutation.mutate(file, {
+      onSettled: () => {
+        input.value = ''
+      }
+    })
   }
 
   const handleOrganizationSubmit = (event) => {
@@ -615,7 +649,7 @@ export default function Settings() {
               </div>
             )}
             <form className="form-grid" onSubmit={handleOrganizationSubmit}>
-              <label className="field">
+              <label className="field" data-help="Display name shown in navigation and dashboards.">
                 <span>Organization name</span>
                 <input
                   value={orgForm.name}
@@ -623,7 +657,7 @@ export default function Settings() {
                   required
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Registered legal entity name used on invoices.">
                 <span>Legal name</span>
                 <input
                   value={orgForm.legal_name}
@@ -631,7 +665,7 @@ export default function Settings() {
                   placeholder="Registered business name"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Primary address for alerts and administrative notifications.">
                 <span>Notification email</span>
                 <input
                   type="email"
@@ -641,7 +675,7 @@ export default function Settings() {
                 />
                 <small className="muted">Administrative emails and backup alerts will be delivered here.</small>
               </label>
-              <label className="field">
+              <label className="field" data-help="Timezone used for due dates and scheduling.">
                 <span>Timezone</span>
                 <input
                   value={orgForm.timezone}
@@ -649,7 +683,7 @@ export default function Settings() {
                   placeholder="e.g. America/New_York"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Government-issued business number for compliance.">
                 <span>ABN / business number</span>
                 <input
                   value={orgForm.abn}
@@ -657,7 +691,7 @@ export default function Settings() {
                   placeholder="e.g. 12 345 678 901"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Tax identifier displayed on quotes and invoices.">
                 <span>Tax registration</span>
                 <input
                   value={orgForm.tax_id}
@@ -665,7 +699,7 @@ export default function Settings() {
                   placeholder="VAT, GST or other tax ID"
                 />
               </label>
-              <label className="field field--span">
+              <label className="field field--span" data-help="Head office or registered trading address.">
                 <span>Registered address</span>
                 <textarea
                   rows={3}
@@ -674,7 +708,7 @@ export default function Settings() {
                   placeholder="Street, city, state and postcode"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Main phone number for customer contact.">
                 <span>Support phone</span>
                 <input
                   value={orgForm.phone}
@@ -682,7 +716,7 @@ export default function Settings() {
                   placeholder="e.g. +61 2 1234 5678"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Public website or knowledge base link for staff reference.">
                 <span>Website</span>
                 <input
                   value={orgForm.website}
@@ -690,16 +724,33 @@ export default function Settings() {
                   placeholder="https://example.com"
                 />
               </label>
-              <label className="field field--span">
-                <span>Logo URL</span>
-                <input
-                  value={orgForm.logo_url}
-                  onChange={(e) => setOrgForm((prev) => ({ ...prev, logo_url: e.target.value }))}
-                  placeholder="Link to hosted logo image"
-                />
-                <small className="muted">Used across the dashboard and invoice preview when provided.</small>
+              <label className="field field--span" data-help="Upload a PNG or JPG logo or provide a hosted link for branding.">
+                <span>Brand logo</span>
+                {logoPreview ? (
+                  <div className="logo-preview">
+                    <img src={logoPreview} alt="Logo preview" />
+                  </div>
+                ) : null}
+                <div className="field__stack">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleLogoUpload}
+                    disabled={uploadLogoMutation.isLoading}
+                  />
+                  <input
+                    value={orgForm.logo_url}
+                    onChange={(e) => setOrgForm((prev) => ({ ...prev, logo_url: e.target.value }))}
+                    placeholder="Link to hosted logo image"
+                  />
+                </div>
+                <small className="muted">
+                  {uploadLogoMutation.isLoading
+                    ? 'Uploading logo…'
+                    : 'PNG or JPG up to 2 MB. Leave blank to use the default system mark.'}
+                </small>
               </label>
-              <label className="field">
+              <label className="field" data-help="Prefix automatically applied to new invoice numbers.">
                 <span>Invoice prefix</span>
                 <input
                   value={orgForm.invoice_prefix}
@@ -707,7 +758,7 @@ export default function Settings() {
                   placeholder="e.g. INV- or JOB-"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Default credit terms displayed on new invoices.">
                 <span>Default payment terms</span>
                 <input
                   value={orgForm.default_payment_terms}
@@ -715,7 +766,7 @@ export default function Settings() {
                   placeholder="e.g. Net 14"
                 />
               </label>
-              <label className="field">
+              <label className="field" data-help="Currency code used for pricing and billing.">
                 <span>Default currency</span>
                 <input
                   value={orgForm.currency}
@@ -723,7 +774,7 @@ export default function Settings() {
                   placeholder="e.g. AUD"
                 />
               </label>
-              <label className="field field--span">
+              <label className="field field--span" data-help="Standard footer text appended to every invoice.">
                 <span>Default invoice notes</span>
                 <textarea
                   rows={3}
@@ -755,7 +806,7 @@ export default function Settings() {
             <div className="grid split">
               <form className="form-grid" onSubmit={handleCreateUser}>
                 <h3>Invite a team member</h3>
-                <label className="field">
+                <label className="field" data-help="Name shown to other teammates and on activity logs.">
                   <span>Full name</span>
                   <input
                     value={userForm.full_name}
@@ -763,7 +814,7 @@ export default function Settings() {
                     required
                   />
                 </label>
-                <label className="field">
+                <label className="field" data-help="Work email address used to sign in and receive notifications.">
                   <span>Email</span>
                   <input
                     type="email"
@@ -772,7 +823,7 @@ export default function Settings() {
                     required
                   />
                 </label>
-                <label className="field">
+                <label className="field" data-help="Initial password the user must change after first login.">
                   <span>Temporary password</span>
                   <input
                     type="password"
@@ -781,7 +832,7 @@ export default function Settings() {
                     required
                   />
                 </label>
-                <label className="field">
+                <label className="field" data-help="Determines administrative permissions for the user.">
                   <span>Role</span>
                   <select
                     value={userForm.role}
@@ -791,7 +842,7 @@ export default function Settings() {
                     <option value="admin">Administrator</option>
                   </select>
                 </label>
-                <label className="field">
+                <label className="field" data-help="Preferred interface layout that loads after login.">
                   <span>Interface style</span>
                   <select
                     value={userForm.ui_variant}
@@ -802,7 +853,7 @@ export default function Settings() {
                     ))}
                   </select>
                 </label>
-                <label className="field field--checkbox">
+                <label className="field field--checkbox" data-help="Forces the invited user to set a personal password.">
                   <input
                     type="checkbox"
                     checked={userForm.must_change_password}
@@ -874,7 +925,7 @@ export default function Settings() {
                 {editingUser && (
                   <form className="form-grid form-grid--inline" onSubmit={handleUpdateUser}>
                     <h4>Edit {editingUser.full_name}</h4>
-                    <label className="field">
+                    <label className="field" data-help="Update the name that appears in user menus and logs.">
                       <span>Full name</span>
                       <input
                         value={editForm.full_name}
@@ -882,7 +933,7 @@ export default function Settings() {
                         required
                       />
                     </label>
-                    <label className="field">
+                    <label className="field" data-help="Change the email address used to sign in.">
                       <span>Email</span>
                       <input
                         type="email"
@@ -891,7 +942,7 @@ export default function Settings() {
                         required
                       />
                     </label>
-                    <label className="field">
+                    <label className="field" data-help="Adjust the user's access level.">
                       <span>Role</span>
                       <select
                         value={editForm.role}
@@ -901,7 +952,7 @@ export default function Settings() {
                         <option value="admin">Administrator</option>
                       </select>
                     </label>
-                    <label className="field">
+                    <label className="field" data-help="Select the workspace layout this user will see by default.">
                       <span>Interface style</span>
                       <select
                         value={editForm.ui_variant}
@@ -912,7 +963,7 @@ export default function Settings() {
                         ))}
                       </select>
                     </label>
-                    <label className="field">
+                    <label className="field" data-help="Optional reset to immediately change the account password.">
                       <span>New password</span>
                       <input
                         type="password"
@@ -921,7 +972,7 @@ export default function Settings() {
                         placeholder="Leave blank to keep current password"
                       />
                     </label>
-                    <label className="field field--checkbox">
+                    <label className="field field--checkbox" data-help="Prompt the user to pick a new password after this update.">
                       <input
                         type="checkbox"
                         checked={editForm.must_change_password}
@@ -952,7 +1003,7 @@ export default function Settings() {
             </div>
             {banner && <div className="banner banner--info">{banner}</div>}
             <form className="form-grid" onSubmit={handleSubmit}>
-              <label className="field">
+              <label className="field" data-help="Toggle proactive notifications when products fall below reorder points.">
                 <span>Low stock alerts</span>
                 <select
                   value={formState.low_stock_alerts_enabled ? 'enabled' : 'disabled'}
@@ -965,7 +1016,7 @@ export default function Settings() {
                   <option value="disabled">Disabled</option>
                 </select>
               </label>
-              <label className="field">
+              <label className="field" data-help="Target response time applied to new work orders.">
                 <span>Default SLA window (hours)</span>
                 <input
                   type="number"
@@ -974,7 +1025,7 @@ export default function Settings() {
                   onChange={(e) => setFormState((prev) => ({ ...prev, default_sla_hours: e.target.value }))}
                 />
               </label>
-              <label className="field field--span">
+              <label className="field field--span" data-help="People alerted when escalations or SLA breaches occur.">
                 <span>Escalation emails</span>
                 <textarea
                   rows={2}
@@ -984,7 +1035,7 @@ export default function Settings() {
                 />
                 <p className="muted">Comma-separated list of recipients notified for SLA breaches.</p>
               </label>
-              <label className="field">
+              <label className="field" data-help="Enable scheduled exports of your database for recovery.">
                 <span>Automatic backups</span>
                 <select
                   value={formState.backup_enabled ? 'enabled' : 'disabled'}
@@ -997,7 +1048,7 @@ export default function Settings() {
                   <option value="disabled">Disabled</option>
                 </select>
               </label>
-              <label className="field">
+              <label className="field" data-help="Cron expression describing when backups should run.">
                 <span>Backup schedule (cron)</span>
                 <input
                   type="text"
@@ -1008,7 +1059,7 @@ export default function Settings() {
                 />
                 <p className="muted">Use cron syntax to control when automatic backups run.</p>
               </label>
-              <label className="field">
+              <label className="field" data-help="How long backups are kept before automatic cleanup.">
                 <span>Retention window (days)</span>
                 <input
                   type="number"

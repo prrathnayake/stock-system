@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { clearTokens, getAccessToken, getUserProfile, setTokens, setUserProfile } from '../lib/auth';
+import { resolveAssetUrl } from '../lib/urls';
 
 const AuthContext = createContext(null);
 
 function normalizeOrganization(value) {
   if (!value) return null;
+  const rawLogo = value.logo_url || '';
   return {
     ...value,
     name: value.name || '',
@@ -17,7 +19,8 @@ function normalizeOrganization(value) {
     address: value.address || '',
     phone: value.phone || '',
     website: value.website || '',
-    logo_url: value.logo_url || '',
+    logo_url: rawLogo,
+    logo_asset_url: resolveAssetUrl(rawLogo),
     invoice_prefix: value.invoice_prefix || '',
     default_payment_terms: value.default_payment_terms || '',
     invoice_notes: value.invoice_notes || '',
@@ -56,8 +59,8 @@ export function AuthProvider({ children }) {
     };
   }, [user?.ui_variant]);
 
-  const login = async (organization, email, password) => {
-    const { data } = await api.post('/auth/login', { organization, email, password });
+  const login = async (email, password) => {
+    const { data } = await api.post('/auth/login', { email, password });
     const normalizedUser = normalizeUser(data.user);
     setTokens(data.access, data.refresh);
     setUserProfile(normalizedUser);

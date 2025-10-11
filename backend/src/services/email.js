@@ -3,6 +3,26 @@ import { config } from '../config.js';
 
 let transporterPromise = null;
 
+function buildTransport() {
+  const tls = config.mail.rejectUnauthorized
+    ? undefined
+    : { rejectUnauthorized: false };
+
+  if (config.mail.url) {
+    return nodemailer.createTransport(config.mail.url, { tls });
+  }
+
+  return nodemailer.createTransport({
+    host: config.mail.host,
+    port: config.mail.port,
+    secure: config.mail.secure,
+    auth: config.mail.user && config.mail.pass
+      ? { user: config.mail.user, pass: config.mail.pass }
+      : undefined,
+    tls
+  });
+}
+
 async function createTransporter() {
   if (!config.mail.enabled) {
     return null;
@@ -12,15 +32,13 @@ async function createTransporter() {
   }
   transporterPromise = (async () => {
     try {
-      const transport = nodemailer.createTransport({
-        host: config.mail.host,
-        port: config.mail.port,
-        secure: config.mail.secure,
-        auth: config.mail.user && config.mail.pass
-          ? { user: config.mail.user, pass: config.mail.pass }
-          : undefined
-      });
-      await transport.verify();
+      const transport = buildTransport();
+      try {
+        await transport.verify();
+      } catch (error) {
+        const level = config.env === 'production' ? 'error' : 'warn';
+        console[level]('[mail] Transport verification failed, continuing anyway:', error.message);
+      }
       return transport;
     } catch (error) {
       console.error('[mail] Transport initialisation failed:', error.message);
