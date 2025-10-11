@@ -72,6 +72,7 @@ export default function AppLayout() {
     const items = [
       { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
       { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
+      { to: '/storage-bins', label: 'Storage bins', roles: ['admin', 'user'] },
       { to: '/sales', label: 'Sales', roles: ['admin', 'user'] },
       { to: '/invoices', label: 'Invoices', roles: ['admin'] },
       { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
@@ -83,6 +84,17 @@ export default function AppLayout() {
     }
     return items;
   }, [user?.role, variant, organization?.invoicing_enabled])
+
+  const quickLinks = useMemo(() => (
+    [
+      { to: '/', label: 'Home', roles: ['admin', 'user'] },
+      { to: '/inventory', label: 'Inventory', roles: ['admin', 'user'] },
+      { to: '/storage-bins', label: 'Bins', roles: ['admin', 'user'] },
+      { to: '/sales', label: 'Sales', roles: ['admin', 'user'] },
+      { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user'] }
+    ]
+      .filter((item) => (!item.roles || item.roles.includes(user?.role)))
+  ), [user?.role])
 
   const pageTitle = useMemo(() => {
     const match = navItems.find((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)))
@@ -174,6 +186,17 @@ export default function AppLayout() {
             </div>
           </div>
           <div className="topbar__actions">
+            <nav className="topbar__quick-nav" aria-label="Quick navigation">
+              {quickLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={({ isActive }) => `topbar__quick-link${isActive ? ' topbar__quick-link--active' : ''}`}
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </nav>
             <button className="button button--ghost" type="button" onClick={toggleTheme}>
               {theme === 'dark' ? '☀️ Light mode' : '🌙 Dark mode'}
             </button>
@@ -199,7 +222,7 @@ export default function AppLayout() {
                   onClick={() => handleProfileNavigate('#profile')}
                   role="menuitem"
                 >
-                  View profile
+                  Personal preferences
                 </button>
                 <button
                   type="button"

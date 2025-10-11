@@ -718,27 +718,26 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="settings-layout">
-        <aside className="settings-secondary-nav">
-          <p className="settings-secondary-nav__title">Jump to</p>
-          <div className="settings-secondary-nav__list">
-            {navigationItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`settings-secondary-nav__link${activeSection === item.id ? ' settings-secondary-nav__link--active' : ''}`}
-                onClick={() => {
-                  setActiveSection(item.id)
-                  scrollToSection(item.id)
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </aside>
+      <nav className="settings-tabs" role="tablist" aria-label="Settings sections">
+        {navigationItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            className={`settings-tabs__item${activeSection === item.id ? ' settings-tabs__item--active' : ''}`}
+            aria-selected={activeSection === item.id}
+            aria-controls={`settings-${item.id}`}
+            onClick={() => {
+              setActiveSection(item.id)
+              scrollToSection(item.id)
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
 
-        <div className="settings-content">
+      <div className="settings-content">
           <section id="settings-profile" className="settings-section">
             <header className="settings-section__header">
               <h2>Profile & preferences</h2>
@@ -1524,7 +1523,6 @@ export default function Settings() {
             </>
           )}
         </div>
-      </div>
     </div>
   )
 }

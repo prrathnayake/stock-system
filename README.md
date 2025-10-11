@@ -103,7 +103,7 @@ From `backend/`:
 ```bash
 npm test
 ```
-The Vitest system test provisions an in-memory SQLite database, exercises authentication, product CRUD, stock adjustments, purchasing, RMAs, invoices, and produces `reports/system-test-report.json` summarising the run.
+The Vitest system test provisions an in-memory SQLite database, exercises authentication, product CRUD, stock adjustments, purchasing, RMAs, and invoices, and can emit a JSON summary under `reports/system-test-report.json` (generated on demand).
 
 ## Environment Configuration
 ### Backend
@@ -178,8 +178,10 @@ VITE_SOCKET_URL=http://localhost:8080
 
 ## UI Highlights
 - **Organization-aware headers** – Dashboard and navigation copy react immediately to updates made in the organization settings.
-- **Inventory sub-navigation** – Switch between active stock monitoring and storage bin administration without losing context.
+- **Inventory workspace refresh** – Active stock tables, history tools, and the operations feed now share consistent spacing for easier scanning across cards.
+- **Dedicated storage bins workspace** – Manage bin codes, edit locations inline, and create new storage bins from a focused page accessible via the main quick navigation.
 - **Sales workspace tabs** – Jump between customer management and in-flight sales from the same route using quick toggle buttons.
+- **Topbar quick navigation** – A compact pill menu in the top-right corner links to the dashboard, inventory, bins, sales, and work orders without opening the sidebar.
 
 ## Email notifications
 - Configure SMTP credentials in `backend/.env` using the `MAIL_*` variables. Providing `MAIL_HOST` or `MAIL_URL` automatically enables the transporter.

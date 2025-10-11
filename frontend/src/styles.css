@@ -274,6 +274,36 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
 }
 
+.topbar__quick-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(99, 102, 241, 0.08);
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.topbar__quick-link {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.topbar__quick-link:hover,
+.topbar__quick-link:focus-visible {
+  background: rgba(99, 102, 241, 0.16);
+  color: var(--color-text);
+}
+
+.topbar__quick-link--active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4);
+}
+
 .topbar__profile {
   position: relative;
 }
@@ -435,62 +465,38 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
 }
 
-.settings-layout {
-  display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-
-.settings-secondary-nav {
-  position: sticky;
-  top: 108px;
+.settings-tabs {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 12px;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  padding: 20px;
+  padding: 16px;
   box-shadow: var(--shadow-sm);
-  max-height: calc(100vh - 140px);
 }
 
-.settings-secondary-nav__title {
-  margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.settings-tabs__item {
+  border: none;
+  background: rgba(99, 102, 241, 0.08);
   color: var(--color-text-muted);
-}
-
-.settings-secondary-nav__list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.settings-secondary-nav__link {
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  text-align: left;
+  padding: 10px 18px;
+  border-radius: 999px;
   font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-tabs__item:hover,
+.settings-tabs__item:focus-visible {
+  outline: none;
+  background: rgba(99, 102, 241, 0.16);
   color: var(--color-text);
-  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
-.settings-secondary-nav__link:hover,
-.settings-secondary-nav__link:focus-visible {
-  border-color: var(--color-border);
-  background: rgba(148, 163, 184, 0.14);
-}
-
-.settings-secondary-nav__link--active {
-  border-color: var(--color-primary);
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--color-primary-dark);
+.settings-tabs__item--active {
+  background: rgba(99, 102, 241, 0.26);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4);
 }
 
 .settings-section {
@@ -526,35 +532,14 @@ input:focus, select:focus, textarea:focus {
 }
 
 @media (max-width: 960px) {
-  .settings-layout {
-    grid-template-columns: 1fr;
-    gap: 20px;
+  .settings-tabs {
+    padding: 12px;
+    gap: 10px;
   }
 
-  .settings-secondary-nav {
-    position: static;
-    flex-direction: column;
-    gap: 8px;
-    background: transparent;
-    border: none;
-    padding: 0;
-    box-shadow: none;
-  }
-
-  .settings-secondary-nav__title {
-    display: none;
-  }
-
-  .settings-secondary-nav__list {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .settings-secondary-nav__link {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    white-space: nowrap;
+  .settings-tabs__item {
+    flex: 1 1 200px;
+    justify-content: center;
   }
 
   .settings-section__cards--columns {
@@ -1033,7 +1018,7 @@ input:focus, select:focus, textarea:focus {
 .inventory__workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-  gap: 24px;
+  gap: 32px;
   align-items: start;
 }
 
@@ -1064,7 +1049,7 @@ input:focus, select:focus, textarea:focus {
 .inventory__primary {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
 .inventory__tools-card {
@@ -1103,10 +1088,10 @@ input:focus, select:focus, textarea:focus {
 }
 
 .inventory__tool-panel {
-  padding: 24px;
+  padding: 28px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
 .inventory__history-grid {
@@ -1149,21 +1134,59 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
 }
 
-.inventory__bin-edit-row td {
-  background: var(--color-surface-alt);
-  padding: 18px 20px;
-}
-
-.inventory__bin-edit-form {
+.storage-bins {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
 }
 
-.inventory__bin-edit-grid {
+.storage-bins__intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.storage-bins__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.storage-bins__layout {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.storage-bins__table .card__header {
+  align-items: flex-start;
+}
+
+.storage-bins__edit-row td {
+  background: var(--color-surface-alt);
+  padding: 20px 22px;
+}
+
+.storage-bins__edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.storage-bins__edit-grid {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.storage-bins__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .inventory-table {
@@ -1329,6 +1352,10 @@ input:focus, select:focus, textarea:focus {
     min-width: 0;
   }
 
+  .storage-bins__layout {
+    grid-template-columns: 1fr;
+  }
+
   .inventory__header {
     flex-direction: column;
     align-items: stretch;
@@ -1488,15 +1515,6 @@ input:focus, select:focus, textarea:focus {
 .inventory__panel {
   display: block;
   margin-bottom: 40px;
-}
-
-.inventory__bins-view {
-  align-items: flex-start;
-}
-
-.inventory__bins-table .badge {
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--color-text);
 }
 
 .sales__panel {
@@ -2129,6 +2147,22 @@ input:focus, select:focus, textarea:focus {
     width: fit-content;
   }
   .topbar__actions {
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .topbar__quick-nav {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .storage-bins__intro {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  .storage-bins__status {
     width: 100%;
     justify-content: space-between;
   }

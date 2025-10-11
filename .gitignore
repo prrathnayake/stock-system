@@ -5,6 +5,7 @@ frontend/node_modules/
 # Build artifacts
 backend/dist/
 frontend/dist/
+reports/
 
 # Environment files
 backend/.env
