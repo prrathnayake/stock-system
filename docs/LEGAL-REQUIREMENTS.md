@@ -2,7 +2,7 @@
 
 Add your jurisdiction-specific policies here before launching to production. Recommended documents:
 
-- Terms of Service / Repair Agreement
+- Terms of Service / Stock Agreement
 - Privacy Notice in accordance with GDPR/CCPA or relevant laws
 - Warranty, liability and consent forms required for device intake
 - Data retention and breach response procedures

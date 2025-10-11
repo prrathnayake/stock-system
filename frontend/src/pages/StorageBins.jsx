@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../providers/AuthProvider.jsx'
+import TablePagination from '../components/TablePagination.jsx'
 
 const initialCreateForm = { code: '', site: '', room: '' }
 const initialEditForm = { code: '', site: '', room: '', locationId: null }
@@ -14,6 +15,7 @@ export default function StorageBins() {
   const [editingId, setEditingId] = useState(null)
   const [tableFeedback, setTableFeedback] = useState(null)
   const [formFeedback, setFormFeedback] = useState(null)
+  const [binPage, setBinPage] = useState(1)
 
   const binsQuery = useQuery({
     queryKey: ['bins'],
@@ -98,6 +100,19 @@ export default function StorageBins() {
     })
     return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
   }, [bins, stock])
+
+  const BINS_PAGE_SIZE = 10
+  const totalBinPages = Math.max(1, Math.ceil(overview.length / BINS_PAGE_SIZE))
+  const visibleBins = useMemo(() => {
+    const start = (binPage - 1) * BINS_PAGE_SIZE
+    return overview.slice(start, start + BINS_PAGE_SIZE)
+  }, [overview, binPage])
+
+  useEffect(() => {
+    if (binPage > totalBinPages) {
+      setBinPage(totalBinPages)
+    }
+  }, [binPage, totalBinPages])
 
   const isBusy = binsQuery.isFetching || stockQuery.isFetching
 
@@ -243,6 +258,13 @@ export default function StorageBins() {
               {tableFeedback.message}
             </div>
           )}
+          <TablePagination
+            page={binPage}
+            totalPages={totalBinPages}
+            onPrev={() => setBinPage((page) => Math.max(1, page - 1))}
+            onNext={() => setBinPage((page) => Math.min(totalBinPages, page + 1))}
+            className="table-pagination--inline"
+          />
           <div className="table-scroll">
             <table className="table table--compact">
               <thead>
@@ -261,7 +283,7 @@ export default function StorageBins() {
                     <td colSpan={6} className="muted">No storage bins recorded yet.</td>
                   </tr>
                 ) : (
-                  overview.map((bin) => (
+                  visibleBins.map((bin) => (
                     <React.Fragment key={bin.id}>
                       <tr>
                         <td><span className="badge">{bin.code}</span></td>
@@ -346,6 +368,12 @@ export default function StorageBins() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            page={binPage}
+            totalPages={totalBinPages}
+            onPrev={() => setBinPage((page) => Math.max(1, page - 1))}
+            onNext={() => setBinPage((page) => Math.min(totalBinPages, page + 1))}
+          />
         </section>
 
         <form className="card storage-bins__form" onSubmit={handleCreateBin}>

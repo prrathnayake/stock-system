@@ -5,6 +5,8 @@ import { useAuth } from '../providers/AuthProvider.jsx'
 import { api } from '../lib/api'
 import { getAccessToken, setUserProfile as persistUserProfile } from '../lib/auth'
 import { resolveAssetUrl } from '../lib/urls'
+import { APP_NAME, ORGANIZATION_TYPES, PASSWORD_REQUIREMENTS, STRONG_PASSWORD_PATTERN } from '../lib/appInfo.js'
+import TablePagination from '../components/TablePagination.jsx'
 
 const uiVariants = [
   {
@@ -33,21 +35,6 @@ const uiVariants = [
     description: 'Large charts and tiles for status-at-a-glance monitoring.'
   }
 ]
-
-function TablePagination({ page, totalPages, onPrev, onNext }) {
-  if (totalPages <= 1) return null
-  return (
-    <div className="table-pagination">
-      <button type="button" className="button button--ghost" onClick={onPrev} disabled={page <= 1}>
-        Previous
-      </button>
-      <span>Page {page} of {totalPages}</span>
-      <button type="button" className="button button--ghost" onClick={onNext} disabled={page >= totalPages}>
-        Next
-      </button>
-    </div>
-  )
-}
 
 export default function Settings() {
   const { user, setUser, organization } = useAuth()
@@ -146,6 +133,8 @@ export default function Settings() {
 
   const [userSearch, setUserSearch] = useState('')
   const [userPage, setUserPage] = useState(1)
+  const [activityPage, setActivityPage] = useState(1)
+  const [backupPage, setBackupPage] = useState(1)
 
   const filteredUsers = useMemo(() => {
     if (!userSearch) return users
@@ -192,6 +181,32 @@ export default function Settings() {
     },
     enabled: isAdmin
   })
+
+  const ACTIVITIES_PAGE_SIZE = 10
+  const totalActivityPages = Math.max(1, Math.ceil(activities.length / ACTIVITIES_PAGE_SIZE))
+  const visibleActivities = useMemo(() => {
+    const start = (activityPage - 1) * ACTIVITIES_PAGE_SIZE
+    return activities.slice(start, start + ACTIVITIES_PAGE_SIZE)
+  }, [activities, activityPage])
+
+  const BACKUPS_PAGE_SIZE = 10
+  const totalBackupPages = Math.max(1, Math.ceil(backups.length / BACKUPS_PAGE_SIZE))
+  const visibleBackups = useMemo(() => {
+    const start = (backupPage - 1) * BACKUPS_PAGE_SIZE
+    return backups.slice(start, start + BACKUPS_PAGE_SIZE)
+  }, [backups, backupPage])
+
+  useEffect(() => {
+    if (activityPage > totalActivityPages) {
+      setActivityPage(totalActivityPages)
+    }
+  }, [activityPage, totalActivityPages])
+
+  useEffect(() => {
+    if (backupPage > totalBackupPages) {
+      setBackupPage(totalBackupPages)
+    }
+  }, [backupPage, totalBackupPages])
 
   const { data: organizationDetails } = useQuery({
     queryKey: ['organization'],
@@ -241,6 +256,7 @@ export default function Settings() {
     name: organization?.name || user?.organization?.name || '',
     contact_email: organization?.contact_email || '',
     legal_name: organization?.legal_name || '',
+    type: organization?.type || user?.organization?.type || '',
     timezone: organization?.timezone || '',
     abn: organization?.abn || '',
     tax_id: organization?.tax_id || '',
@@ -257,7 +273,24 @@ export default function Settings() {
       ? organization.banner_images.join('\n')
       : ''
   })
-  const [logoPreview, setLogoPreview] = useState(resolveAssetUrl(organization?.logo_url || ''))
+  const [logoPreview, setLogoPreview] = useState(() => {
+    const initialLogo = organization?.logo_url || user?.organization?.logo_url || ''
+    const version = organization?.logo_updated_at || user?.organization?.logo_updated_at || null
+    const resolved = resolveAssetUrl(initialLogo)
+    if (!resolved) return ''
+    return version ? `${resolved}${resolved.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}` : resolved
+  })
+  const selectedOrgType = useMemo(
+    () => ORGANIZATION_TYPES.find((item) => item.id === orgForm.type) || null,
+    [orgForm.type]
+  )
+  const buildLogoAssetUrl = useCallback((url, version) => {
+    const resolved = resolveAssetUrl(url || '')
+    if (!resolved) return ''
+    return version
+      ? `${resolved}${resolved.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`
+      : resolved
+  }, [])
 
   useEffect(() => {
     if (settingsData) {
@@ -289,6 +322,7 @@ export default function Settings() {
         name: organizationDetails.name || '',
         legal_name: organizationDetails.legal_name || '',
         contact_email: organizationDetails.contact_email || '',
+        type: organizationDetails.type || '',
         timezone: organizationDetails.timezone || '',
         abn: organizationDetails.abn || '',
         tax_id: organizationDetails.tax_id || '',
@@ -305,7 +339,7 @@ export default function Settings() {
           ? organizationDetails.banner_images.join('\n')
           : ''
       })
-      setLogoPreview(resolveAssetUrl(organizationDetails.logo_url || ''))
+      setLogoPreview(buildLogoAssetUrl(organizationDetails.logo_url || '', organizationDetails.logo_updated_at))
       updateCachedOrganization(organizationDetails)
     }
   }, [organizationDetails])
@@ -438,6 +472,7 @@ export default function Settings() {
         name: data.name || '',
         legal_name: data.legal_name || '',
         contact_email: data.contact_email || '',
+        type: data.type || '',
         timezone: data.timezone || '',
         abn: data.abn || '',
         tax_id: data.tax_id || '',
@@ -455,7 +490,7 @@ export default function Settings() {
           : ''
       })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
-      setLogoPreview(resolveAssetUrl(data.logo_url || ''))
+      setLogoPreview(buildLogoAssetUrl(data.logo_url || '', data.logo_updated_at))
       updateCachedOrganization(data)
     },
     onError: (error) => {
@@ -466,6 +501,8 @@ export default function Settings() {
   const updateCachedOrganization = (data) => {
     if (!user) return
     const logoUrl = data.logo_url || ''
+    const logoVersion = data.logo_updated_at || user.organization?.logo_updated_at || null
+    const logoAssetUrl = buildLogoAssetUrl(logoUrl, logoVersion)
     const mergedOrg = {
       ...(user.organization || {}),
       id: data.id ?? user.organization?.id ?? null,
@@ -474,13 +511,15 @@ export default function Settings() {
       contact_email: data.contact_email ?? user.organization?.contact_email ?? '',
       timezone: data.timezone ?? user.organization?.timezone ?? '',
       legal_name: data.legal_name ?? user.organization?.legal_name ?? '',
+      type: data.type ?? user.organization?.type ?? '',
       abn: data.abn ?? user.organization?.abn ?? '',
       tax_id: data.tax_id ?? user.organization?.tax_id ?? '',
       address: data.address ?? user.organization?.address ?? '',
       phone: data.phone ?? user.organization?.phone ?? '',
       website: data.website ?? user.organization?.website ?? '',
       logo_url: logoUrl,
-      logo_asset_url: resolveAssetUrl(logoUrl),
+      logo_asset_url: logoAssetUrl,
+      logo_updated_at: logoVersion,
       invoice_prefix: data.invoice_prefix ?? user.organization?.invoice_prefix ?? '',
       default_payment_terms: data.default_payment_terms ?? user.organization?.default_payment_terms ?? '',
       invoice_notes: data.invoice_notes ?? user.organization?.invoice_notes ?? '',
@@ -512,7 +551,7 @@ export default function Settings() {
     onSuccess: (data) => {
       const nextLogo = data.logo_url || ''
       setOrgForm((prev) => ({ ...prev, logo_url: nextLogo }))
-      setLogoPreview(resolveAssetUrl(nextLogo))
+      setLogoPreview(buildLogoAssetUrl(nextLogo, data.logo_updated_at))
       setOrgBanner({ type: 'info', message: 'Logo updated successfully.' })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       updateCachedOrganization(data)
@@ -572,6 +611,7 @@ export default function Settings() {
       name: orgForm.name.trim(),
       contact_email: orgForm.contact_email.trim(),
       legal_name: orgForm.legal_name.trim(),
+      type: orgForm.type || '',
       timezone: orgForm.timezone.trim(),
       abn: orgForm.abn.trim(),
       tax_id: orgForm.tax_id.trim(),
@@ -650,6 +690,10 @@ export default function Settings() {
       setUserBanner({ type: 'error', message: 'All fields are required to create a user.' })
       return
     }
+    if (!STRONG_PASSWORD_PATTERN.test(payload.password)) {
+      setUserBanner({ type: 'error', message: PASSWORD_REQUIREMENTS })
+      return
+    }
     createUserMutation.mutate(payload)
   }
 
@@ -689,6 +733,10 @@ export default function Settings() {
       ui_variant: editForm.ui_variant
     }
     if (editForm.password) {
+      if (!STRONG_PASSWORD_PATTERN.test(editForm.password)) {
+        setUserBanner({ type: 'error', message: PASSWORD_REQUIREMENTS })
+        return
+      }
       payload.password = editForm.password
     }
     updateUserMutation.mutate({ id: editingUser.id, payload })
@@ -851,7 +899,7 @@ export default function Settings() {
               <section id="settings-organization" className="settings-section">
                 <header className="settings-section__header">
                   <h2>Organization profile</h2>
-                  <p className="muted">Manage branding, legal and invoicing defaults for this organization.</p>
+                  <p className="muted">Manage branding, legal and invoicing defaults for your {APP_NAME} workspace.</p>
                 </header>
                 <div className="settings-section__cards">
                   <div className="card settings-card">
@@ -876,6 +924,21 @@ export default function Settings() {
                           onChange={(e) => setOrgForm((prev) => ({ ...prev, legal_name: e.target.value }))}
                           placeholder="Registered business name"
                         />
+                      </label>
+                      <label className="field" data-help="Select the category that best represents your operations.">
+                        <span>Organization type</span>
+                        <select
+                          value={orgForm.type}
+                          onChange={(e) => setOrgForm((prev) => ({ ...prev, type: e.target.value }))}
+                        >
+                          <option value="">Select organization type</option>
+                          {ORGANIZATION_TYPES.map((option) => (
+                            <option key={option.id} value={option.id}>{option.label}</option>
+                          ))}
+                        </select>
+                        <small className="muted">
+                          {selectedOrgType ? selectedOrgType.description : 'Used to tailor copy and insights throughout the app.'}
+                        </small>
                       </label>
                       <label className="field" data-help="Primary address for alerts and administrative notifications.">
                         <span>Notification email</span>
@@ -1068,7 +1131,7 @@ export default function Settings() {
                             required
                           />
                         </label>
-                        <label className="field" data-help="Initial password the user must change after first login.">
+                        <label className="field" data-help={`Initial password the user must change after first login. ${PASSWORD_REQUIREMENTS}`}>
                           <span>Temporary password</span>
                           <input
                             type="password"
@@ -1076,6 +1139,7 @@ export default function Settings() {
                             onChange={(e) => setUserForm((prev) => ({ ...prev, password: e.target.value }))}
                             required
                           />
+                          <small className="muted">{PASSWORD_REQUIREMENTS}</small>
                         </label>
                         <label className="field" data-help="Determines administrative permissions for the user.">
                           <span>Role</span>
@@ -1127,6 +1191,13 @@ export default function Settings() {
                             </label>
                           </div>
                         </div>
+                        <TablePagination
+                          page={userPage}
+                          totalPages={totalUserPages}
+                          onPrev={() => setUserPage((page) => Math.max(1, page - 1))}
+                          onNext={() => setUserPage((page) => Math.min(totalUserPages, page + 1))}
+                          className="table-pagination--inline"
+                        />
                         <div className="table-scroll user-management__table">
                           <table className="table table--compact">
                             <thead>
@@ -1248,7 +1319,7 @@ export default function Settings() {
                                 ))}
                               </select>
                             </label>
-                            <label className="field" data-help="Optional reset to immediately change the account password.">
+                            <label className="field" data-help={`Optional reset to immediately change the account password. ${PASSWORD_REQUIREMENTS}`}>
                               <span>New password</span>
                               <input
                                 type="password"
@@ -1256,6 +1327,7 @@ export default function Settings() {
                                 onChange={(e) => setEditForm((prev) => ({ ...prev, password: e.target.value }))}
                                 placeholder="Leave blank to keep current password"
                               />
+                              <small className="muted">{PASSWORD_REQUIREMENTS}</small>
                             </label>
                             <label className="field field--checkbox" data-help="Prompt the user to pick a new password after this update.">
                               <input
@@ -1438,6 +1510,13 @@ export default function Settings() {
                         <p className="muted">Audit trail of key actions taken by product administrators.</p>
                       </div>
                     </div>
+                    <TablePagination
+                      page={activityPage}
+                      totalPages={totalActivityPages}
+                      onPrev={() => setActivityPage((page) => Math.max(1, page - 1))}
+                      onNext={() => setActivityPage((page) => Math.min(totalActivityPages, page + 1))}
+                      className="table-pagination--inline"
+                    />
                     <div className="table-scroll">
                       <table className="table table--compact">
                         <thead>
@@ -1453,7 +1532,7 @@ export default function Settings() {
                               <td colSpan={3} className="muted">No activity recorded yet.</td>
                             </tr>
                           )}
-                          {activities.map((entry) => (
+                          {visibleActivities.map((entry) => (
                             <tr key={entry.id}>
                               <td>
                                 <strong>{entry.action}</strong>
@@ -1466,6 +1545,12 @@ export default function Settings() {
                         </tbody>
                       </table>
                     </div>
+                    <TablePagination
+                      page={activityPage}
+                      totalPages={totalActivityPages}
+                      onPrev={() => setActivityPage((page) => Math.max(1, page - 1))}
+                      onNext={() => setActivityPage((page) => Math.min(totalActivityPages, page + 1))}
+                    />
                   </div>
 
                   <div className="card settings-card">
@@ -1483,6 +1568,13 @@ export default function Settings() {
                         {runBackupMutation.isLoading ? 'Starting…' : 'Run backup now'}
                       </button>
                     </div>
+                    <TablePagination
+                      page={backupPage}
+                      totalPages={totalBackupPages}
+                      onPrev={() => setBackupPage((page) => Math.max(1, page - 1))}
+                      onNext={() => setBackupPage((page) => Math.min(totalBackupPages, page + 1))}
+                      className="table-pagination--inline"
+                    />
                     <div className="table-scroll">
                       <table className="table table--compact">
                         <thead>
@@ -1499,7 +1591,7 @@ export default function Settings() {
                               <td colSpan={4} className="muted">No backups generated yet.</td>
                             </tr>
                           )}
-                          {backups.map((backup) => (
+                          {visibleBackups.map((backup) => (
                             <tr key={backup.file}>
                               <td>{backup.file}</td>
                               <td>{backup.createdAt ? new Date(backup.createdAt).toLocaleString() : '—'}</td>
@@ -1517,6 +1609,12 @@ export default function Settings() {
                         </tbody>
                       </table>
                     </div>
+                    <TablePagination
+                      page={backupPage}
+                      totalPages={totalBackupPages}
+                      onPrev={() => setBackupPage((page) => Math.max(1, page - 1))}
+                      onNext={() => setBackupPage((page) => Math.min(totalBackupPages, page + 1))}
+                    />
                   </div>
                 </div>
               </section>

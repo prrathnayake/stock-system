@@ -8,6 +8,11 @@ const AuthContext = createContext(null);
 function normalizeOrganization(value) {
   if (!value) return null;
   const rawLogo = value.logo_url || '';
+  const logoVersion = value.logo_updated_at || value.logoUpdatedAt || null;
+  const resolvedLogo = resolveAssetUrl(rawLogo);
+  const versionedLogo = resolvedLogo && logoVersion
+    ? `${resolvedLogo}${resolvedLogo.includes('?') ? '&' : '?'}v=${encodeURIComponent(logoVersion)}`
+    : resolvedLogo;
   return {
     ...value,
     name: value.name || '',
@@ -20,7 +25,9 @@ function normalizeOrganization(value) {
     phone: value.phone || '',
     website: value.website || '',
     logo_url: rawLogo,
-    logo_asset_url: resolveAssetUrl(rawLogo),
+    logo_asset_url: versionedLogo,
+    logo_updated_at: logoVersion,
+    type: value.type || '',
     invoice_prefix: value.invoice_prefix || '',
     default_payment_terms: value.default_payment_terms || '',
     invoice_notes: value.invoice_notes || '',

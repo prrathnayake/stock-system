@@ -92,6 +92,7 @@ export const Organization = sequelize.define('organization', {
   phone: { type: DataTypes.STRING(32), allowNull: true },
   website: { type: DataTypes.STRING(191), allowNull: true },
   logo_url: { type: DataTypes.STRING(512), allowNull: true },
+  type: { type: DataTypes.STRING(64), allowNull: true },
   invoice_prefix: { type: DataTypes.STRING(16), allowNull: true },
   default_payment_terms: { type: DataTypes.STRING(191), allowNull: true },
   invoice_notes: { type: DataTypes.TEXT, allowNull: true },
@@ -127,6 +128,9 @@ Organization.addHook('beforeValidate', (org) => {
   }
   if (org.phone) {
     org.phone = org.phone.trim();
+  }
+  if (org.type) {
+    org.type = org.type.trim().toLowerCase();
   }
   if (org.website) {
     org.website = org.website.trim();
@@ -431,7 +435,8 @@ export const Customer = sequelize.define('customer', {
 }, {
   indexes: [
     { fields: ['organization_id', 'name'] },
-    { fields: ['organization_id', 'email'] }
+    { unique: true, fields: ['organization_id', 'email'], name: 'customers_email_unique' },
+    { unique: true, fields: ['organization_id', 'phone'], name: 'customers_phone_unique' }
   ]
 });
 

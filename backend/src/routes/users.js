@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { createPasswordSchema } from '../utils/passwordPolicy.js';
 import {
   notifyUserAccountCreated,
   notifyUserAccountDeleted,
@@ -19,10 +20,12 @@ const router = Router();
 const RolesEnum = z.enum(['admin', 'user']);
 const UiVariantEnum = z.enum(['pro', 'analytics', 'tabular', 'minimal', 'visual']);
 
+const StrongPasswordSchema = createPasswordSchema(z);
+
 const CreateUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required'),
   email: z.string().email('Valid email is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters long'),
+  password: StrongPasswordSchema,
   role: RolesEnum.default('user'),
   ui_variant: UiVariantEnum.optional()
 });
@@ -30,7 +33,7 @@ const CreateUserSchema = z.object({
 const UpdateUserSchema = z.object({
   full_name: z.string().min(1).optional(),
   email: z.string().email().optional(),
-  password: z.string().min(8).optional(),
+  password: StrongPasswordSchema.optional(),
   role: RolesEnum.optional(),
   must_change_password: z.boolean().optional(),
   ui_variant: UiVariantEnum.optional()

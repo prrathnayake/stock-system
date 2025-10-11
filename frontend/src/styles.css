@@ -616,7 +616,7 @@ input:focus, select:focus, textarea:focus {
 
 .table-pagination {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
   padding: 12px;
@@ -624,6 +624,17 @@ input:focus, select:focus, textarea:focus {
   border-top: none;
   background: var(--color-surface-subtle);
   font-size: 13px;
+}
+
+.table-pagination--inline {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-bottom: 12px;
+}
+
+.table-pagination--inline .button {
+  min-width: auto;
 }
 
 .table-pagination .button {
@@ -967,7 +978,7 @@ input:focus, select:focus, textarea:focus {
   flex: 1;
   border-radius: var(--radius-md);
   overflow: hidden;
-  height: 200px;
+  height: 280px;
   background: var(--color-surface-alt);
 }
 
@@ -1284,6 +1295,23 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
 }
 
+.inventory__history-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.inventory__history-summary span {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.inventory__history-summary strong {
+  color: var(--color-text);
+}
+
 .inventory__history-timeline {
   max-height: 220px;
   overflow-y: auto;
@@ -1317,6 +1345,7 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.modal,
 .inventory__modal {
   position: fixed;
   inset: 0;
@@ -1328,6 +1357,7 @@ input:focus, select:focus, textarea:focus {
   z-index: 20;
 }
 
+.modal__content,
 .inventory__modal-content {
   max-width: 640px;
   width: 100%;
@@ -1335,12 +1365,24 @@ input:focus, select:focus, textarea:focus {
   overflow-y: auto;
 }
 
+.modal__header,
 .inventory__modal-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 12px;
+}
+
+.modal__body {
+  margin-top: 16px;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
 }
 
 @media (max-width: 1080px) {

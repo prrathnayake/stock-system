@@ -49,6 +49,8 @@ const uploadLogoMiddleware = (req, res, next) => {
 
 const bannerSchema = z.array(urlSchema).max(10, 'Provide up to 10 banner images');
 
+const ORGANIZATION_TYPES = ['retail', 'service', 'manufacturing', 'distribution', 'education', 'healthcare', 'nonprofit', 'technology', 'other'];
+
 const UpdateSchema = z.object({
   name: z.string().min(1, 'Organization name is required'),
   legal_name: z.string().max(191).optional(),
@@ -60,6 +62,7 @@ const UpdateSchema = z.object({
   phone: z.string().max(32).optional(),
   website: z.union([urlSchema, z.literal('')]).optional(),
   logo_url: logoUrlSchema.optional(),
+  type: z.union([z.enum(ORGANIZATION_TYPES), z.literal('')]).optional(),
   invoice_prefix: z.string().max(16).optional(),
   default_payment_terms: z.string().max(191).optional(),
   invoice_notes: z.string().max(4000).optional(),
@@ -90,12 +93,14 @@ function serializeOrganization(org, extras = {}) {
     phone: org.phone,
     website: org.website,
     logo_url: org.logo_url,
+    type: org.type,
     invoice_prefix: org.invoice_prefix,
     default_payment_terms: org.default_payment_terms,
     invoice_notes: org.invoice_notes,
     currency: org.currency,
     invoicing_enabled: org.invoicing_enabled,
-    banner_images: normaliseBannerImages(extras.bannerImages ?? extras.banner_images ?? org.banner_images)
+    banner_images: normaliseBannerImages(extras.bannerImages ?? extras.banner_images ?? org.banner_images),
+    logo_updated_at: org.updatedAt ? org.updatedAt.toISOString?.() || new Date(org.updatedAt).toISOString() : null
   };
 }
 
@@ -124,12 +129,13 @@ router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
       updates[key] = null;
     }
   };
-  ['contact_email', 'legal_name', 'abn', 'tax_id', 'address', 'phone', 'website', 'logo_url', 'invoice_prefix', 'default_payment_terms', 'invoice_notes', 'currency', 'timezone'].forEach(normaliseEmpty);
+  ['contact_email', 'legal_name', 'abn', 'tax_id', 'address', 'phone', 'website', 'logo_url', 'invoice_prefix', 'default_payment_terms', 'invoice_notes', 'currency', 'timezone', 'type'].forEach(normaliseEmpty);
   const bannerImagesUpdate = parsed.data.banner_images !== undefined
     ? normaliseBannerImages(parsed.data.banner_images)
     : undefined;
 
   await organization.update(updates);
+  await organization.reload();
   if (bannerImagesUpdate !== undefined) {
     await upsertSettings({ organization_banner_images: bannerImagesUpdate }, organization.id);
   }
@@ -163,7 +169,8 @@ router.post('/logo', requireAuth(['admin']), uploadLogoMiddleware, asyncHandler(
   }
 
   await organization.update({ logo_url: newLogoUrl });
-  res.status(201).json({ logo_url: newLogoUrl });
+  await organization.reload();
+  res.status(201).json({ logo_url: newLogoUrl, logo_updated_at: organization.updatedAt?.toISOString?.() || new Date(organization.updatedAt).toISOString() });
 }));
 
 export default router;

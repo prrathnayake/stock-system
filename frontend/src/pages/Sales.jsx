@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import TablePagination from '../components/TablePagination.jsx'
 
 const createEmptyCustomerForm = () => ({
   name: '',
@@ -30,21 +31,6 @@ function Banner({ banner, onClose }) {
   )
 }
 
-function TablePagination({ page, totalPages, onPrev, onNext }) {
-  if (totalPages <= 1) return null
-  return (
-    <div className="table-pagination">
-      <button type="button" className="button button--ghost" onClick={onPrev} disabled={page <= 1}>
-        Previous
-      </button>
-      <span>Page {page} of {totalPages}</span>
-      <button type="button" className="button button--ghost" onClick={onNext} disabled={page >= totalPages}>
-        Next
-      </button>
-    </div>
-  )
-}
-
 export default function Sales() {
   const queryClient = useQueryClient()
   const [customerSearch, setCustomerSearch] = useState('')
@@ -58,6 +44,10 @@ export default function Sales() {
   const [customerPage, setCustomerPage] = useState(1)
   const [salePage, setSalePage] = useState(1)
   const [activeSection, setActiveSection] = useState('sales')
+  const [activeSale, setActiveSale] = useState(null)
+  const [saleDetailForm, setSaleDetailForm] = useState({ reference: '', notes: '', customer_id: '' })
+  const [saleDetailBanner, setSaleDetailBanner] = useState(null)
+  const [saleDetailLoading, setSaleDetailLoading] = useState(false)
 
   const { data: customers = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ['customers', customerSearch],
@@ -95,6 +85,21 @@ export default function Sales() {
 
   const saleItems = saleForm.items
   const selectedCustomer = customers.find((customer) => String(customer.id) === String(saleForm.customer_id)) || null
+  const saleCustomerOptions = useMemo(() => {
+    const map = new Map()
+    customers.forEach((customer) => {
+      const label = customer.name || customer.company || customer.email || `Customer #${customer.id}`
+      map.set(String(customer.id), label)
+    })
+    if (activeSale?.customer) {
+      const id = String(activeSale.customer.id)
+      if (!map.has(id)) {
+        const label = activeSale.customer.name || activeSale.customer.company || activeSale.customer.email || `Customer #${activeSale.customer.id}`
+        map.set(id, label)
+      }
+    }
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label }))
+  }, [customers, activeSale?.customer])
 
   const PAGE_SIZE = 10
 
@@ -235,6 +240,27 @@ export default function Sales() {
     }
   })
 
+  const updateSaleDetailsMutation = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      const { data } = await api.patch(`/sales/${id}`, payload)
+      return data
+    },
+    onSuccess: (updated) => {
+      setSaleDetailBanner({ type: 'success', message: 'Sale updated successfully.' })
+      setActiveSale(updated)
+      setSaleDetailForm({
+        reference: updated.reference || '',
+        notes: updated.notes || '',
+        customer_id: updated.customer ? String(updated.customer.id) : updated.customerId ? String(updated.customerId) : ''
+      })
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      queryClient.invalidateQueries({ queryKey: ['customers'] })
+    },
+    onError: (error) => {
+      setSaleDetailBanner({ type: 'error', message: error.response?.data?.error || 'Unable to update sale.' })
+    }
+  })
+
   const handleCustomerSubmit = (event) => {
     event.preventDefault()
     const payload = {
@@ -260,6 +286,82 @@ export default function Sales() {
       })
       return { ...prev, items }
     })
+  }
+
+  const closeSaleDetails = () => {
+    setActiveSale(null)
+    setSaleDetailBanner(null)
+    setSaleDetailForm({ reference: '', notes: '', customer_id: '' })
+    setSaleDetailLoading(false)
+  }
+
+  const openSaleDetails = (sale) => {
+    if (!sale) return
+    setSaleDetailBanner(null)
+    setSaleDetailForm({
+      reference: sale.reference || '',
+      notes: sale.notes || '',
+      customer_id: sale.customer ? String(sale.customer.id) : sale.customerId ? String(sale.customerId) : ''
+    })
+    setActiveSale(sale)
+    setSaleDetailLoading(true)
+    api.get(`/sales/${sale.id}`)
+      .then(({ data }) => {
+        setActiveSale(data)
+        setSaleDetailForm({
+          reference: data.reference || '',
+          notes: data.notes || '',
+          customer_id: data.customer ? String(data.customer.id) : data.customerId ? String(data.customerId) : ''
+        })
+      })
+      .catch((error) => {
+        setSaleDetailBanner({ type: 'error', message: error.response?.data?.error || 'Unable to load sale details.' })
+      })
+      .finally(() => {
+        setSaleDetailLoading(false)
+      })
+  }
+
+  const handleSaleDetailChange = (field, value) => {
+    setSaleDetailForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSaleDetailSubmit = (event) => {
+    event.preventDefault()
+    if (!activeSale) return
+    setSaleDetailBanner(null)
+    const payload = {}
+    const trimmedReference = saleDetailForm.reference.trim()
+    const trimmedNotes = saleDetailForm.notes.trim()
+    const currentReference = activeSale.reference || ''
+    const currentNotes = activeSale.notes || ''
+    const currentCustomerId = activeSale.customer
+      ? String(activeSale.customer.id)
+      : activeSale.customerId
+        ? String(activeSale.customerId)
+        : ''
+
+    if (trimmedReference !== currentReference) {
+      payload.reference = trimmedReference
+    }
+    if (trimmedNotes !== currentNotes) {
+      payload.notes = trimmedNotes
+    }
+    if (saleDetailForm.customer_id && saleDetailForm.customer_id !== currentCustomerId) {
+      const parsedCustomerId = Number(saleDetailForm.customer_id)
+      if (!Number.isFinite(parsedCustomerId) || parsedCustomerId <= 0) {
+        setSaleDetailBanner({ type: 'error', message: 'Select a valid customer.' })
+        return
+      }
+      payload.customer_id = parsedCustomerId
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setSaleDetailBanner({ type: 'info', message: 'No changes detected for this sale.' })
+      return
+    }
+
+    updateSaleDetailsMutation.mutate({ id: activeSale.id, payload })
   }
 
   const handleSaleSubmit = (event) => {
@@ -458,7 +560,16 @@ export default function Sales() {
               placeholder="Search by name, company or email"
             />
           </div>
-            <div className="table-scroll">
+
+          <TablePagination
+            page={customerPage}
+            totalPages={customerTotalPages}
+            onPrev={() => setCustomerPage((page) => Math.max(1, page - 1))}
+            onNext={() => setCustomerPage((page) => Math.min(customerTotalPages, page + 1))}
+            className="table-pagination--inline"
+          />
+
+          <div className="table-scroll">
             <table className="table table--compact">
               <thead>
                 <tr>
@@ -632,7 +743,15 @@ export default function Sales() {
             </select>
           </div>
 
-            <div className="table-scroll">
+          <TablePagination
+            page={salePage}
+            totalPages={saleTotalPages}
+            onPrev={() => setSalePage((page) => Math.max(1, page - 1))}
+            onNext={() => setSalePage((page) => Math.min(saleTotalPages, page + 1))}
+            className="table-pagination--inline"
+          />
+
+          <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>
@@ -678,6 +797,13 @@ export default function Sales() {
                       </span>
                     </td>
                     <td className="table__actions">
+                      <button
+                        className="button button--ghost"
+                        type="button"
+                        onClick={() => openSaleDetails(sale)}
+                      >
+                        View / update
+                      </button>
                       {sale.status === 'backorder' && (
                         <button
                           className="button button--ghost"
@@ -727,6 +853,86 @@ export default function Sales() {
           </section>
         )}
       </div>
+      {activeSale && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby={`sale-detail-${activeSale.id}`}>
+          <div className="modal__content card">
+            <div className="modal__header">
+              <div>
+                <h3 id={`sale-detail-${activeSale.id}`}>Sale #{activeSale.id}</h3>
+                <p className="muted">
+                  {saleDetailLoading ? 'Loading sale details…' : `Status: ${activeSale.status}`}
+                </p>
+              </div>
+              <button type="button" className="button button--ghost" onClick={closeSaleDetails}>Close</button>
+            </div>
+            {saleDetailBanner && (
+              <div className={`banner banner--${saleDetailBanner.type === 'error' ? 'danger' : saleDetailBanner.type || 'info'}`}>
+                {saleDetailBanner.message}
+              </div>
+            )}
+            <form className="form-grid" onSubmit={handleSaleDetailSubmit}>
+              <label className="field" data-help="Visible on documents and internal activity logs.">
+                <span>Reference</span>
+                <input
+                  value={saleDetailForm.reference}
+                  onChange={(e) => handleSaleDetailChange('reference', e.target.value)}
+                  placeholder="Optional reference"
+                  disabled={saleDetailLoading || updateSaleDetailsMutation.isLoading}
+                />
+              </label>
+              <label className="field" data-help="Update the customer linked to this sale.">
+                <span>Customer</span>
+                <select
+                  value={saleDetailForm.customer_id}
+                  onChange={(e) => handleSaleDetailChange('customer_id', e.target.value)}
+                  disabled={saleDetailLoading || updateSaleDetailsMutation.isLoading}
+                >
+                  <option value="">Select customer</option>
+                  {saleCustomerOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field field--full" data-help="Internal notes for your team.">
+                <span>Notes</span>
+                <textarea
+                  value={saleDetailForm.notes}
+                  onChange={(e) => handleSaleDetailChange('notes', e.target.value)}
+                  rows={3}
+                  placeholder="Add context for this sale"
+                  disabled={saleDetailLoading || updateSaleDetailsMutation.isLoading}
+                />
+              </label>
+              <div className="modal__actions">
+                <button type="button" className="button button--ghost" onClick={closeSaleDetails} disabled={updateSaleDetailsMutation.isLoading}>
+                  Close
+                </button>
+                <button type="submit" className="button button--primary" disabled={updateSaleDetailsMutation.isLoading}>
+                  {updateSaleDetailsMutation.isLoading ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </form>
+            <section className="modal__body">
+              <h4>Items</h4>
+              <ul className="sale-items__list">
+                {Array.isArray(activeSale.items) && activeSale.items.map((item) => {
+                  const product = item.product || productMap[item.productId] || {}
+                  const backordered = Math.max(0, item.quantity - item.qty_reserved)
+                  return (
+                    <li key={item.id}>
+                      <span>{product.name || `Product #${item.productId}`}</span>
+                      <span className="stat-card__hint">
+                        Ordered {item.quantity} • Reserved {item.qty_reserved} • Shipped {item.qty_shipped}
+                        {backordered > 0 ? ` • Backorder ${backordered}` : ''}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
