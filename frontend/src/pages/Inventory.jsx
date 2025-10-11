@@ -35,6 +35,7 @@ export default function Inventory() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm, setEditForm] = useState(initialProductForm)
   const [binForm, setBinForm] = useState({ code: '', site: '', room: '' })
+  const [activeSection, setActiveSection] = useState('stock')
 
   const queryClient = useQueryClient()
 
@@ -194,6 +195,45 @@ export default function Inventory() {
             location: bin.location
           })
         }
+      })
+    })
+    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
+  }, [bins, stock])
+
+  const binOverview = useMemo(() => {
+    const map = new Map()
+    bins.forEach((bin) => {
+      const locationParts = []
+      if (bin.location?.site) locationParts.push(bin.location.site)
+      if (bin.location?.room) locationParts.push(bin.location.room)
+      map.set(bin.id, {
+        id: bin.id,
+        code: bin.code,
+        location: locationParts.join(' · '),
+        productCount: 0,
+        onHand: 0,
+        available: 0
+      })
+    })
+    stock.forEach((product) => {
+      product.bins.forEach((bin) => {
+        const id = bin.bin_id
+        if (!map.has(id)) {
+          map.set(id, {
+            id,
+            code: bin.bin_code,
+            location: bin.location || '',
+            productCount: 0,
+            onHand: 0,
+            available: 0
+          })
+        }
+        const entry = map.get(id)
+        entry.productCount += 1
+        const onHand = Number(bin.on_hand || 0)
+        const reserved = Number(bin.reserved || 0)
+        entry.onHand += onHand
+        entry.available += Math.max(0, onHand - reserved)
       })
     })
     return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
@@ -517,28 +557,64 @@ export default function Inventory() {
     updateStockLevels.isLoading ||
     removeProduct.isLoading
   const savingProduct = updateProduct.isLoading || updateStockLevels.isLoading
+  const isStockView = activeSection === 'stock'
+  const isBinsView = activeSection === 'bins'
 
   return (
     <div className="page inventory">
-      <div className="card inventory__header">
-        <div>
-          <h2>Inventory control center</h2>
-          <p className="muted">Search, curate and adjust your catalogue with real-time visibility into stock health.</p>
-        </div>
-        <div className="inventory__header-actions">
-          <button className="button" onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </div>
+      <div className="subnav" role="tablist" aria-label="Inventory sections">
+        <button
+          id="inventory-stock-tab"
+          type="button"
+          role="tab"
+          aria-controls="inventory-stock-panel"
+          aria-selected={isStockView}
+          tabIndex={isStockView ? 0 : -1}
+          className={`subnav__item${isStockView ? ' subnav__item--active' : ''}`}
+          onClick={() => setActiveSection('stock')}
+        >
+          Active stock
+        </button>
+        <button
+          id="inventory-bins-tab"
+          type="button"
+          role="tab"
+          aria-controls="inventory-bins-panel"
+          aria-selected={isBinsView}
+          tabIndex={isBinsView ? 0 : -1}
+          className={`subnav__item${isBinsView ? ' subnav__item--active' : ''}`}
+          onClick={() => setActiveSection('bins')}
+        >
+          Storage bins
+        </button>
       </div>
 
-      {feedback && (
-        <div className={`banner banner--${feedback.type === 'error' ? 'danger' : 'info'}`}>
-          {feedback.message}
-        </div>
-      )}
+      {isStockView && (
+        <section
+          id="inventory-stock-panel"
+          role="tabpanel"
+          aria-labelledby="inventory-stock-tab"
+          className="inventory__panel"
+        >
+          <div className="card inventory__header">
+            <div>
+              <h2>Inventory control center</h2>
+              <p className="muted">Search, curate and adjust your catalogue with real-time visibility into stock health.</p>
+            </div>
+            <div className="inventory__header-actions">
+              <button className="button" onClick={() => refetch()} disabled={isFetching}>
+                {isFetching ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
 
-      <div className="grid stats">
+          {feedback && (
+            <div className={`banner banner--${feedback.type === 'error' ? 'danger' : 'info'}`}>
+              {feedback.message}
+            </div>
+          )}
+
+          <div className="grid stats">
         <div className="stat-card card">
           <p className="muted">Active SKUs</p>
           <h2>{overviewStats.skuCount}</h2>
@@ -566,7 +642,7 @@ export default function Inventory() {
         </div>
       </div>
 
-      <div className="inventory__layout">
+          <div className="inventory__layout">
         <div className="card inventory__table-card">
           <div className="inventory__table-header">
             <div>
@@ -778,11 +854,11 @@ export default function Inventory() {
             </div>
           )}
         </aside>
-      </div>
+          </div>
 
-      <div className="inventory__forms">
-        <form className="card form-grid" onSubmit={handleCreateProduct}>
-          <h3>Create product</h3>
+          <div className="inventory__forms">
+            <form className="card form-grid" onSubmit={handleCreateProduct}>
+              <h3>Create product</h3>
           <label className="field" data-help="Unique identifier used for scanning, search and integrations.">
             <span>SKU</span>
             <input
@@ -854,8 +930,8 @@ export default function Inventory() {
           </div>
         </form>
 
-        <form className="card form-grid" onSubmit={handleAdjustStock}>
-          <h3>Adjust stock</h3>
+            <form className="card form-grid" onSubmit={handleAdjustStock}>
+              <h3>Adjust stock</h3>
           <label className="field" data-help="Select the item that requires a stock adjustment.">
             <span>Product</span>
             <select
@@ -917,48 +993,9 @@ export default function Inventory() {
           </div>
         </form>
 
-        <form className="card form-grid" onSubmit={handleCreateBin}>
-          <h3>Create storage bin</h3>
-          {binFeedback && (
-            <div className={`banner banner--${binFeedback.type === 'error' ? 'danger' : 'info'}`}>
-              {binFeedback.message}
-            </div>
-          )}
-          <label className="field" data-help="Unique identifier used when allocating or picking stock.">
-            <span>Bin code</span>
-            <input
-              value={binForm.code}
-              onChange={(e) => setBinForm((prev) => ({ ...prev, code: e.target.value }))}
-              placeholder="e.g. A-01"
-              required
-            />
-          </label>
-          <label className="field" data-help="Optional location name to help your team locate the bin.">
-            <span>Location</span>
-            <input
-              value={binForm.site}
-              onChange={(e) => setBinForm((prev) => ({ ...prev, site: e.target.value }))}
-              placeholder="Main warehouse"
-            />
-          </label>
-          <label className="field" data-help="Optional zone, aisle or room information.">
-            <span>Room / area</span>
-            <input
-              value={binForm.room}
-              onChange={(e) => setBinForm((prev) => ({ ...prev, room: e.target.value }))}
-              placeholder="Aisle 3"
-            />
-          </label>
-          <p className="muted field--span">Bins can be assigned to products later from the stock adjustment tools.</p>
-          <div className="form-actions">
-            <button className="button button--primary" type="submit" disabled={createBin.isLoading}>
-              {createBin.isLoading ? 'Creating…' : 'Create bin'}
-            </button>
           </div>
-        </form>
-      </div>
 
-      <div className="inventory__insights">
+          <div className="inventory__insights">
         <div className="card">
           <h3>Low stock alerts</h3>
           <p className="muted">Products that are at or below their reorder point.</p>
@@ -1097,7 +1134,120 @@ export default function Inventory() {
             <p className="muted">RMA tracking is reserved for inventory leads.</p>
           )}
         </div>
-      </div>
+          </div>
+        </section>
+      )}
+
+      {isBinsView && (
+        <section
+          id="inventory-bins-panel"
+          role="tabpanel"
+          aria-labelledby="inventory-bins-tab"
+          className="inventory__panel"
+        >
+          <div className="card inventory__header">
+            <div>
+              <h2>Storage locations</h2>
+              <p className="muted">Create bins and review how stock is distributed across the floor.</p>
+            </div>
+            <div className="inventory__header-actions">
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  binsQuery.refetch()
+                  refetch()
+                }}
+                disabled={binsQuery.isFetching || isFetching}
+              >
+                {binsQuery.isFetching || isFetching ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid split inventory__bins-view">
+            <form className="card form-grid" onSubmit={handleCreateBin}>
+              <h3>Create storage bin</h3>
+              {binFeedback && (
+                <div className={`banner banner--${binFeedback.type === 'error' ? 'danger' : 'info'}`}>
+                  {binFeedback.message}
+                </div>
+              )}
+              <label className="field" data-help="Unique identifier used when allocating or picking stock.">
+                <span>Bin code</span>
+                <input
+                  value={binForm.code}
+                  onChange={(e) => setBinForm((prev) => ({ ...prev, code: e.target.value }))}
+                  placeholder="e.g. A-01"
+                  required
+                />
+              </label>
+              <label className="field" data-help="Optional location name to help your team locate the bin.">
+                <span>Location</span>
+                <input
+                  value={binForm.site}
+                  onChange={(e) => setBinForm((prev) => ({ ...prev, site: e.target.value }))}
+                  placeholder="Main warehouse"
+                />
+              </label>
+              <label className="field" data-help="Optional zone, aisle or room information.">
+                <span>Room / area</span>
+                <input
+                  value={binForm.room}
+                  onChange={(e) => setBinForm((prev) => ({ ...prev, room: e.target.value }))}
+                  placeholder="Aisle 3"
+                />
+              </label>
+              <p className="muted field--span">Bins can be assigned to products later from the stock adjustment tools.</p>
+              <div className="form-actions">
+                <button className="button button--primary" type="submit" disabled={createBin.isLoading}>
+                  {createBin.isLoading ? 'Creating…' : 'Create bin'}
+                </button>
+              </div>
+            </form>
+
+            <section className="card inventory__bins-table">
+              <header className="card__header">
+                <div>
+                  <h3>Registered bins</h3>
+                  <p className="muted">Overview of storage locations and current stock assignments.</p>
+                </div>
+                <span className="badge badge--muted">{binOverview.length} locations</span>
+              </header>
+              <div className="table-scroll">
+                <table className="table table--compact">
+                  <thead>
+                    <tr>
+                      <th>Bin</th>
+                      <th>Location</th>
+                      <th>Products</th>
+                      <th>On hand</th>
+                      <th>Available</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {binOverview.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="muted">No bins recorded yet.</td>
+                      </tr>
+                    ) : (
+                      binOverview.map((bin) => (
+                        <tr key={bin.id}>
+                          <td><span className="badge">{bin.code}</span></td>
+                          <td>{bin.location || '—'}</td>
+                          <td>{bin.productCount}</td>
+                          <td>{bin.onHand}</td>
+                          <td>{bin.available}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      )}
 
       {editingProduct && (
         <div className="inventory__modal" role="dialog" aria-modal="true">

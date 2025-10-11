@@ -32,21 +32,26 @@ async function waitForDatabaseConnection({ retries = 10, delayMs = 2000 } = {}) 
 }
 
 async function ensureDefaultOrganization(transaction) {
+  const defaults = config.bootstrap.organization;
+  const organizationDefaults = {
+    name: defaults.name,
+    legal_name: defaults.legalName,
+    contact_email: defaults.contactEmail || null,
+    timezone: defaults.timezone,
+    abn: defaults.abn || null,
+    tax_id: defaults.taxId || null,
+    address: defaults.address || null,
+    phone: defaults.phone || null,
+    website: defaults.website || null,
+    default_payment_terms: defaults.defaultPaymentTerms,
+    invoice_notes: defaults.invoiceNotes,
+    invoice_prefix: defaults.invoicePrefix,
+    currency: defaults.currency,
+    invoicing_enabled: defaults.invoicingEnabled
+  };
   const [organization] = await Organization.findOrCreate({
     where: { slug: 'default' },
-    defaults: {
-      name: 'Default Organization',
-      legal_name: 'Default Organization Pty Ltd',
-      contact_email: 'operations@example.com',
-      abn: '12 345 678 901',
-      address: '123 Example Street\nSydney NSW 2000',
-      timezone: 'Australia/Sydney',
-      default_payment_terms: 'Due within 14 days',
-      invoice_notes: 'Please remit payment within the agreed terms.',
-      invoice_prefix: 'INV-',
-      currency: 'AUD',
-      invoicing_enabled: true
-    },
+    defaults: organizationDefaults,
     transaction
   });
 
@@ -581,38 +586,45 @@ export async function initialiseDatabase() {
   await cleanupDuplicateOrganizationSlugIndexes();
   await sequelize.sync({ alter: true });
 
+  const defaults = config.bootstrap.organization;
   const [organization] = await Organization.findOrCreate({
     where: { slug: 'default' },
     defaults: {
-      name: 'Default Organization',
-      legal_name: 'Default Organization Pty Ltd',
-      contact_email: 'operations@example.com',
-      abn: '12 345 678 901',
-      address: '123 Example Street\nSydney NSW 2000',
-      timezone: 'Australia/Sydney',
-      default_payment_terms: 'Due within 14 days',
-      invoice_notes: 'Please remit payment within the agreed terms.',
-      invoice_prefix: 'INV-',
-      currency: 'AUD',
-      invoicing_enabled: true
+      name: defaults.name,
+      legal_name: defaults.legalName,
+      contact_email: defaults.contactEmail || null,
+      abn: defaults.abn || null,
+      tax_id: defaults.taxId || null,
+      address: defaults.address || null,
+      phone: defaults.phone || null,
+      website: defaults.website || null,
+      timezone: defaults.timezone,
+      default_payment_terms: defaults.defaultPaymentTerms,
+      invoice_notes: defaults.invoiceNotes,
+      invoice_prefix: defaults.invoicePrefix,
+      currency: defaults.currency,
+      invoicing_enabled: defaults.invoicingEnabled
     }
   });
 
-  await runAsOrganization(organization.id, async () => {
-    const users = await User.count();
-    if (users === 0) {
-      const bcrypt = (await import('bcryptjs')).default;
-      const hash = await bcrypt.hash('admin123', 10);
-      await User.create({
-        full_name: 'Admin',
-        email: 'admin@example.com',
-        password_hash: hash,
-        role: 'admin',
-        must_change_password: true,
-        ui_variant: 'pro'
-      });
-      console.log('Seeded admin user admin@example.com / admin123');
-    }
+    await runAsOrganization(organization.id, async () => {
+      const adminDefaults = config.bootstrap.admin;
+      const users = await User.count();
+      if (users === 0) {
+        const bcrypt = (await import('bcryptjs')).default;
+        const hash = await bcrypt.hash(adminDefaults.password, 10);
+        await User.create({
+          full_name: adminDefaults.name || 'Admin',
+          email: adminDefaults.email,
+          password_hash: hash,
+          role: 'admin',
+          must_change_password: true,
+          ui_variant: 'pro'
+        });
+        if (config.env !== 'production') {
+          console.log(`Seeded admin user ${adminDefaults.email} with password from DEFAULT_ADMIN_PASSWORD.`);
+        }
+      }
 
     if (config.env !== 'production') {
       const locs = await Location.count();
