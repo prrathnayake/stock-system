@@ -30,15 +30,9 @@ export default function Inventory() {
   const [productForm, setProductForm] = useState(initialProductForm)
   const [adjustForm, setAdjustForm] = useState(initialAdjustmentForm)
   const [feedback, setFeedback] = useState(null)
-  const [binFeedback, setBinFeedback] = useState(null)
   const [selectedProductId, setSelectedProductId] = useState(null)
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm, setEditForm] = useState(initialProductForm)
-  const [binForm, setBinForm] = useState({ code: '', site: '', room: '' })
-  const [activeSection, setActiveSection] = useState('stock')
-  const [binTableFeedback, setBinTableFeedback] = useState(null)
-  const [editingBinId, setEditingBinId] = useState(null)
-  const [binEditForm, setBinEditForm] = useState({ code: '', site: '', room: '', locationId: null })
   const [activeStockTool, setActiveStockTool] = useState('history')
   const [notificationsOpen, setNotificationsOpen] = useState(true)
 
@@ -205,51 +199,6 @@ export default function Inventory() {
     return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
   }, [bins, stock])
 
-  const binOverview = useMemo(() => {
-    const map = new Map()
-    bins.forEach((bin) => {
-      const locationParts = []
-      if (bin.location?.site) locationParts.push(bin.location.site)
-      if (bin.location?.room) locationParts.push(bin.location.room)
-      map.set(bin.id, {
-        id: bin.id,
-        code: bin.code,
-        location: locationParts.join(' · '),
-        site: bin.location?.site || '',
-        room: bin.location?.room || '',
-        locationId: bin.location?.id ?? bin.location_id ?? null,
-        productCount: 0,
-        onHand: 0,
-        available: 0
-      })
-    })
-    stock.forEach((product) => {
-      product.bins.forEach((bin) => {
-        const id = bin.bin_id
-        if (!map.has(id)) {
-          map.set(id, {
-            id,
-            code: bin.bin_code,
-            location: bin.location || '',
-            site: '',
-            room: '',
-            locationId: null,
-            productCount: 0,
-            onHand: 0,
-            available: 0
-          })
-        }
-        const entry = map.get(id)
-        entry.productCount += 1
-        const onHand = Number(bin.on_hand || 0)
-        const reserved = Number(bin.reserved || 0)
-        entry.onHand += onHand
-        entry.available += Math.max(0, onHand - reserved)
-      })
-    })
-    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
-  }, [bins, stock])
-
   const productForAdjustment = useMemo(
     () => stock.find((item) => String(item.id) === adjustForm.product_id) || null,
     [stock, adjustForm.product_id]
@@ -321,27 +270,6 @@ export default function Inventory() {
     mutationFn: async (payload) => {
       const { data } = await api.post('/stock/move', payload)
       return data
-    }
-  })
-
-  const createBin = useMutation({
-    mutationFn: async (payload) => {
-      const { data } = await api.post('/bins', payload)
-      return data
-    }
-  })
-
-  const updateBin = useMutation({
-    mutationFn: async ({ id, payload }) => {
-      const { data } = await api.patch(`/bins/${id}`, payload)
-      return data
-    }
-  })
-
-  const deleteBin = useMutation({
-    mutationFn: async (id) => {
-      await api.delete(`/bins/${id}`)
-      return true
     }
   })
 
@@ -421,112 +349,6 @@ export default function Inventory() {
       }
     })
     setSelectedProductId(value || null)
-  }
-
-  const handleCreateBin = (event) => {
-    event.preventDefault()
-    setBinFeedback(null)
-    const code = binForm.code.trim()
-    if (!code) {
-      setBinFeedback({ type: 'error', message: 'Bin code is required.' })
-      return
-    }
-    const payload = { code }
-    const site = binForm.site.trim()
-    const room = binForm.room.trim()
-    if (site) {
-      payload.location = { site }
-      if (room) {
-        payload.location.room = room
-      }
-    }
-    createBin.mutate(payload, {
-      onSuccess: () => {
-        setBinFeedback({ type: 'success', message: 'Bin created successfully.' })
-        setBinForm({ code: '', site: '', room: '' })
-        queryClient.invalidateQueries({ queryKey: ['bins'] })
-        refetch()
-      },
-      onError: (error) => {
-        setBinFeedback({
-          type: 'error',
-          message: error.response?.data?.error || 'Unable to create bin right now.'
-        })
-      }
-    })
-  }
-
-  const openBinEditor = (bin) => {
-    setBinTableFeedback(null)
-    setEditingBinId(bin.id)
-    setBinEditForm({
-      code: bin.code || '',
-      site: bin.site || '',
-      room: bin.room || '',
-      locationId: bin.locationId ?? null
-    })
-  }
-
-  const cancelBinEdit = () => {
-    setEditingBinId(null)
-    setBinEditForm({ code: '', site: '', room: '', locationId: null })
-  }
-
-  const handleUpdateBinRow = (event) => {
-    event.preventDefault()
-    if (!editingBinId) return
-    setBinTableFeedback(null)
-    const code = binEditForm.code.trim()
-    if (!code) {
-      setBinTableFeedback({ type: 'error', message: 'Bin code is required.' })
-      return
-    }
-    const payload = { code }
-    const site = binEditForm.site.trim()
-    const room = binEditForm.room.trim()
-    if (site) {
-      payload.location = { site }
-      if (room) {
-        payload.location.room = room
-      }
-    } else if (binEditForm.locationId) {
-      payload.clear_location = true
-    }
-    updateBin.mutate({ id: editingBinId, payload }, {
-      onSuccess: () => {
-        setBinTableFeedback({ type: 'success', message: 'Storage bin updated successfully.' })
-        cancelBinEdit()
-        queryClient.invalidateQueries({ queryKey: ['bins'] })
-        refetch()
-      },
-      onError: (error) => {
-        setBinTableFeedback({
-          type: 'error',
-          message: error.response?.data?.error || 'Unable to update storage bin.'
-        })
-      }
-    })
-  }
-
-  const handleDeleteBin = (bin) => {
-    if (typeof window !== 'undefined' && !window.confirm(`Remove bin ${bin.code}? Any stock must be reassigned first.`)) return
-    setBinTableFeedback(null)
-    deleteBin.mutate(bin.id, {
-      onSuccess: () => {
-        setBinTableFeedback({ type: 'success', message: 'Storage bin removed.' })
-        if (editingBinId === bin.id) {
-          cancelBinEdit()
-        }
-        queryClient.invalidateQueries({ queryKey: ['bins'] })
-        refetch()
-      },
-      onError: (error) => {
-        setBinTableFeedback({
-          type: 'error',
-          message: error.response?.data?.error || 'Unable to remove storage bin.'
-        })
-      }
-    })
   }
 
   const openEdit = (product) => {
@@ -654,54 +476,30 @@ export default function Inventory() {
     updateProduct.isLoading ||
     updateStockLevels.isLoading ||
     removeProduct.isLoading
-  const binActionDisabled = updateBin.isLoading || deleteBin.isLoading
   const savingProduct = updateProduct.isLoading || updateStockLevels.isLoading
-  const isStockView = activeSection === 'stock'
-  const isBinsView = activeSection === 'bins'
 
   return (
     <div className="page inventory">
-      <div className="subnav" role="tablist" aria-label="Inventory sections">
-        <button
-          id="inventory-stock-tab"
-          type="button"
-          role="tab"
-          aria-controls="inventory-stock-panel"
-          aria-selected={isStockView}
-          tabIndex={isStockView ? 0 : -1}
-          className={`subnav__item${isStockView ? ' subnav__item--active' : ''}`}
-          onClick={() => setActiveSection('stock')}
-        >
-          Active stock
-        </button>
-        <button
-          id="inventory-bins-tab"
-          type="button"
-          role="tab"
-          aria-controls="inventory-bins-panel"
-          aria-selected={isBinsView}
-          tabIndex={isBinsView ? 0 : -1}
-          className={`subnav__item${isBinsView ? ' subnav__item--active' : ''}`}
-          onClick={() => setActiveSection('bins')}
-        >
-          Storage bins
-        </button>
-      </div>
-
-      {isStockView && (
-        <section
-          id="inventory-stock-panel"
-          role="tabpanel"
-          aria-labelledby="inventory-stock-tab"
-          className="inventory__panel"
-        >
+      <section
+        id="inventory-stock-panel"
+        className="inventory__panel"
+        aria-label="Inventory workspace"
+      >
           <div className="card inventory__header">
             <div>
               <h2>Inventory control center</h2>
               <p className="muted">Search, curate and adjust your catalogue with real-time visibility into stock health.</p>
             </div>
             <div className="inventory__header-actions">
-              <button className="button" onClick={() => refetch()} disabled={isFetching}>
+              <button
+                className="button"
+                onClick={() => {
+                  refetch()
+                  binsQuery.refetch()
+                  serialsQuery.refetch()
+                }}
+                disabled={isFetching}
+              >
                 {isFetching ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
@@ -1384,197 +1182,7 @@ export default function Inventory() {
             <p className="muted">RMA tracking is reserved for inventory leads.</p>
           )}
         </div>
-        </section>
-      )}
-
-      {isBinsView && (
-        <section
-          id="inventory-bins-panel"
-          role="tabpanel"
-          aria-labelledby="inventory-bins-tab"
-          className="inventory__panel"
-        >
-          <div className="card inventory__header">
-            <div>
-              <h2>Storage locations</h2>
-              <p className="muted">Create bins and review how stock is distributed across the floor.</p>
-            </div>
-            <div className="inventory__header-actions">
-              <button
-                className="button"
-                type="button"
-                onClick={() => {
-                  binsQuery.refetch()
-                  refetch()
-                }}
-                disabled={binsQuery.isFetching || isFetching}
-              >
-                {binsQuery.isFetching || isFetching ? 'Refreshing…' : 'Refresh'}
-              </button>
-            </div>
-          </div>
-
-          <div className="grid split inventory__bins-view">
-            <section className="card inventory__bins-table">
-              <header className="card__header">
-                <div>
-                  <h3>Registered bins</h3>
-                  <p className="muted">Overview of storage locations and current stock assignments.</p>
-                </div>
-                <span className="badge badge--muted">{binOverview.length} locations</span>
-              </header>
-              {binTableFeedback && (
-                <div className={`banner banner--${binTableFeedback.type === 'error' ? 'danger' : 'info'}`}>
-                  {binTableFeedback.message}
-                </div>
-              )}
-              <div className="table-scroll">
-                <table className="table table--compact">
-                  <thead>
-                    <tr>
-                      <th>Bin</th>
-                      <th>Location</th>
-                      <th>Products</th>
-                      <th>On hand</th>
-                      <th>Available</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {binOverview.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="muted">No bins recorded yet.</td>
-                      </tr>
-                    ) : (
-                      binOverview.map((bin) => (
-                        <React.Fragment key={bin.id}>
-                          <tr>
-                            <td><span className="badge">{bin.code}</span></td>
-                            <td>{bin.location || '—'}</td>
-                            <td>{bin.productCount}</td>
-                            <td>{bin.onHand}</td>
-                            <td>{bin.available}</td>
-                            <td>
-                              <div className="table__actions">
-                                <button
-                                  type="button"
-                                  className="button button--small"
-                                  onClick={() => openBinEditor(bin)}
-                                  disabled={binActionDisabled && editingBinId !== bin.id}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  className="button button--small button--danger"
-                                  onClick={() => handleDeleteBin(bin)}
-                                  disabled={deleteBin.isLoading}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                          {editingBinId === bin.id && (
-                            <tr className="inventory__bin-edit-row">
-                              <td colSpan={6}>
-                                <form className="inventory__bin-edit-form" onSubmit={handleUpdateBinRow}>
-                                  <div className="inventory__bin-edit-grid">
-                                    <label className="field">
-                                      <span>Bin code</span>
-                                      <input
-                                        value={binEditForm.code}
-                                        onChange={(e) => setBinEditForm((prev) => ({ ...prev, code: e.target.value }))}
-                                        required
-                                        disabled={updateBin.isLoading}
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>Location name</span>
-                                      <input
-                                        value={binEditForm.site}
-                                        onChange={(e) => setBinEditForm((prev) => ({ ...prev, site: e.target.value }))}
-                                        placeholder="Main warehouse"
-                                        disabled={updateBin.isLoading}
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>Room / area</span>
-                                      <input
-                                        value={binEditForm.room}
-                                        onChange={(e) => setBinEditForm((prev) => ({ ...prev, room: e.target.value }))}
-                                        placeholder="Aisle 3"
-                                        disabled={updateBin.isLoading}
-                                      />
-                                    </label>
-                                  </div>
-                                  <div className="form-actions">
-                                    <button className="button button--primary" type="submit" disabled={updateBin.isLoading}>
-                                      {updateBin.isLoading ? 'Saving…' : 'Save changes'}
-                                    </button>
-                                    <button
-                                      className="button button--ghost button--small"
-                                      type="button"
-                                      onClick={cancelBinEdit}
-                                      disabled={updateBin.isLoading}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </form>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <form className="card form-grid" onSubmit={handleCreateBin}>
-              <h3>Create storage bin</h3>
-              {binFeedback && (
-                <div className={`banner banner--${binFeedback.type === 'error' ? 'danger' : 'info'}`}>
-                  {binFeedback.message}
-                </div>
-              )}
-              <label className="field" data-help="Unique identifier used when allocating or picking stock.">
-                <span>Bin code</span>
-                <input
-                  value={binForm.code}
-                  onChange={(e) => setBinForm((prev) => ({ ...prev, code: e.target.value }))}
-                  placeholder="e.g. A-01"
-                  required
-                />
-              </label>
-              <label className="field" data-help="Optional location name to help your team locate the bin.">
-                <span>Location</span>
-                <input
-                  value={binForm.site}
-                  onChange={(e) => setBinForm((prev) => ({ ...prev, site: e.target.value }))}
-                  placeholder="Main warehouse"
-                />
-              </label>
-              <label className="field" data-help="Optional zone, aisle or room information.">
-                <span>Room / area</span>
-                <input
-                  value={binForm.room}
-                  onChange={(e) => setBinForm((prev) => ({ ...prev, room: e.target.value }))}
-                  placeholder="Aisle 3"
-                />
-              </label>
-              <p className="muted field--span">Bins can be assigned to products later from the stock adjustment tools.</p>
-              <div className="form-actions">
-                <button className="button button--primary" type="submit" disabled={createBin.isLoading}>
-                  {createBin.isLoading ? 'Creating…' : 'Create bin'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </section>
-      )}
+      </section>
 
       {editingProduct && (
         <div className="inventory__modal" role="dialog" aria-modal="true">
