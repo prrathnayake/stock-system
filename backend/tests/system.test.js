@@ -226,6 +226,9 @@ describe('End-to-end system workflow', () => {
         .set('Authorization', `Bearer ${authToken}`);
       expect(res.status).toBe(200);
       expect(res.body.length).toBeGreaterThanOrEqual(1);
+      const [firstUser] = res.body;
+      expect(firstUser).toHaveProperty('online');
+      expect(firstUser).toHaveProperty('last_seen_at');
     });
 
     await step('Create new product', async () => {

@@ -12,6 +12,7 @@ import {
   notifyUserAccountUpdated
 } from '../services/notificationService.js';
 import { presentActivity } from '../services/activityLog.js';
+import { isUserOnline } from '../services/userPresence.js';
 
 const router = Router();
 
@@ -42,6 +43,9 @@ const PreferenceSchema = z.object({
 });
 
 function presentUser(user) {
+  const lastSeen = typeof user?.get === 'function'
+    ? user.get('last_seen_at')
+    : user?.last_seen_at ?? user?.lastSeenAt ?? null;
   return {
     id: user.id,
     name: user.full_name,
@@ -52,7 +56,9 @@ function presentUser(user) {
     organization_id: user.organizationId,
     created_at: user.createdAt,
     updated_at: user.updatedAt,
-    ui_variant: user.ui_variant
+    ui_variant: user.ui_variant,
+    last_seen_at: lastSeen,
+    online: isUserOnline(lastSeen)
   };
 }
 

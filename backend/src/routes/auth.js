@@ -9,6 +9,7 @@ import { HttpError } from '../utils/httpError.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/tokenService.js';
 import { recordActivity } from '../services/activityLog.js';
+import { touchUserPresence } from '../services/userPresence.js';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
 
   const access = signAccessToken(user);
   const refresh = signRefreshToken(user.id);
+  await touchUserPresence(user.id, { force: true, organizationId: organization.id });
   await recordActivity({
     organizationId: organization.id,
     userId: user.id,
