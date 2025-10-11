@@ -16,6 +16,7 @@ import createPurchasingRoutes from './routes/purchasing.js';
 import createRmaRoutes from './routes/rma.js';
 import settingsRoutes from './routes/settings.js';
 import backupsRoutes from './routes/backups.js';
+import organizationRoutes from './routes/organization.js';
 import { config } from './config.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
@@ -58,6 +59,7 @@ export function registerRoutes(app, io) {
   app.use('/rma', createRmaRoutes(io));
   app.use('/settings', settingsRoutes);
   app.use('/backups', backupsRoutes);
+  app.use('/organization', organizationRoutes);
 
   if (config.frontend.serve) {
     const distPath = config.frontend.distPath;

@@ -4,6 +4,15 @@ import { clearTokens, getAccessToken, getUserProfile, setTokens, setUserProfile 
 
 const AuthContext = createContext(null);
 
+function normalizeUser(value) {
+  if (!value) return null;
+  return {
+    ui_variant: 'pro',
+    ...value,
+    ui_variant: value.ui_variant || 'pro'
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -12,17 +21,27 @@ export function AuthProvider({ children }) {
     const token = getAccessToken();
     if (token) {
       const cachedUser = getUserProfile();
-      setUser(cachedUser);
+      setUser(normalizeUser(cachedUser));
     }
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const variant = user?.ui_variant || 'pro';
+    document.documentElement.dataset.uiVariant = variant;
+    return () => {
+      document.documentElement.dataset.uiVariant = '';
+    };
+  }, [user?.ui_variant]);
+
   const login = async (organization, email, password) => {
     const { data } = await api.post('/auth/login', { organization, email, password });
+    const normalizedUser = normalizeUser(data.user);
     setTokens(data.access, data.refresh);
-    setUserProfile(data.user);
-    setUser(data.user);
-    return data.user;
+    setUserProfile(normalizedUser);
+    setUser(normalizedUser);
+    return normalizedUser;
   };
 
   const logout = () => {

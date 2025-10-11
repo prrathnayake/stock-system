@@ -6,17 +6,24 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import {
+  notifyUserAccountCreated,
+  notifyUserAccountDeleted,
+  notifyUserAccountUpdated
+} from '../services/notificationService.js';
 
 const router = Router();
 
 const RolesEnum = z.enum(['admin', 'user']);
+const UiVariantEnum = z.enum(['pro', 'analytics', 'tabular', 'minimal', 'visual']);
 
 const CreateUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required'),
   email: z.string().email('Valid email is required'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
   role: RolesEnum.default('user'),
-  must_change_password: z.boolean().optional()
+  must_change_password: z.boolean().optional(),
+  ui_variant: UiVariantEnum.optional()
 });
 
 const UpdateUserSchema = z.object({
@@ -24,21 +31,28 @@ const UpdateUserSchema = z.object({
   email: z.string().email().optional(),
   password: z.string().min(8).optional(),
   role: RolesEnum.optional(),
-  must_change_password: z.boolean().optional()
+  must_change_password: z.boolean().optional(),
+  ui_variant: UiVariantEnum.optional()
 }).refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field must be provided'
+});
+
+const PreferenceSchema = z.object({
+  ui_variant: UiVariantEnum
 });
 
 function presentUser(user) {
   return {
     id: user.id,
+    name: user.full_name,
     full_name: user.full_name,
     email: user.email,
     role: user.role,
     must_change_password: user.must_change_password,
     organization_id: user.organizationId,
     created_at: user.createdAt,
-    updated_at: user.updatedAt
+    updated_at: user.updatedAt,
+    ui_variant: user.ui_variant
   };
 }
 
@@ -52,7 +66,7 @@ router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
   }
-  const { full_name, email, password, role, must_change_password } = parsed.data;
+  const { full_name, email, password, role, must_change_password, ui_variant } = parsed.data;
   const normalizedEmail = normalizeEmail(email);
   const existing = await User.findOne({ where: { email: normalizedEmail } });
   if (existing) {
@@ -64,9 +78,18 @@ router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
     email: normalizedEmail,
     password_hash,
     role,
-    must_change_password: must_change_password ?? false
+    must_change_password: must_change_password ?? false,
+    ui_variant: ui_variant ?? 'pro'
   });
-  res.status(201).json(presentUser(created));
+  const payload = presentUser(created);
+  res.status(201).json(payload);
+  notifyUserAccountCreated({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    user: payload
+  }).catch((error) => {
+    console.error('[notify] failed to send user creation email', error);
+  });
 }));
 
 router.put('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
@@ -94,7 +117,15 @@ router.put('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
   }
 
   await user.update(updates);
-  res.json(presentUser(user));
+  const payload = presentUser(user);
+  res.json(payload);
+  notifyUserAccountUpdated({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    user: payload
+  }).catch((error) => {
+    console.error('[notify] failed to send user update email', error);
+  });
 }));
 
 router.delete('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
@@ -103,8 +134,29 @@ router.delete('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
     throw new HttpError(404, 'User not found');
   }
 
+  const snapshot = presentUser(user);
   await user.destroy();
   res.status(204).send();
+  notifyUserAccountDeleted({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    user: snapshot
+  }).catch((error) => {
+    console.error('[notify] failed to send user deletion email', error);
+  });
+}));
+
+router.put('/me/preferences', requireAuth(), asyncHandler(async (req, res) => {
+  const parsed = PreferenceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
+  }
+  const user = await User.findByPk(req.user.id);
+  if (!user) {
+    throw new HttpError(404, 'User not found');
+  }
+  await user.update({ ui_variant: parsed.data.ui_variant });
+  res.json(presentUser(user));
 }));
 
 export default router;

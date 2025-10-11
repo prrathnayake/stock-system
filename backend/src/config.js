@@ -93,6 +93,15 @@ export const config = {
     directory: process.env.BACKUP_DIRECTORY || 'backups',
     retainDays: Number(process.env.BACKUP_RETAIN_DAYS || 14)
   },
+  mail: {
+    enabled: process.env.MAIL_ENABLED === 'true',
+    host: process.env.MAIL_HOST || '',
+    port: Number(process.env.MAIL_PORT || 587),
+    secure: process.env.MAIL_SECURE === 'true',
+    user: process.env.MAIL_USER || '',
+    pass: process.env.MAIL_PASS || '',
+    from: process.env.MAIL_FROM || 'no-reply@stock-system.local'
+  },
   frontend: {
     serve: process.env.SERVE_FRONTEND !== 'false',
     distPath: resolveFrontendPath()
@@ -112,5 +121,13 @@ if (config.env === 'production') {
   }
   if (config.backup.enabled && !config.backup.directory) {
     throw new Error('BACKUP_DIRECTORY must be provided when BACKUP_ENABLED=true');
+  }
+  if (config.mail.enabled) {
+    if (!config.mail.host) {
+      throw new Error('MAIL_HOST must be provided when MAIL_ENABLED=true');
+    }
+    if (!config.mail.from) {
+      throw new Error('MAIL_FROM must be provided when MAIL_ENABLED=true');
+    }
   }
 }

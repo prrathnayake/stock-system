@@ -3,26 +3,27 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { useTheme } from '../providers/ThemeProvider.jsx'
 
-const navItems = [
-  { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
-  { to: '/inventory', label: 'Inventory', roles: ['admin', 'user'] },
-  { to: '/scan', label: 'Scan', roles: ['admin', 'user'] },
-  { to: '/work-orders', label: 'Work Orders', roles: ['admin'] },
-  { to: '/settings', label: 'Administration', roles: ['admin'] }
-]
-
 export default function AppLayout() {
   const { user, logout, organization } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const location = useLocation()
+  const variant = user?.ui_variant || 'pro'
+
+  const navItems = useMemo(() => ([
+    { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
+    { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
+    { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
+    { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin'] },
+    { to: '/settings', label: user?.role === 'admin' ? 'Administration' : 'Settings', roles: ['admin', 'user'] }
+  ]), [user?.role, variant])
 
   const pageTitle = useMemo(() => {
     const match = navItems.find((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)))
     return match ? match.label : 'Dashboard'
-  }, [location.pathname])
+  }, [location.pathname, navItems])
 
   return (
-    <div className="layout">
+    <div className={`layout layout--${variant}`}>
       <aside className="sidebar">
         <div className="sidebar__brand">
           <span className="sidebar__dot" />

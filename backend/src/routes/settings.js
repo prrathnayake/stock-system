@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { getAllSettings, upsertSettings } from '../services/settings.js';
 import { scheduleBackups, getBackupOptions } from '../services/backup.js';
+import { notifySettingsChanged } from '../services/notificationService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const UpdateSchema = z.object({
@@ -50,6 +51,13 @@ router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   const merged = Object.fromEntries(entries.entries());
   const backup = getBackupOptions();
   res.json({ ...merged, backup_enabled: backup.enabled, backup_schedule: backup.schedule, backup_retain_days: backup.retainDays });
+  notifySettingsChanged({
+    organizationId: req.user.organization_id,
+    actor: req.user,
+    keys: Object.keys(payload)
+  }).catch((error) => {
+    console.error('[notify] failed to send settings update email', error);
+  });
 }));
 
 export default router;

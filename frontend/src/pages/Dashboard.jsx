@@ -65,6 +65,19 @@ export default function Dashboard() {
     .sort((a, b) => b.on_hand - a.on_hand)
     .slice(0, 5)
 
+  const chartData = stock
+    .slice()
+    .sort((a, b) => b.available - a.available)
+    .slice(0, 6)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      available: item.available,
+      reserved: item.reserved
+    }))
+
+  const maxStackTotal = chartData.reduce((max, row) => Math.max(max, row.available + row.reserved), 0) || 1
+
   return (
     <div className="page">
       <div className="grid stats">
@@ -82,6 +95,43 @@ export default function Dashboard() {
           <p className="muted">Reserved units</p>
           <h2>{overview?.reservedCount ?? '—'}</h2>
           <p className="stat-card__hint">Allocated to work orders and repairs.</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <div>
+            <h3>Inventory mix</h3>
+            <p className="muted">Compare on-hand versus reserved units for top-moving products.</p>
+          </div>
+        </div>
+        <div className="stacked-chart" role="img" aria-label="Inventory availability chart">
+          {chartData.length === 0 && <p className="muted">Inventory data will appear once products are loaded.</p>}
+          {chartData.map((row) => {
+            const availableWidth = Math.max(0, (row.available / maxStackTotal) * 100)
+            const reservedWidth = Math.max(0, (row.reserved / maxStackTotal) * 100)
+            return (
+              <div key={row.id} className="stacked-chart__row">
+                <div className="stacked-chart__label">{row.name}</div>
+                <div className="stacked-chart__bar">
+                  <span
+                    className="stacked-chart__segment stacked-chart__segment--available"
+                    style={{ width: `${availableWidth}%` }}
+                    aria-hidden="true"
+                  />
+                  <span
+                    className="stacked-chart__segment stacked-chart__segment--reserved"
+                    style={{ width: `${reservedWidth}%` }}
+                    aria-hidden="true"
+                  />
+                </div>
+                <div className="stacked-chart__values">
+                  <span>{row.available} available</span>
+                  <span>{row.reserved} reserved</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
