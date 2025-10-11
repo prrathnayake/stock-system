@@ -97,7 +97,12 @@ export default function createStockRoutes(io) {
     const latestMoves = await StockMove.findAll({
       order: [['createdAt', 'DESC']],
       limit: 5,
-      include: [Product]
+      include: [
+        Product,
+        { model: Bin, as: 'fromBin', attributes: ['id', 'code'] },
+        { model: Bin, as: 'toBin', attributes: ['id', 'code'] },
+        { model: User, as: 'performedBy', attributes: ['id', 'full_name', 'email'] }
+      ]
     });
 
     const payload = {
@@ -107,9 +112,13 @@ export default function createStockRoutes(io) {
       recentActivity: latestMoves.map(move => ({
         id: move.id,
         sku: move.product?.sku,
+        productName: move.product?.name || null,
         qty: move.qty,
         reason: move.reason,
-        occurredAt: move.createdAt
+        occurredAt: move.createdAt,
+        fromBin: move.fromBin?.code || null,
+        toBin: move.toBin?.code || null,
+        performedBy: move.performedBy?.full_name || move.performedBy?.email || null
       }))
     };
 

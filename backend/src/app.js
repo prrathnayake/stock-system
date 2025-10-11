@@ -18,6 +18,7 @@ import settingsRoutes from './routes/settings.js';
 import backupsRoutes from './routes/backups.js';
 import organizationRoutes from './routes/organization.js';
 import createInvoiceRoutes from './routes/invoices.js';
+import binRoutes from './routes/bins.js';
 import { config } from './config.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
@@ -66,6 +67,7 @@ export function registerRoutes(app, io) {
   app.use('/settings', settingsRoutes);
   app.use('/backups', backupsRoutes);
   app.use('/organization', organizationRoutes);
+  app.use('/bins', binRoutes);
 
   if (config.frontend.serve) {
     const distPath = config.frontend.distPath;
