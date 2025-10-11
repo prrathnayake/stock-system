@@ -234,6 +234,7 @@ export const StockMove = sequelize.define('stock_move', {
 export const WorkOrder = sequelize.define('work_order', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  assignedTo: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   customer_name: { type: DataTypes.STRING, allowNull: false },
   device_info: { type: DataTypes.STRING, allowNull: false },
   device_serial: { type: DataTypes.STRING },
@@ -529,6 +530,8 @@ WorkOrder.hasMany(WorkOrderPart);
 WorkOrderPart.belongsTo(WorkOrder);
 Product.hasMany(WorkOrderPart);
 WorkOrderPart.belongsTo(Product);
+User.hasMany(WorkOrder, { as: 'assignedWorkOrders', foreignKey: 'assigned_to' });
+WorkOrder.belongsTo(User, { as: 'assignee', foreignKey: 'assigned_to' });
 
 User.hasMany(StockMove, { foreignKey: 'performed_by' });
 StockMove.belongsTo(User, { as: 'performedBy', foreignKey: 'performed_by' });

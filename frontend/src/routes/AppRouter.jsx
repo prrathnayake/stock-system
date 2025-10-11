@@ -91,7 +91,7 @@ export default function AppRouter() {
           />
           <Route
             path="work-orders"
-            element={<RoleRoute roles={['admin']}><WorkOrders /></RoleRoute>}
+            element={<RoleRoute roles={['admin', 'user']}><WorkOrders /></RoleRoute>}
           />
           <Route path="scan" element={<Scan />} />
           <Route path="settings" element={<Settings />} />

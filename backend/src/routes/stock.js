@@ -298,7 +298,7 @@ export default function createStockRoutes(io) {
     const result = await StockLevel.sequelize.transaction(async (t) => {
       const levels = await StockLevel.findAll({
         where: { productId },
-        order: [['id', 'ASC']],
+        order: [['binId', 'ASC']],
         transaction: t,
         lock: t.LOCK.UPDATE
       });

@@ -526,6 +526,50 @@ async function ensureLegacyStockLevelsHaveOrganization() {
   }
 }
 
+async function ensureWorkOrdersHaveAssigneeColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+  let tables;
+  try {
+    tables = await queryInterface.showAllTables();
+  } catch (error) {
+    console.warn(`Unable to list tables while ensuring work order assignee column: ${error.message}`);
+    return;
+  }
+
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('work_orders')) {
+    return;
+  }
+
+  let columns;
+  try {
+    columns = await queryInterface.describeTable('work_orders');
+  } catch (error) {
+    if (error?.original?.code === 'ER_NO_SUCH_TABLE') {
+      return;
+    }
+    throw error;
+  }
+
+  if (columns.assigned_to || columns.assignedTo) {
+    return;
+  }
+
+  await queryInterface.addColumn('work_orders', 'assigned_to', {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: true,
+    references: {
+      model: { tableName: 'users' },
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
+  });
+}
+
 export async function initialiseDatabase() {
   await waitForDatabaseConnection();
   await ensureLegacyProductsHaveOrganization();
@@ -533,6 +577,7 @@ export async function initialiseDatabase() {
   await ensureLegacyLocationsHaveOrganization();
   await ensureLegacyBinsHaveOrganization();
   await ensureLegacyStockLevelsHaveOrganization();
+  await ensureWorkOrdersHaveAssigneeColumn();
   await cleanupDuplicateOrganizationSlugIndexes();
   await sequelize.sync({ alter: true });
 
