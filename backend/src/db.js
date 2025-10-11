@@ -165,6 +165,7 @@ export const StockLevel = sequelize.define('stock_level', {
 export const StockMove = sequelize.define('stock_move', {
   organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
   qty: { type: DataTypes.INTEGER, allowNull: false },
+  invoiceId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   reason: {
     type: DataTypes.ENUM(
       'receive',
@@ -176,7 +177,8 @@ export const StockMove = sequelize.define('stock_move', {
       'release',
       'receive_po',
       'rma_out',
-      'rma_return'
+      'rma_return',
+      'invoice_sale'
     ),
     allowNull: false
   },
@@ -310,6 +312,74 @@ export const Setting = sequelize.define('setting', {
   ]
 });
 
+export const Invoice = sequelize.define('invoice', {
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  invoice_number: { type: DataTypes.STRING(64), allowNull: false },
+  status: {
+    type: DataTypes.ENUM('draft', 'issued', 'payment_processing', 'paid', 'void'),
+    defaultValue: 'draft'
+  },
+  issue_date: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  due_date: { type: DataTypes.DATE },
+  reference: { type: DataTypes.STRING(128) },
+  customer_name: { type: DataTypes.STRING(191), allowNull: false },
+  customer_email: { type: DataTypes.STRING(191) },
+  customer_address: { type: DataTypes.TEXT },
+  customer_abn: { type: DataTypes.STRING(32) },
+  supplier_name: { type: DataTypes.STRING(191) },
+  supplier_abn: { type: DataTypes.STRING(32) },
+  supplier_address: { type: DataTypes.TEXT },
+  payment_terms: { type: DataTypes.STRING(191) },
+  currency: { type: DataTypes.STRING(8), defaultValue: 'AUD' },
+  notes: { type: DataTypes.TEXT },
+  subtotal: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  gst_total: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  total: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  balance_due: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  created_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  updated_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true }
+}, {
+  indexes: [
+    { unique: true, fields: ['organization_id', 'invoice_number'] }
+  ]
+});
+
+export const InvoiceLine = sequelize.define('invoice_line', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  invoiceId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  productId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  binId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  description: { type: DataTypes.STRING(255), allowNull: false },
+  quantity: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  unit_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  gst_rate: { type: DataTypes.DECIMAL(5, 4), allowNull: false, defaultValue: 0.1 },
+  line_subtotal: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  line_gst: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  line_total: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 }
+});
+
+export const InvoicePayment = sequelize.define('invoice_payment', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  invoiceId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  recorded_by: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  method: { type: DataTypes.STRING(64) },
+  reference: { type: DataTypes.STRING(128) },
+  paid_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  notes: { type: DataTypes.TEXT }
+});
+
+export const UserActivity = sequelize.define('user_activity', {
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  userId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  action: { type: DataTypes.STRING(128), allowNull: false },
+  entity_type: { type: DataTypes.STRING(64) },
+  entity_id: { type: DataTypes.STRING(64) },
+  description: { type: DataTypes.TEXT },
+  metadata: { type: DataTypes.JSON }
+});
+
 applyOrganizationScope(User);
 applyOrganizationScope(Product);
 applyOrganizationScope(Location);
@@ -327,6 +397,10 @@ applyOrganizationScope(PurchaseOrderLine);
 applyOrganizationScope(RmaCase);
 applyOrganizationScope(RmaItem);
 applyOrganizationScope(Setting);
+applyOrganizationScope(Invoice);
+applyOrganizationScope(InvoiceLine);
+applyOrganizationScope(InvoicePayment);
+applyOrganizationScope(UserActivity);
 
 // Relations
 Organization.hasMany(User, { foreignKey: { allowNull: false } });
@@ -379,6 +453,14 @@ RmaItem.belongsTo(Organization);
 
 Organization.hasMany(Setting, { foreignKey: { allowNull: false } });
 Setting.belongsTo(Organization);
+Organization.hasMany(Invoice, { foreignKey: { name: 'organizationId', allowNull: false } });
+Invoice.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
+Organization.hasMany(InvoiceLine, { foreignKey: { name: 'organizationId', allowNull: false } });
+InvoiceLine.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
+Organization.hasMany(InvoicePayment, { foreignKey: { name: 'organizationId', allowNull: false } });
+InvoicePayment.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
+Organization.hasMany(UserActivity, { foreignKey: { name: 'organizationId', allowNull: false } });
+UserActivity.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
 
 Location.hasMany(Bin, { onDelete: 'CASCADE' });
 Bin.belongsTo(Location);
@@ -410,6 +492,8 @@ WorkOrderPart.hasMany(StockMove);
 StockMove.belongsTo(WorkOrderPart);
 StockMove.belongsTo(SerialNumber);
 SerialNumber.hasMany(StockMove);
+Invoice.hasMany(StockMove, { foreignKey: { name: 'invoiceId', allowNull: true } });
+StockMove.belongsTo(Invoice, { foreignKey: { name: 'invoiceId', allowNull: true } });
 
 WorkOrder.hasMany(WorkOrderStatusHistory);
 WorkOrderStatusHistory.belongsTo(WorkOrder);
@@ -449,6 +533,24 @@ Product.hasMany(RmaItem);
 RmaItem.belongsTo(Product);
 SerialNumber.hasMany(RmaItem);
 RmaItem.belongsTo(SerialNumber);
+
+Invoice.hasMany(InvoiceLine, { as: 'lines', foreignKey: { name: 'invoiceId', allowNull: false } });
+InvoiceLine.belongsTo(Invoice, { foreignKey: { name: 'invoiceId', allowNull: false } });
+InvoiceLine.belongsTo(Product, { foreignKey: { name: 'productId', allowNull: false } });
+Product.hasMany(InvoiceLine, { foreignKey: { name: 'productId', allowNull: false } });
+InvoiceLine.belongsTo(Bin, { as: 'bin', foreignKey: { name: 'binId', allowNull: true } });
+Bin.hasMany(InvoiceLine, { foreignKey: { name: 'binId', allowNull: true } });
+
+Invoice.hasMany(InvoicePayment, { as: 'payments', foreignKey: { name: 'invoiceId', allowNull: false } });
+InvoicePayment.belongsTo(Invoice, { foreignKey: { name: 'invoiceId', allowNull: false } });
+User.hasMany(Invoice, { foreignKey: { name: 'created_by', allowNull: true }, as: 'createdInvoices' });
+Invoice.belongsTo(User, { foreignKey: { name: 'created_by', allowNull: true }, as: 'createdBy' });
+User.hasMany(Invoice, { foreignKey: { name: 'updated_by', allowNull: true }, as: 'updatedInvoices' });
+Invoice.belongsTo(User, { foreignKey: { name: 'updated_by', allowNull: true }, as: 'updatedBy' });
+User.hasMany(InvoicePayment, { foreignKey: { name: 'recorded_by', allowNull: true }, as: 'recordedPayments' });
+InvoicePayment.belongsTo(User, { foreignKey: { name: 'recorded_by', allowNull: true }, as: 'recordedBy' });
+User.hasMany(UserActivity, { foreignKey: { name: 'userId', allowNull: true } });
+UserActivity.belongsTo(User, { foreignKey: { name: 'userId', allowNull: true } });
 
 // Utility
 export async function withTransaction(cb) {

@@ -7,7 +7,6 @@ const AuthContext = createContext(null);
 function normalizeUser(value) {
   if (!value) return null;
   return {
-    ui_variant: 'pro',
     ...value,
     ui_variant: value.ui_variant || 'pro'
   };

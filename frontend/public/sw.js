@@ -70,9 +70,22 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin === self.location.origin) {
     if (request.mode === 'navigate') {
-      event.respondWith(
-        cacheFirst(new Request('/index.html', { cache: 'reload' })).catch(() => caches.match('/index.html'))
-      )
+      event.respondWith((async () => {
+        try {
+          const response = await fetch(request, { cache: 'no-store' })
+          const safeResponse = await normalizeResponse(response)
+          const shellCache = await caches.open(SHELL_CACHE)
+          await shellCache.put('/index.html', safeResponse.clone())
+          await shellCache.put('/', safeResponse.clone())
+          return safeResponse
+        } catch (error) {
+          const shellCache = await caches.open(SHELL_CACHE)
+          const cached =
+            (await shellCache.match('/index.html')) || (await shellCache.match('/'))
+          if (cached) return cached
+          throw error
+        }
+      })())
       return
     }
     if (url.pathname.startsWith('/assets') || CORE_ASSETS.includes(url.pathname)) {

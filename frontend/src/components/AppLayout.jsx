@@ -12,6 +12,7 @@ export default function AppLayout() {
   const navItems = useMemo(() => ([
     { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
     { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
+    { to: '/invoices', label: 'Invoices', roles: ['admin'] },
     { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
     { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin'] },
     { to: '/settings', label: user?.role === 'admin' ? 'Administration' : 'Settings', roles: ['admin', 'user'] }

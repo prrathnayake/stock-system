@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { api } from '../lib/api'
-import { setUserProfile as persistUserProfile } from '../lib/auth'
+import { getAccessToken, setUserProfile as persistUserProfile } from '../lib/auth'
 
 const uiVariants = [
   {
@@ -61,6 +61,15 @@ export default function Settings() {
     queryFn: async () => {
       const { data } = await api.get('/backups')
       return data?.backups || []
+    },
+    enabled: isAdmin
+  })
+
+  const { data: activities = [] } = useQuery({
+    queryKey: ['user-activities'],
+    queryFn: async () => {
+      const { data } = await api.get('/users/activities')
+      return data
     },
     enabled: isAdmin
   })
@@ -835,6 +844,41 @@ export default function Settings() {
           <div className="card">
             <div className="card__header">
               <div>
+                <h2>User activity</h2>
+                <p className="muted">Audit trail of key actions taken by product administrators.</p>
+              </div>
+            </div>
+            <table className="table table--compact">
+              <thead>
+                <tr>
+                  <th>Activity</th>
+                  <th>User</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activities.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="muted">No activity recorded yet.</td>
+                  </tr>
+                )}
+                {activities.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>
+                      <strong>{entry.action}</strong>
+                      {entry.description && <p className="muted">{entry.description}</p>}
+                    </td>
+                    <td>{entry.user ? `${entry.user.name || entry.user.email}` : 'System'}</td>
+                    <td>{entry.performed_at ? new Date(entry.performed_at).toLocaleString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card">
+            <div className="card__header">
+              <div>
                 <h2>Database backups</h2>
                 <p className="muted">Review automated snapshots and trigger an on-demand backup if required.</p>
               </div>
@@ -868,7 +912,10 @@ export default function Settings() {
                     <td>{backup.createdAt ? new Date(backup.createdAt).toLocaleString() : '—'}</td>
                     <td>{(backup.size / 1024 / 1024).toFixed(2)} MB</td>
                     <td>
-                      <a className="button button--ghost button--small" href={`${api.defaults.baseURL}/backups/${backup.file}`}>
+                      <a
+                        className="button button--ghost button--small"
+                        href={`${api.defaults.baseURL}/backups/${backup.file}?token=${getAccessToken()}`}
+                      >
                         Download
                       </a>
                     </td>

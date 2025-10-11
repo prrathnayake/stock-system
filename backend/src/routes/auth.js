@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { HttpError } from '../utils/httpError.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/tokenService.js';
+import { recordActivity } from '../services/activityLog.js';
 
 const router = Router();
 
@@ -53,6 +54,14 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
 
   const access = signAccessToken(user);
   const refresh = signRefreshToken(user.id);
+  await recordActivity({
+    organizationId: organization.id,
+    userId: user.id,
+    action: 'auth.login',
+    entityType: 'user',
+    entityId: user.id,
+    description: `User ${user.full_name} signed in`
+  }).catch(() => {});
   res.json({
     access,
     refresh,

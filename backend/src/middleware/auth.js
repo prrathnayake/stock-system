@@ -6,7 +6,10 @@ export function requireAuth(roles = [], options = {}) {
 
   return (req, res, next) => {
     const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    let token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token && typeof req.query?.token === 'string') {
+      token = req.query.token;
+    }
     if (!token) return res.status(401).json({ error: 'Missing token' });
     try {
       const payload = verifyAccessToken(token);
