@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Op } from 'sequelize';
-import { Product, Bin, Location, StockLevel, StockMove } from '../db.js';
+import { Product, Bin, Location, StockLevel, StockMove, User } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
@@ -112,6 +112,63 @@ export default function createStockRoutes(io) {
 
     await cacheStockOverview(payload, organizationId);
     res.json(payload);
+  }));
+
+  router.get('/:productId/history', requireAuth(), asyncHandler(async (req, res) => {
+    const productId = Number(req.params.productId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new HttpError(400, 'Invalid product id');
+    }
+
+    const product = await Product.findByPk(productId);
+    if (!product) {
+      throw new HttpError(404, 'Product not found');
+    }
+
+    const moves = await StockMove.findAll({
+      where: { productId },
+      order: [['createdAt', 'ASC']],
+      include: [
+        { model: Bin, as: 'fromBin', attributes: ['id', 'code'] },
+        { model: Bin, as: 'toBin', attributes: ['id', 'code'] },
+        { model: User, as: 'performedBy', attributes: ['id', 'full_name'] }
+      ]
+    });
+
+    let level = 0;
+    const datapoints = moves.map((move) => {
+      const decrease = move.from_bin_id ? move.qty : 0;
+      const increase = move.to_bin_id ? move.qty : 0;
+      const delta = increase - decrease;
+      level += delta;
+      return {
+        id: move.id,
+        occurredAt: move.createdAt,
+        qty: move.qty,
+        delta,
+        level,
+        reason: move.reason,
+        fromBin: move.fromBin ? move.fromBin.code : null,
+        toBin: move.toBin ? move.toBin.code : null,
+        performedBy: move.performedBy ? move.performedBy.full_name : null
+      };
+    });
+
+    const lastMove = moves.length ? moves[moves.length - 1] : null;
+
+    res.json({
+      product: {
+        id: product.id,
+        name: product.name,
+        sku: product.sku
+      },
+      datapoints,
+      summary: {
+        lastUpdated: lastMove ? lastMove.createdAt : product.updatedAt,
+        totalMoves: moves.length,
+        currentLevel: level
+      }
+    });
   }));
 
   const MoveSchema = z.object({
