@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { useTheme } from '../providers/ThemeProvider.jsx'
 
@@ -7,6 +7,7 @@ export default function AppLayout() {
   const { user, logout, organization } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const location = useLocation()
+  const navigate = useNavigate()
   const variant = user?.ui_variant || 'pro'
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -16,6 +17,8 @@ export default function AppLayout() {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(max-width: 960px)').matches
   })
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const menuRef = useRef(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -46,6 +49,21 @@ export default function AppLayout() {
     setIsSidebarOpen(false)
   }
 
+  const handleProfileToggle = () => {
+    setIsMenuOpen((prev) => !prev)
+  }
+
+  const handleProfileNavigate = (hash = '') => {
+    setIsMenuOpen(false)
+    const destination = hash ? `/settings${hash}` : '/settings'
+    navigate(destination)
+  }
+
+  const handleLogout = () => {
+    setIsMenuOpen(false)
+    logout()
+  }
+
   const brandName = organization?.name || user?.organization?.name || 'Repair Center'
   const brandSubtitle = organization?.legal_name || 'Operations Suite'
   const brandLogo = organization?.logo_asset_url || organization?.logo_url
@@ -70,6 +88,31 @@ export default function AppLayout() {
     const match = navItems.find((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)))
     return match ? match.label : 'Dashboard'
   }, [location.pathname, navItems])
+
+  useEffect(() => {
+    if (!isMenuOpen) return undefined
+    const handlePointerDown = (event) => {
+      if (!menuRef.current) return
+      if (!menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false)
+      }
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false)
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isMenuOpen])
+
+  useEffect(() => {
+    setIsMenuOpen(false)
+  }, [location.pathname])
 
   return (
     <div
@@ -105,9 +148,6 @@ export default function AppLayout() {
               </NavLink>
             ))}
         </nav>
-        <div className="sidebar__footer">
-          <button className="sidebar__logout" onClick={logout}>Log out</button>
-        </div>
       </aside>
       {isMobile && (
         <div
@@ -137,11 +177,57 @@ export default function AppLayout() {
             <button className="button button--ghost" type="button" onClick={toggleTheme}>
               {theme === 'dark' ? '☀️ Light mode' : '🌙 Dark mode'}
             </button>
-            <div className="topbar__user">
-              <span className="avatar">{(user?.name || user?.email || 'U').slice(0, 1).toUpperCase()}</span>
-              <div>
-                <p className="avatar__name">{user?.name || 'User'}</p>
-                <p className="avatar__role">{user?.role || 'team member'}</p>
+            <div className="topbar__profile" ref={menuRef}>
+              <button
+                className="topbar__profile-button"
+                type="button"
+                onClick={handleProfileToggle}
+                aria-haspopup="true"
+                aria-expanded={isMenuOpen}
+              >
+                <span className="avatar">{(user?.name || user?.email || 'U').slice(0, 1).toUpperCase()}</span>
+                <span className="topbar__profile-label">
+                  <span className="topbar__profile-name">{user?.name || user?.email || 'User'}</span>
+                  <span className="topbar__profile-role">{user?.role || 'team member'}</span>
+                </span>
+                <span className="topbar__profile-caret" aria-hidden="true">▾</span>
+              </button>
+              <div className={`topbar__profile-menu${isMenuOpen ? ' topbar__profile-menu--open' : ''}`} role="menu">
+                <button
+                  type="button"
+                  className="topbar__profile-item"
+                  onClick={() => handleProfileNavigate('#profile')}
+                  role="menuitem"
+                >
+                  View profile
+                </button>
+                <button
+                  type="button"
+                  className="topbar__profile-item"
+                  onClick={() => handleProfileNavigate('')}
+                  role="menuitem"
+                >
+                  Workspace settings
+                </button>
+                {user?.role === 'admin' && (
+                  <button
+                    type="button"
+                    className="topbar__profile-item"
+                    onClick={() => handleProfileNavigate('#team')}
+                    role="menuitem"
+                  >
+                    User management
+                  </button>
+                )}
+                <div className="topbar__profile-separator" role="presentation" />
+                <button
+                  type="button"
+                  className="topbar__profile-item topbar__profile-item--danger"
+                  onClick={handleLogout}
+                  role="menuitem"
+                >
+                  Log out
+                </button>
               </div>
             </div>
           </div>
