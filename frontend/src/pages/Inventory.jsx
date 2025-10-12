@@ -5,6 +5,113 @@ import { useAuth } from '../providers/AuthProvider.jsx'
 import StockHistoryChart from '../components/StockHistoryChart.jsx'
 import TablePagination from '../components/TablePagination.jsx'
 
+const MOVEMENT_REASON_LABELS = {
+  receive: 'Received',
+  adjust: 'Adjusted',
+  pick: 'Picked',
+  return: 'Returned',
+  transfer: 'Transferred',
+  reserve: 'Reserved',
+  release: 'Released',
+  invoice_sale: 'Invoice fulfilled',
+  receive_po: 'Purchase order received',
+  rma_out: 'RMA dispatched',
+  rma_return: 'RMA returned'
+}
+
+const HOUR_IN_MS = 60 * 60 * 1000
+const DAY_IN_MS = 24 * HOUR_IN_MS
+
+function resolveReservedLevel(entry) {
+  const candidates = [
+    entry?.reservedLevel,
+    entry?.reserved_level,
+    entry?.reserved,
+    entry?.reserved_after,
+    entry?.reserved_qty
+  ]
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined) continue
+    const value = Number(candidate)
+    if (!Number.isNaN(value)) {
+      return value
+    }
+  }
+  return null
+}
+
+function formatDelta(value) {
+  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value) || value === 0) {
+    return '0'
+  }
+  return value > 0 ? `+${value}` : `${value}`
+}
+
+function humanizeReason(reason) {
+  if (!reason) return 'Movement'
+  return MOVEMENT_REASON_LABELS[reason] || reason
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function getReservedBaseline(movement) {
+  if (typeof movement.previousReservedLevel === 'number') return movement.previousReservedLevel
+  if (typeof movement.reservedLevel === 'number' && typeof movement.reservedDelta === 'number') {
+    return movement.reservedLevel - movement.reservedDelta
+  }
+  return typeof movement.reservedLevel === 'number' ? movement.reservedLevel : null
+}
+
+function aggregateHistoryBuckets(movements, unit = 'hour') {
+  if (!Array.isArray(movements) || movements.length === 0) return []
+  const bucketSize = unit === 'day' ? DAY_IN_MS : HOUR_IN_MS
+  const buckets = new Map()
+
+  movements.forEach((movement) => {
+    const start = new Date(movement.timestamp)
+    if (unit === 'day') {
+      start.setHours(0, 0, 0, 0)
+    } else {
+      start.setMinutes(0, 0, 0)
+    }
+    const key = start.getTime()
+    const existing = buckets.get(key) || { start, events: [] }
+    existing.events.push(movement)
+    buckets.set(key, existing)
+  })
+
+  return Array.from(buckets.values())
+    .map((bucket) => {
+      const events = bucket.events.slice().sort((a, b) => a.timestamp - b.timestamp)
+      const first = events[0]
+      const last = events[events.length - 1]
+      const startLevel = (first.previousLevel ?? (first.level - first.delta)) ?? first.level
+      const endLevel = last.level
+      const startReserved = getReservedBaseline(first)
+      const endReserved = typeof last.reservedLevel === 'number' ? last.reservedLevel : startReserved
+      const reservedDelta =
+        typeof startReserved === 'number' && typeof endReserved === 'number'
+          ? endReserved - startReserved
+          : null
+      return {
+        key: `${bucket.start.getTime()}-${unit}`,
+        start: bucket.start,
+        end: new Date(bucket.start.getTime() + bucketSize),
+        startLevel,
+        endLevel,
+        delta: endLevel - startLevel,
+        reservedDelta,
+        moveCount: events.length
+      }
+    })
+    .sort((a, b) => b.start - a.start)
+}
+
+function formatHourWindow(start, end) {
+  const options = { hour: 'numeric' }
+  return `${start.toLocaleTimeString(undefined, options)} – ${end.toLocaleTimeString(undefined, options)}`
+}
+
 const initialProductForm = {
   sku: '',
   name: '',
@@ -208,6 +315,80 @@ export default function Inventory() {
 
   const historyPoints = historyQuery.data?.datapoints ?? []
   const historySummary = historyQuery.data?.summary ?? null
+  const historyMovements = useMemo(() => {
+    if (!Array.isArray(historyPoints) || historyPoints.length === 0) return []
+
+    const sanitized = historyPoints
+      .map((entry, index) => {
+        const occurredAt = entry?.occurredAt ?? entry?.occurred_at ?? entry?.timestamp
+        if (!occurredAt) return null
+        const timestamp = new Date(occurredAt)
+        if (Number.isNaN(timestamp.getTime())) return null
+        const level = Number(entry?.level)
+        if (Number.isNaN(level)) return null
+        const qtyCandidate = entry?.qty ?? entry?.quantity ?? null
+        const qty = qtyCandidate === null || qtyCandidate === undefined ? null : Number(qtyCandidate)
+        const reservedLevel = resolveReservedLevel(entry)
+        const fallbackId = entry?.id ?? entry?.event_id ?? entry?.movement_id ?? `${timestamp.getTime()}-${index}`
+        const performedBy = entry?.performedBy ?? entry?.performed_by ?? null
+        const reason = entry?.reason ?? entry?.action ?? 'movement'
+        return {
+          ...entry,
+          id: fallbackId,
+          timestamp,
+          occurredAt: timestamp.toISOString(),
+          level,
+          qty: Number.isNaN(qty) ? qtyCandidate : qty,
+          reservedLevel,
+          performedBy,
+          reason
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.timestamp - b.timestamp)
+
+    return sanitized.map((entry, index) => {
+      const previous = index > 0 ? sanitized[index - 1] : null
+      const delta = previous ? entry.level - previous.level : 0
+      const reservedDelta =
+        previous && typeof entry.reservedLevel === 'number' && typeof previous.reservedLevel === 'number'
+          ? entry.reservedLevel - previous.reservedLevel
+          : null
+      return {
+        ...entry,
+        delta,
+        reservedDelta,
+        previousLevel: previous?.level ?? null,
+        previousReservedLevel: previous?.reservedLevel ?? null
+      }
+    })
+  }, [historyPoints])
+
+  const hourlyHistory = useMemo(
+    () => aggregateHistoryBuckets(historyMovements, 'hour'),
+    [historyMovements]
+  )
+  const dailyHistory = useMemo(
+    () => aggregateHistoryBuckets(historyMovements, 'day'),
+    [historyMovements]
+  )
+  const recentHourlyHistory = useMemo(() => {
+    if (hourlyHistory.length === 0) return []
+    const now = Date.now()
+    const filtered = hourlyHistory
+      .filter((bucket) => now - bucket.start.getTime() <= DAY_IN_MS)
+      .slice(0, 6)
+    return filtered.length > 0 ? filtered : hourlyHistory.slice(0, 6)
+  }, [hourlyHistory])
+  const recentDailyHistory = useMemo(() => {
+    if (dailyHistory.length === 0) return []
+    const now = Date.now()
+    const filtered = dailyHistory
+      .filter((bucket) => now - bucket.start.getTime() <= 7 * DAY_IN_MS)
+      .slice(0, 7)
+    return filtered.length > 0 ? filtered : dailyHistory.slice(0, 7)
+  }, [dailyHistory])
+  const movementLog = useMemo(() => historyMovements.slice().reverse(), [historyMovements])
 
   const productOptions = useMemo(
     () => stock.map((row) => ({ id: row.id, name: row.name, sku: row.sku })),
@@ -745,18 +926,89 @@ export default function Inventory() {
                         ) : (
                           <>
                             <StockHistoryChart points={historyPoints} height={220} />
-                            <ul className="timeline inventory__history-timeline">
-                              {historyPoints.length === 0 && <li className="muted">No stock movements recorded for this product yet.</li>}
-                              {[...historyPoints].reverse().slice(0, 6).map((entry) => (
-                                <li key={entry.id}>
-                                  <div className="timeline__title">{entry.reason} · {entry.qty} units</div>
-                                  <div className="timeline__meta">
-                                    {new Date(entry.occurredAt).toLocaleString()} · Level {entry.level}
-                                    {entry.performedBy ? ` · by ${entry.performedBy}` : ''}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
+                            <div className="inventory__history-insights">
+                              <section className="inventory__history-section">
+                                <p className="inventory__history-section-title">Hourly movements (last 24 hours)</p>
+                                <ul className="timeline inventory__history-timeline inventory__history-timeline--compact">
+                                  {recentHourlyHistory.length === 0 ? (
+                                    <li className="muted">No hourly movements recorded yet.</li>
+                                  ) : (
+                                    recentHourlyHistory.map((bucket) => (
+                                      <li key={bucket.key}>
+                                        <div className="timeline__title">
+                                          {formatHourWindow(bucket.start, bucket.end)} · {formatDelta(bucket.delta)}
+                                        </div>
+                                        <div className="timeline__meta">
+                                          {bucket.startLevel} → {bucket.endLevel}
+                                          {bucket.moveCount > 1 ? ` · ${bucket.moveCount} moves` : ''}
+                                          {typeof bucket.reservedDelta === 'number' && bucket.reservedDelta !== 0
+                                            ? ` · Reserved ${formatDelta(bucket.reservedDelta)}`
+                                            : ''}
+                                        </div>
+                                      </li>
+                                    ))
+                                  )}
+                                </ul>
+                              </section>
+                              <section className="inventory__history-section">
+                                <p className="inventory__history-section-title">Daily trend (last 7 days)</p>
+                                <ul className="timeline inventory__history-timeline inventory__history-timeline--compact">
+                                  {recentDailyHistory.length === 0 ? (
+                                    <li className="muted">No daily movements captured yet.</li>
+                                  ) : (
+                                    recentDailyHistory.map((bucket) => (
+                                      <li key={bucket.key}>
+                                        <div className="timeline__title">
+                                          {bucket.start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                          {' · '}
+                                          {formatDelta(bucket.delta)}
+                                        </div>
+                                        <div className="timeline__meta">
+                                          {bucket.startLevel} → {bucket.endLevel}
+                                          {bucket.moveCount > 1 ? ` · ${bucket.moveCount} moves` : ''}
+                                          {typeof bucket.reservedDelta === 'number' && bucket.reservedDelta !== 0
+                                            ? ` · Reserved ${formatDelta(bucket.reservedDelta)}`
+                                            : ''}
+                                        </div>
+                                      </li>
+                                    ))
+                                  )}
+                                </ul>
+                              </section>
+                            </div>
+                            <div className="inventory__history-log">
+                              <h4>Movement log</h4>
+                              <ul className="timeline inventory__history-timeline inventory__history-timeline--detailed">
+                                {movementLog.length === 0 ? (
+                                  <li className="muted">No stock movements recorded for this product yet.</li>
+                                ) : (
+                                  movementLog.slice(0, 8).map((entry) => {
+                                    const qtyLabel =
+                                      typeof entry.qty === 'number' && !Number.isNaN(entry.qty)
+                                        ? `${entry.qty} units`
+                                        : entry.qty
+                                    return (
+                                      <li key={entry.id}>
+                                        <div className="timeline__title">
+                                          {humanizeReason(entry.reason)} · {formatDelta(entry.delta)}
+                                          {qtyLabel ? ` (${qtyLabel})` : ''}
+                                        </div>
+                                        <div className="timeline__meta">
+                                          {entry.timestamp.toLocaleString()} ·{' '}
+                                          {entry.previousLevel !== null
+                                            ? `${entry.previousLevel} → ${entry.level}`
+                                            : `${entry.level} on hand`}
+                                          {typeof entry.reservedDelta === 'number'
+                                            ? ` · Reserved ${formatDelta(entry.reservedDelta)}`
+                                            : ''}
+                                          {entry.performedBy ? ` · by ${entry.performedBy}` : ''}
+                                        </div>
+                                      </li>
+                                    )
+                                  })
+                                )}
+                              </ul>
+                            </div>
                           </>
                         )}
                       </div>

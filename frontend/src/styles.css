@@ -708,6 +708,15 @@ input:focus, select:focus, textarea:focus {
   gap: 24px;
 }
 
+.page.inventory .grid.stats {
+  margin: 32px 0 40px;
+  gap: 32px;
+}
+
+.page.inventory .stat-card {
+  padding: 28px 32px;
+}
+
 .grid.two-columns {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
@@ -1234,7 +1243,7 @@ input:focus, select:focus, textarea:focus {
 
 .inventory__workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 32px;
   align-items: start;
 }
@@ -1324,6 +1333,47 @@ input:focus, select:focus, textarea:focus {
   .inventory__history-grid {
     grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   }
+}
+
+.inventory__history-insights {
+  display: grid;
+  gap: 24px;
+}
+
+.inventory__history-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .inventory__history-insights {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}
+
+.inventory__history-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.inventory__history-timeline--compact {
+  gap: 12px;
+}
+
+.inventory__history-timeline--detailed {
+  gap: 16px;
+}
+
+.inventory__history-log {
+  margin-top: 16px;
+}
+
+.inventory__history-log h4 {
+  margin: 0 0 12px;
 }
 
 .inventory__notifications {
