@@ -124,9 +124,12 @@ const runningInsideContainer = () => {
   }
 };
 
+const LOOPBACK_DB_HOSTS = new Set(['127.0.0.1', 'localhost']);
+
 const resolveDbHost = () => {
   const configuredHost = (process.env.DB_HOST || '').trim();
-  if (configuredHost && !['127.0.0.1', 'localhost'].includes(configuredHost)) {
+  const isLoopbackHost = LOOPBACK_DB_HOSTS.has(configuredHost);
+  if (configuredHost && !isLoopbackHost) {
     return configuredHost;
   }
 
@@ -135,7 +138,7 @@ const resolveDbHost = () => {
     if (serviceName) {
       return serviceName;
     }
-    if (!configuredHost) {
+    if (!configuredHost || isLoopbackHost) {
       return 'mysql';
     }
   }
