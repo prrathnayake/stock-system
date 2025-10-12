@@ -101,16 +101,18 @@ export default function AppLayout() {
   const brandSubtitle = organization?.legal_name || typeInfo?.label || 'Operations Suite'
   const brandLogo = organization?.logo_asset_url || organization?.logo_url
 
+  const privilegedRoles = ['admin', 'developer']
+
   const navItems = useMemo(() => {
     const items = [
-      { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
-      { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
-      { to: '/storage-bins', label: 'Braces & hoses', roles: ['admin', 'user'] },
-      { to: '/sales', label: 'Sales', roles: ['admin', 'user'] },
-      { to: '/invoices', label: 'Invoices', roles: ['admin'] },
-      { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
-      { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin', 'user'] },
-      { to: '/settings', label: user?.role === 'admin' ? 'Administration' : 'Settings', roles: ['admin', 'user'] }
+      { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user', 'developer'] },
+      { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user', 'developer'] },
+      { to: '/storage-bins', label: 'Branch locations', roles: ['admin', 'user', 'developer'] },
+      { to: '/sales', label: 'Sales', roles: ['admin', 'user', 'developer'] },
+      { to: '/invoices', label: 'Invoices', roles: ['admin', 'developer'] },
+      { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user', 'developer'] },
+      { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin', 'user', 'developer'] },
+      { to: '/settings', label: privilegedRoles.includes(user?.role) ? 'Administration' : 'Settings', roles: ['admin', 'user', 'developer'] }
     ];
     if (organization?.invoicing_enabled === false) {
       return items.filter((item) => item.to !== '/invoices');
@@ -120,11 +122,11 @@ export default function AppLayout() {
 
   const quickLinks = useMemo(() => (
     [
-      { to: '/', label: 'Home', roles: ['admin', 'user'] },
-      { to: '/inventory', label: 'Inventory', roles: ['admin', 'user'] },
-      { to: '/storage-bins', label: 'Braces & hoses', roles: ['admin', 'user'] },
-      { to: '/sales', label: 'Sales', roles: ['admin', 'user'] },
-      { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user'] }
+      { to: '/', label: 'Home', roles: ['admin', 'user', 'developer'] },
+      { to: '/inventory', label: 'Inventory', roles: ['admin', 'user', 'developer'] },
+      { to: '/storage-bins', label: 'Branch locations', roles: ['admin', 'user', 'developer'] },
+      { to: '/sales', label: 'Sales', roles: ['admin', 'user', 'developer'] },
+      { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user', 'developer'] }
     ]
       .filter((item) => (!item.roles || item.roles.includes(user?.role)))
   ), [user?.role])
@@ -203,11 +205,17 @@ export default function AppLayout() {
       )}
       <div className="main">
         {routeLoading && (
-          <div className="route-loader" role="status" aria-live="polite">
-            <div className="route-loader__spinner" aria-hidden="true" />
-            <span className="route-loader__text">Switching views…</span>
-          </div>
-        )}
+            <div className="route-loader" role="status" aria-live="polite">
+              <div className="route-loader__panel">
+                <div className="route-loader__spinner" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <p className="route-loader__text">Preparing your workspace…</p>
+              </div>
+            </div>
+          )}
         <header className="topbar">
           <div className="topbar__lead">
             <button

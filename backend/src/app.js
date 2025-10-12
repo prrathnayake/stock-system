@@ -21,6 +21,7 @@ import createInvoiceRoutes from './routes/invoices.js';
 import binRoutes from './routes/bins.js';
 import createSalesRoutes from './routes/sales.js';
 import createCustomerRoutes from './routes/customers.js';
+import developerRoutes from './routes/developer.js';
 import { config } from './config.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
@@ -106,6 +107,7 @@ export function registerRoutes(app, io) {
   app.use('/backups', backupsRoutes);
   app.use('/organization', organizationRoutes);
   app.use('/bins', binRoutes);
+  app.use('/developer', developerRoutes);
 
   if (distPath && existsSync(distPath)) {
     app.get('*', (req, res, next) => {

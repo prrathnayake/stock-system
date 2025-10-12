@@ -9,7 +9,7 @@ import { HttpError } from '../utils/httpError.js';
 
 const router = Router();
 
-router.use(requireAuth(['admin']));
+router.use(requireAuth(['admin', 'developer']));
 
 router.get('/', asyncHandler(async (_req, res) => {
   const backups = await listBackups();

@@ -159,7 +159,7 @@ export const User = sequelize.define('user', {
   full_name: { type: DataTypes.STRING, allowNull: false },
   email: { type: DataTypes.STRING(191), allowNull: false },
   password_hash: { type: DataTypes.STRING, allowNull: false },
-  role: { type: DataTypes.ENUM('admin', 'user'), defaultValue: 'user' },
+  role: { type: DataTypes.ENUM('admin', 'user', 'developer'), defaultValue: 'user' },
   must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   ui_variant: { type: DataTypes.ENUM('pro', 'analytics', 'tabular', 'minimal', 'visual'), defaultValue: 'pro' },
   transition_loading_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },

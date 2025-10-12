@@ -83,7 +83,7 @@ function StatusHistory({ history }) {
 
 export default function WorkOrders() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role === 'admin' || user?.role === 'developer'
   const [statusDraft, setStatusDraft] = useState({})
   const [statusNotes, setStatusNotes] = useState({})
   const [diagnosticDraft, setDiagnosticDraft] = useState({})

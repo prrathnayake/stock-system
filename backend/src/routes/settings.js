@@ -24,14 +24,14 @@ const UpdateSchema = z.object({
 
 const router = Router();
 
-router.get('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.get('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const entries = await getAllSettings(false, req.user.organization_id);
   const payload = Object.fromEntries(entries.entries());
   const backup = getBackupOptions();
   res.json({ ...payload, backup_enabled: backup.enabled, backup_schedule: backup.schedule, backup_retain_days: backup.retainDays });
 }));
 
-router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.put('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const parsed = UpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());

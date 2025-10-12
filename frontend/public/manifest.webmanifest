@@ -1,6 +1,6 @@
 {
-  "name": "Stock System",
-  "short_name": "RC Stock",
+  "name": "Stock Management System",
+  "short_name": "StockMgmt",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

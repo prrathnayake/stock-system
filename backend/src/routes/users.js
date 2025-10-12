@@ -17,7 +17,7 @@ import { isUserOnline } from '../services/userPresence.js';
 
 const router = Router();
 
-const RolesEnum = z.enum(['admin', 'user']);
+const RolesEnum = z.enum(['admin', 'user', 'developer']);
 const UiVariantEnum = z.enum(['pro', 'analytics', 'tabular', 'minimal', 'visual']);
 
 const StrongPasswordSchema = createPasswordSchema(z);
@@ -67,12 +67,12 @@ function presentUser(user) {
   };
 }
 
-router.get('/', requireAuth(['admin']), asyncHandler(async (_req, res) => {
+router.get('/', requireAuth(['admin', 'developer']), asyncHandler(async (_req, res) => {
   const users = await User.findAll({ order: [['id', 'ASC']] });
   res.json(users.map(presentUser));
 }));
 
-router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.post('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const parsed = CreateUserSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -109,7 +109,7 @@ router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   });
 }));
 
-router.put('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.put('/:id', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const parsed = UpdateUserSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -145,7 +145,7 @@ router.put('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
   });
 }));
 
-router.delete('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.delete('/:id', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const user = await User.findByPk(req.params.id);
   if (!user) {
     throw new HttpError(404, 'User not found');
@@ -163,7 +163,7 @@ router.delete('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
   });
 }));
 
-router.get('/activities', requireAuth(['admin']), asyncHandler(async (_req, res) => {
+router.get('/activities', requireAuth(['admin', 'developer']), asyncHandler(async (_req, res) => {
   const entries = await UserActivity.findAll({
     order: [['createdAt', 'DESC']],
     limit: 200,

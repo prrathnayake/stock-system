@@ -33,7 +33,7 @@ const UpdateSchema = z.object({
   message: 'Provide at least one field to update.'
 });
 
-router.get('/', requireAuth(['admin', 'user']), asyncHandler(async (_req, res) => {
+router.get('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (_req, res) => {
   const bins = await Bin.findAll({
     include: [{ model: Location }],
     order: [['code', 'ASC']]
@@ -58,7 +58,7 @@ router.get('/', requireAuth(['admin', 'user']), asyncHandler(async (_req, res) =
   res.json(payload);
 }));
 
-router.post('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+router.post('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
   const parsed = CreateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -110,7 +110,7 @@ router.post('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) =
   });
 }));
 
-router.patch('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+router.patch('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     throw new HttpError(400, 'Invalid bin identifier');
@@ -187,7 +187,7 @@ router.patch('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, re
   });
 }));
 
-router.delete('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+router.delete('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     throw new HttpError(400, 'Invalid bin identifier');

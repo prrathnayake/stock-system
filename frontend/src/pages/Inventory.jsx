@@ -378,7 +378,7 @@ export default function Inventory() {
     const binId = Number(adjustForm.bin_id)
     const qty = Number(adjustForm.qty)
     if (!productId || !binId || !qty || qty <= 0) {
-      setFeedback({ type: 'error', message: 'Select a product, brace or hose location and enter a positive quantity.' })
+      setFeedback({ type: 'error', message: 'Select a product, branch location and enter a positive quantity.' })
       return
     }
     const payload = adjustForm.direction === 'increase'
@@ -586,7 +586,7 @@ export default function Inventory() {
         <div className="stat-card card">
           <p className="muted">On-hand units</p>
           <h2>{overviewStats.onHandTotal}</h2>
-          <p className="stat-card__hint">All brace &amp; hose locations summed together.</p>
+          <p className="stat-card__hint">All branch locations summed together.</p>
         </div>
         <div className="stat-card card">
           <p className="muted">Available to promise</p>
@@ -611,7 +611,7 @@ export default function Inventory() {
                 <div className="inventory__table-header">
                   <div>
                     <h3>Catalogue</h3>
-                    <p className="muted">Click a row to reveal brace &amp; hose allocations and action shortcuts.</p>
+                    <p className="muted">Click a row to reveal branch allocations and action shortcuts.</p>
                   </div>
                   <div className="inventory__table-controls">
                     <label className="field" data-help="Filter the catalogue by SKU or product name.">
@@ -636,7 +636,7 @@ export default function Inventory() {
                     <tr>
                       <th>SKU</th>
                       <th>Name</th>
-                      <th>Braces &amp; hoses</th>
+                      <th>Branch coverage</th>
                       <th>On hand</th>
                       <th>Reserved</th>
                       <th>Available</th>
@@ -664,7 +664,7 @@ export default function Inventory() {
                           <td>{product.name}</td>
                           <td>
                             {product.bins.length === 0 ? (
-                              <span className="muted">No brace or hose locations</span>
+                              <span className="muted">No branch locations</span>
                             ) : (
                               <div
                                 className="inventory-table__bins-cell"
@@ -735,9 +735,9 @@ export default function Inventory() {
                                   <p className="inventory-detail__value">{currencyFormatter.format(Number(product.unit_price) || 0)}</p>
                                 </div>
                                 <div className="inventory-detail__bins">
-                                  <p className="inventory-detail__label">Brace &amp; hose allocations</p>
+                                  <p className="inventory-detail__label">Branch allocations</p>
                                   <ul>
-                                    {product.bins.length === 0 && <li>No brace or hose assignments yet.</li>}
+                                {product.bins.length === 0 && <li>No branch assignments yet.</li>}
                                     {product.bins.map((bin) => (
                                       <li key={bin.bin_id}>
                                         <span>{bin.bin_code}</span>
@@ -817,6 +817,12 @@ export default function Inventory() {
                               <span><strong>Last update:</strong> {historySummary.lastUpdated ? new Date(historySummary.lastUpdated).toLocaleString() : '—'}</span>
                               <span><strong>Total moves:</strong> {historySummary.totalMoves}</span>
                               <span><strong>Current level:</strong> {historySummary.currentLevel}</span>
+                              {typeof historySummary.currentReserved === 'number' && (
+                                <span><strong>Reserved now:</strong> {historySummary.currentReserved}</span>
+                              )}
+                              {typeof historySummary.startingLevel === 'number' && (
+                                <span><strong>Starting level:</strong> {historySummary.startingLevel}</span>
+                              )}
                             </>
                           ) : historyQuery.isFetching ? (
                             <span className="muted">Loading history…</span>
@@ -976,15 +982,15 @@ export default function Inventory() {
                           ))}
                         </select>
                       </label>
-                      <label className="field" data-help="Brace or hose location receiving or issuing the stock movement.">
-                        <span>Brace &amp; hose location</span>
+                      <label className="field" data-help="Branch location receiving or issuing the stock movement.">
+                        <span>Branch location</span>
                         <select
                           value={adjustForm.bin_id}
                           onChange={(e) => setAdjustForm((prev) => ({ ...prev, bin_id: e.target.value }))}
                           required
                           disabled={!hasBinsAvailable}
                         >
-                          {hasBinsAvailable ? null : <option value="">No brace or hose locations available</option>}
+                          {hasBinsAvailable ? null : <option value="">No branch locations available</option>}
                           {binsForSelection.map((bin) => (
                             <option key={bin.id} value={bin.id}>
                               {bin.code}{bin.location ? ` · ${bin.location}` : ''}
@@ -1076,7 +1082,7 @@ export default function Inventory() {
                             <th>Serial</th>
                             <th>Product</th>
                             <th>Status</th>
-                            <th>Brace/hose location</th>
+                            <th>Branch location</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1430,7 +1436,7 @@ export default function Inventory() {
                 />
                 <small className="muted">Stored in {currencyCode}.</small>
               </label>
-              <label className="field" data-help="Adjust the total quantity on hand across all brace &amp; hose locations.">
+              <label className="field" data-help="Adjust the total quantity on hand across all branch locations.">
                 <span>On-hand quantity</span>
                 <input
                   type="number"

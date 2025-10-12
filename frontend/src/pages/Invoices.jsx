@@ -667,7 +667,7 @@ export default function Invoices() {
                     </div>
                     <div className="grid two-columns">
                       <label className="form-control">
-                        <span>Fulfil from brace/hose location</span>
+                        <span>Fulfil from branch location</span>
                         <select
                           value={line.bin_id}
                           onChange={(e) => updateLine(index, 'bin_id', e.target.value)}

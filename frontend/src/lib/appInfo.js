@@ -1,4 +1,4 @@
-export const APP_NAME = 'Stock System';
+export const APP_NAME = 'Stock Management System';
 
 export const ORGANIZATION_TYPES = [
   { id: 'retail', label: 'Retail & eCommerce', description: 'Customer-facing businesses managing product sales.' },

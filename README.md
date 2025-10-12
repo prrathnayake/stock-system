@@ -8,7 +8,7 @@ A production-ready stock management platform built for multi-location repair and
 - **Customer and sales flows** – Toggle between customer maintenance and sales fulfilment views without leaving the page, keeping context on the same data grid.
 - **Operational workflows** – Coordinate purchasing, serial tracking, RMAs, work orders, and invoicing from a unified interface.
 - **Dynamic organization branding** – Page headers, navigation labels, and contact information refresh instantly when organization settings change.
-- **Secure multi-tenant access** – JWT authentication, role-based permissions, rate limiting, and organization-aware data scoping.
+- **Secure multi-tenant access** – JWT authentication, role-based permissions (including a multi-factor developer tier), rate limiting, and organization-aware data scoping.
 - **Observability & resilience** – Structured logging, caching, backup scheduling, email notifications, and queue-powered background jobs.
 
 ## Use Case Diagram
@@ -55,6 +55,7 @@ usecaseDiagram
 | Products | `GET /products`, `POST /products`, `PATCH /products/:id`, `DELETE /products/:id` |
 | Stock | `GET /stock`, `GET /stock/overview`, `POST /stock/move`, `GET /stock/:id/history` |
 | Users & Organization | `/users`, `/organization`, `/backups`, `/settings`, `/work-orders`, `/serials`, `/purchasing`, `/rma`, `/invoices` |
+| Developer Operations | `/developer/maintenance/cleanup`, `/developer/sessions/terminal` |
 
 ## Getting Started
 ### Prerequisites
@@ -130,7 +131,7 @@ MAIL_PORT=587
 MAIL_SECURE=false
 MAIL_USER=mailer@example.com
 MAIL_PASS=super-secret-password
-MAIL_FROM=Stock System <no-reply@example.com>
+MAIL_FROM=Stock Management System <no-reply@example.com>
 MAIL_URL=
 MAIL_TLS_REJECT_UNAUTHORIZED=true
 
@@ -162,6 +163,10 @@ DEFAULT_ORG_PAYMENT_TERMS=Due within 14 days
 DEFAULT_ORG_INVOICE_NOTES=Please remit payment within the agreed terms.
 DEFAULT_ORG_CURRENCY=AUD
 DEFAULT_ORG_INVOICING_ENABLED=true
+
+# Developer multi-factor tokens
+DEVELOPER_API_KEY=change-me-primary
+DEVELOPER_SECOND_FACTOR=change-me-secondary
 DEFAULT_ADMIN_EMAIL=admin@example.com
 DEFAULT_ADMIN_NAME=Admin User
 DEFAULT_ADMIN_PASSWORD=admin123

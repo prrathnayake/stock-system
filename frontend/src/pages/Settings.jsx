@@ -40,7 +40,7 @@ export default function Settings() {
   const { user, setUser, organization } = useAuth()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role === 'admin' || user?.role === 'developer'
   const activeVariant = uiVariants.find((variant) => variant.id === (user?.ui_variant || 'pro')) || uiVariants[0]
 
   const navigationItems = useMemo(() => {
@@ -1163,7 +1163,7 @@ export default function Settings() {
                           />
                           <small className="muted">{PASSWORD_REQUIREMENTS}</small>
                         </label>
-                        <label className="field" data-help="Determines administrative permissions for the user.">
+                        <label className="field" data-help="Determines administrative permissions for the user. Choose Developer for secure maintenance access.">
                           <span>Role</span>
                           <select
                             value={userForm.role}
@@ -1171,6 +1171,7 @@ export default function Settings() {
                           >
                             <option value="user">User</option>
                             <option value="admin">Administrator</option>
+                            <option value="developer">Developer</option>
                           </select>
                         </label>
                         <label className="field" data-help="Preferred interface layout that loads after login.">
@@ -1249,9 +1250,9 @@ export default function Settings() {
                                     <td>{account.full_name}</td>
                                     <td>{account.email}</td>
                                     <td>
-                                      <span className={`badge badge--${account.role === 'admin' ? 'info' : 'muted'}`}>
-                                        {account.role}
-                                      </span>
+                              <span className={`badge badge--${['admin', 'developer'].includes(account.role) ? 'info' : 'muted'}`}>
+                                {account.role}
+                              </span>
                                     </td>
                                     <td>
                                       <div>
@@ -1320,7 +1321,7 @@ export default function Settings() {
                                 required
                               />
                             </label>
-                            <label className="field" data-help="Adjust the user's access level.">
+                            <label className="field" data-help="Adjust the user's access level. Developer includes secure maintenance tools.">
                               <span>Role</span>
                               <select
                                 value={editForm.role}
@@ -1328,6 +1329,7 @@ export default function Settings() {
                               >
                                 <option value="user">User</option>
                                 <option value="admin">Administrator</option>
+                                <option value="developer">Developer</option>
                               </select>
                             </label>
                             <label className="field" data-help="Select the workspace layout this user will see by default.">

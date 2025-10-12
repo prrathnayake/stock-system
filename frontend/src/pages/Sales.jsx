@@ -48,6 +48,16 @@ export default function Sales() {
   const [saleDetailForm, setSaleDetailForm] = useState({ reference: '', notes: '', customer_id: '' })
   const [saleDetailBanner, setSaleDetailBanner] = useState(null)
   const [saleDetailLoading, setSaleDetailLoading] = useState(false)
+  const saleDetailsLocked = activeSale ? ['complete', 'canceled'].includes(activeSale.status) : false
+
+  useEffect(() => {
+    if (saleDetailsLocked && activeSale && !saleDetailBanner) {
+      setSaleDetailBanner({ type: 'info', message: 'This sale is locked because it has been completed or canceled.' })
+    }
+    if (!saleDetailsLocked && saleDetailBanner?.type === 'info' && saleDetailBanner.message.includes('locked')) {
+      setSaleDetailBanner(null)
+    }
+  }, [saleDetailsLocked, activeSale?.id, saleDetailBanner])
 
   const { data: customers = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ['customers', customerSearch],
@@ -329,6 +339,10 @@ export default function Sales() {
   const handleSaleDetailSubmit = (event) => {
     event.preventDefault()
     if (!activeSale) return
+    if (['complete', 'canceled'].includes(activeSale.status)) {
+      setSaleDetailBanner({ type: 'error', message: 'Completed or canceled sales cannot be modified.' })
+      return
+    }
     setSaleDetailBanner(null)
     const payload = {}
     const trimmedReference = saleDetailForm.reference.trim()
@@ -861,6 +875,7 @@ export default function Sales() {
                 <h3 id={`sale-detail-${activeSale.id}`}>Sale #{activeSale.id}</h3>
                 <p className="muted">
                   {saleDetailLoading ? 'Loading sale details…' : `Status: ${activeSale.status}`}
+                  {saleDetailsLocked && !saleDetailLoading ? ' · Updates locked' : ''}
                 </p>
               </div>
               <button type="button" className="button button--ghost" onClick={closeSaleDetails}>Close</button>
@@ -877,7 +892,7 @@ export default function Sales() {
                   value={saleDetailForm.reference}
                   onChange={(e) => handleSaleDetailChange('reference', e.target.value)}
                   placeholder="Optional reference"
-                  disabled={saleDetailLoading || updateSaleDetailsMutation.isLoading}
+                  disabled={saleDetailsLocked || saleDetailLoading || updateSaleDetailsMutation.isLoading}
                 />
               </label>
               <label className="field" data-help="Update the customer linked to this sale.">
@@ -885,7 +900,7 @@ export default function Sales() {
                 <select
                   value={saleDetailForm.customer_id}
                   onChange={(e) => handleSaleDetailChange('customer_id', e.target.value)}
-                  disabled={saleDetailLoading || updateSaleDetailsMutation.isLoading}
+                  disabled={saleDetailsLocked || saleDetailLoading || updateSaleDetailsMutation.isLoading}
                 >
                   <option value="">Select customer</option>
                   {saleCustomerOptions.map((option) => (
@@ -900,15 +915,15 @@ export default function Sales() {
                   onChange={(e) => handleSaleDetailChange('notes', e.target.value)}
                   rows={3}
                   placeholder="Add context for this sale"
-                  disabled={saleDetailLoading || updateSaleDetailsMutation.isLoading}
+                  disabled={saleDetailsLocked || saleDetailLoading || updateSaleDetailsMutation.isLoading}
                 />
               </label>
               <div className="modal__actions">
                 <button type="button" className="button button--ghost" onClick={closeSaleDetails} disabled={updateSaleDetailsMutation.isLoading}>
                   Close
                 </button>
-                <button type="submit" className="button button--primary" disabled={updateSaleDetailsMutation.isLoading}>
-                  {updateSaleDetailsMutation.isLoading ? 'Saving…' : 'Save changes'}
+                <button type="submit" className="button button--primary" disabled={saleDetailsLocked || updateSaleDetailsMutation.isLoading}>
+                  {saleDetailsLocked ? 'Updates disabled' : updateSaleDetailsMutation.isLoading ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             </form>
