@@ -1,7 +1,11 @@
 import { sequelize, Organization, User } from './db.js';
 import bcrypt from 'bcryptjs';
+import fs from 'fs/promises';
+import path from 'path';
 import { runAsOrganization } from './services/requestContext.js';
 import { config } from './config.js';
+import { SeedSchema, seedOrganizationData } from './services/seedImporter.js';
+import { invalidateStockOverviewCache } from './services/cache.js';
 
 (async () => {
   await sequelize.sync({ force: true });
@@ -53,9 +57,36 @@ import { config } from './config.js';
         });
       }
     }
+
+    const seedPath = process.argv[2] || process.env.SEED_DATA_PATH;
+    if (seedPath) {
+      const resolvedSeedPath = path.resolve(seedPath);
+      try {
+        const raw = await fs.readFile(resolvedSeedPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        const validation = SeedSchema.safeParse(parsed);
+        if (!validation.success) {
+          console.error('[seed] Seed file validation failed.');
+          console.error(JSON.stringify(validation.error.flatten(), null, 2));
+          process.exitCode = 1;
+          return;
+        }
+        const summary = await seedOrganizationData({
+          data: validation.data,
+          organizationId: organization.id
+        });
+        await invalidateStockOverviewCache(organization.id).catch(() => {});
+        console.log(`[seed] Imported seed data from ${resolvedSeedPath}`);
+        console.log(JSON.stringify(summary, null, 2));
+      } catch (error) {
+        console.error(`[seed] Unable to import seed data from ${resolvedSeedPath}: ${error.message}`);
+        process.exitCode = 1;
+      }
+    }
   });
   console.log(
     `Seed complete. Default admin user ${config.bootstrap.admin.email} and developer user ${config.bootstrap.developer.email} created.`
   );
-  process.exit(0);
+  const exitCode = typeof process.exitCode === 'number' ? process.exitCode : 0;
+  process.exit(exitCode);
 })();

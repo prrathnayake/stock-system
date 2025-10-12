@@ -4,6 +4,7 @@ import AppLayout from '../components/AppLayout.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import FirstLogin from '../pages/FirstLogin.jsx';
 import Inventory from '../pages/Inventory.jsx';
+import Operations from '../pages/Operations.jsx';
 import Login from '../pages/Login.jsx';
 import Scan from '../pages/Scan.jsx';
 import Settings from '../pages/Settings.jsx';
@@ -87,6 +88,7 @@ export default function AppRouter() {
         >
           <Route index element={<Dashboard />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="operations" element={<Operations />} />
           <Route path="storage-bins" element={<StorageBins />} />
           <Route path="sales" element={<Sales />} />
           <Route

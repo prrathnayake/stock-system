@@ -108,6 +108,7 @@ export default function AppLayout() {
     const items = [
       { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user', 'developer'] },
       { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user', 'developer'] },
+      { to: '/operations', label: 'Operations', roles: ['admin', 'user', 'developer'] },
       { to: '/storage-bins', label: 'Branch locations', roles: ['admin', 'user', 'developer'] },
       { to: '/sales', label: 'Sales', roles: ['admin', 'user', 'developer'] },
       { to: '/invoices', label: 'Invoices', roles: ['admin', 'developer'] },
@@ -129,6 +130,7 @@ export default function AppLayout() {
     [
       { to: '/', label: 'Home', roles: ['admin', 'user', 'developer'] },
       { to: '/inventory', label: 'Inventory', roles: ['admin', 'user', 'developer'] },
+      { to: '/operations', label: 'Operations', roles: ['admin', 'user', 'developer'] },
       { to: '/storage-bins', label: 'Branch locations', roles: ['admin', 'user', 'developer'] },
       { to: '/sales', label: 'Sales', roles: ['admin', 'user', 'developer'] },
       { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user', 'developer'] }

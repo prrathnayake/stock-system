@@ -1,0 +1,64 @@
+{
+  "products": [
+    {
+      "sku": "TOOL-SET-001",
+      "name": "Technician starter kit",
+      "reorder_point": 5,
+      "lead_time_days": 7,
+      "unit_price": 249.5
+    },
+    {
+      "sku": "LAPTOP-15",
+      "name": "Service laptop 15\"",
+      "reorder_point": 2,
+      "lead_time_days": 5,
+      "unit_price": 1399,
+      "track_serial": true
+    }
+  ],
+  "locations": [
+    {
+      "site": "Sydney HQ",
+      "room": "Service Bay",
+      "notes": "Primary repair hub"
+    },
+    {
+      "site": "Melbourne Depot",
+      "room": "Logistics",
+      "notes": "Forward staging area"
+    }
+  ],
+  "bins": [
+    {
+      "code": "SYD-A1",
+      "location_site": "Sydney HQ"
+    },
+    {
+      "code": "SYD-B2",
+      "location_site": "Sydney HQ"
+    },
+    {
+      "code": "MEL-A1",
+      "location_site": "Melbourne Depot"
+    }
+  ],
+  "stock": [
+    {
+      "sku": "TOOL-SET-001",
+      "bin": "SYD-A1",
+      "on_hand": 12
+    },
+    {
+      "sku": "TOOL-SET-001",
+      "bin": "MEL-A1",
+      "on_hand": 4,
+      "reserved": 1
+    },
+    {
+      "sku": "LAPTOP-15",
+      "bin": "SYD-B2",
+      "on_hand": 6,
+      "reserved": 2
+    }
+  ]
+}
