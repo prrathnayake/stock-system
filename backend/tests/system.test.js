@@ -3,6 +3,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs/promises';
+import { normalizePhone } from '../src/utils/phone.js';
 
 process.env.NODE_ENV = 'test';
 process.env.DB_DIALECT = 'sqlite';
@@ -380,12 +381,13 @@ describe('End-to-end system workflow', () => {
     });
 
     await step('Update customer contact details', async () => {
+      const updatePayload = { phone: '+61 2 5555 1234' };
       const res = await request(app)
         .put(`/customers/${customerId}`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ phone: '+61 2 5555 1234' });
+        .send(updatePayload);
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('phone', '+61 2 5555 1234');
+      expect(res.body).toHaveProperty('phone', normalizePhone(updatePayload.phone));
     });
 
     saleStartingOnHand = await step('Inspect available stock before sale', async () => {

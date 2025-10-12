@@ -2,6 +2,7 @@ import { DataTypes } from 'sequelize';
 import { sequelize, Organization, User, Product, Location, Bin, StockLevel } from '../db.js';
 import { config } from '../config.js';
 import { runAsOrganization } from '../services/requestContext.js';
+import { normalizePhone } from '../utils/phone.js';
 
 const normalizeTableName = (value) => {
   if (!value) return '';
@@ -121,6 +122,63 @@ async function cleanupDuplicateOrganizationSlugIndexes() {
     } catch (error) {
       console.warn(`Failed to remove duplicate organization slug index ${index.name}: ${error.message}`);
     }
+  }
+}
+
+async function cleanupDuplicateCustomerPhoneIndexes() {
+  const queryInterface = sequelize.getQueryInterface();
+  let tables;
+
+  try {
+    tables = await queryInterface.showAllTables();
+  } catch (error) {
+    console.warn(`Unable to list tables while cleaning customer phone indexes: ${error.message}`);
+    return;
+  }
+
+  const normalizedTables = Array.isArray(tables)
+    ? tables.map(normalizeTableName)
+    : [];
+
+  if (!normalizedTables.includes('customers')) {
+    return;
+  }
+
+  const transaction = await sequelize.transaction();
+  try {
+    const [rows] = await sequelize.query(
+      'SELECT `id`, `phone` FROM `customers` WHERE `phone` IS NOT NULL',
+      { transaction }
+    );
+
+    for (const row of rows) {
+      const normalized = normalizePhone(row.phone);
+      if (normalized !== row.phone) {
+        await sequelize.query(
+          'UPDATE `customers` SET `phone` = :phone WHERE `id` = :id',
+          {
+            transaction,
+            replacements: { id: row.id, phone: normalized }
+          }
+        );
+      }
+    }
+
+    await sequelize.query(
+      `DELETE c1 FROM customers c1
+        JOIN customers c2
+          ON c1.organization_id = c2.organization_id
+         AND c1.phone = c2.phone
+         AND c1.id > c2.id
+       WHERE c1.phone IS NOT NULL`,
+      { transaction }
+    );
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    console.warn(`Failed to clean duplicate customer phone records: ${error.message}`);
+    throw error;
   }
 }
 
@@ -624,6 +682,7 @@ export async function initialiseDatabase() {
   await ensureWorkOrdersHaveAssigneeColumn();
   await ensureUsersHaveLastSeenColumn();
   await cleanupDuplicateOrganizationSlugIndexes();
+  await cleanupDuplicateCustomerPhoneIndexes();
   await sequelize.sync({ alter: true });
 
   const defaults = config.bootstrap.organization;

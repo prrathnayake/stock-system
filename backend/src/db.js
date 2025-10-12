@@ -1,6 +1,7 @@
 import { Sequelize, DataTypes } from 'sequelize';
 import { config } from './config.js';
 import { getOrganizationId } from './services/requestContext.js';
+import { normalizePhone } from './utils/phone.js';
 
 const dialect = config.db.dialect || 'mysql';
 
@@ -438,6 +439,36 @@ export const Customer = sequelize.define('customer', {
     { unique: true, fields: ['organization_id', 'email'], name: 'customers_email_unique' },
     { unique: true, fields: ['organization_id', 'phone'], name: 'customers_phone_unique' }
   ]
+});
+
+Customer.addHook('beforeValidate', (customer) => {
+  if (typeof customer.name === 'string') {
+    customer.name = customer.name.trim();
+  }
+
+  if (typeof customer.email === 'string') {
+    const normalizedEmail = customer.email.trim().toLowerCase();
+    customer.email = normalizedEmail.length ? normalizedEmail : null;
+  }
+
+  if (typeof customer.phone !== 'undefined') {
+    customer.phone = normalizePhone(customer.phone);
+  }
+
+  if (typeof customer.company === 'string') {
+    const company = customer.company.trim();
+    customer.company = company.length ? company : null;
+  }
+
+  if (typeof customer.address === 'string') {
+    const address = customer.address.trim();
+    customer.address = address.length ? address : null;
+  }
+
+  if (typeof customer.notes === 'string') {
+    const notes = customer.notes.trim();
+    customer.notes = notes.length ? notes : null;
+  }
 });
 
 export const Sale = sequelize.define('sale', {
