@@ -58,6 +58,14 @@ function InvoicingRoute({ children }) {
   return children;
 }
 
+function FeatureRoute({ children, feature }) {
+  const { organization } = useAuth();
+  if (organization?.features?.[feature] === false) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -88,16 +96,28 @@ export default function AppRouter() {
         >
           <Route index element={<Dashboard />} />
           <Route path="inventory" element={<Inventory />} />
-          <Route path="operations" element={<Operations />} />
+          <Route
+            path="operations"
+            element={<FeatureRoute feature="operations_module_enabled"><Operations /></FeatureRoute>}
+          />
           <Route path="storage-bins" element={<StorageBins />} />
-          <Route path="sales" element={<Sales />} />
+          <Route
+            path="sales"
+            element={<FeatureRoute feature="sales_module_enabled"><Sales /></FeatureRoute>}
+          />
           <Route
             path="invoices"
             element={(<RoleRoute roles={['admin']}><InvoicingRoute><Invoices /></InvoicingRoute></RoleRoute>)}
           />
           <Route
             path="work-orders"
-            element={<RoleRoute roles={['admin', 'user']}><WorkOrders /></RoleRoute>}
+            element={(
+              <RoleRoute roles={['admin', 'user']}>
+                <FeatureRoute feature="work_orders_enabled">
+                  <WorkOrders />
+                </FeatureRoute>
+              </RoleRoute>
+            )}
           />
           <Route path="scan" element={<Scan />} />
           <Route path="settings" element={<Settings />} />

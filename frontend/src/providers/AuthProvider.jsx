@@ -37,7 +37,10 @@ function normalizeOrganization(value) {
       ? value.banner_images.filter((item) => typeof item === 'string' && item.trim().length > 0)
       : [],
     features: {
-      barcode_scanning_enabled: value.features?.barcode_scanning_enabled !== false
+      barcode_scanning_enabled: value.features?.barcode_scanning_enabled !== false,
+      work_orders_enabled: value.features?.work_orders_enabled !== false,
+      sales_module_enabled: value.features?.sales_module_enabled !== false,
+      operations_module_enabled: value.features?.operations_module_enabled !== false
     }
   };
 }

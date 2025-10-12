@@ -278,7 +278,10 @@ export default function Settings() {
     auto_product_sku: false,
     auto_customer_id: false,
     auto_warehouse_id: false,
-    barcode_scanning_enabled: true
+    barcode_scanning_enabled: true,
+    work_orders_enabled: true,
+    sales_module_enabled: true,
+    operations_module_enabled: true
   })
   const [banner, setBanner] = useState(null)
   const [userBanner, setUserBanner] = useState(null)
@@ -373,7 +376,10 @@ export default function Settings() {
         auto_product_sku: settingsData.auto_product_sku === true,
         auto_customer_id: settingsData.auto_customer_id === true,
         auto_warehouse_id: settingsData.auto_warehouse_id === true,
-        barcode_scanning_enabled: settingsData.barcode_scanning_enabled !== false
+        barcode_scanning_enabled: settingsData.barcode_scanning_enabled !== false,
+        work_orders_enabled: settingsData.work_orders_enabled !== false,
+        sales_module_enabled: settingsData.sales_module_enabled !== false,
+        operations_module_enabled: settingsData.operations_module_enabled !== false
       })
     }
   }, [settingsData])
@@ -429,14 +435,20 @@ export default function Settings() {
       } else {
         setBanner('Settings saved successfully.')
       }
-      if (typeof variables?.barcode_scanning_enabled === 'boolean') {
+      const featureUpdates = {}
+      ['barcode_scanning_enabled', 'work_orders_enabled', 'sales_module_enabled', 'operations_module_enabled'].forEach((key) => {
+        if (typeof variables?.[key] === 'boolean') {
+          featureUpdates[key] = variables[key]
+        }
+      })
+      if (Object.keys(featureUpdates).length > 0) {
         setUser((prev) => {
           if (!prev?.organization) return prev
           const updatedOrg = {
             ...prev.organization,
             features: {
               ...(prev.organization.features || {}),
-              barcode_scanning_enabled: variables.barcode_scanning_enabled
+              ...featureUpdates
             }
           }
           const updatedUser = { ...prev, organization: updatedOrg }
@@ -867,7 +879,10 @@ export default function Settings() {
       auto_product_sku: Boolean(formState.auto_product_sku),
       auto_customer_id: Boolean(formState.auto_customer_id),
       auto_warehouse_id: Boolean(formState.auto_warehouse_id),
-      barcode_scanning_enabled: Boolean(formState.barcode_scanning_enabled)
+      barcode_scanning_enabled: Boolean(formState.barcode_scanning_enabled),
+      work_orders_enabled: Boolean(formState.work_orders_enabled),
+      sales_module_enabled: Boolean(formState.sales_module_enabled),
+      operations_module_enabled: Boolean(formState.operations_module_enabled)
     }
     settingsMutation.mutate(payload)
   }
@@ -1690,6 +1705,45 @@ export default function Settings() {
                   <div className="card settings-card">
                     {banner && <div className="banner banner--info">{banner}</div>}
                     <form className="form-grid" onSubmit={handleSubmit}>
+                      <label className="field" data-help="Control access to the service queue and repair tracking workspace.">
+                        <span>Work orders workspace</span>
+                        <select
+                          value={formState.work_orders_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            work_orders_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Toggle the ability to create and manage customer sales orders.">
+                        <span>Sales workspace</span>
+                        <select
+                          value={formState.sales_module_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            sales_module_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
+                      <label className="field" data-help="Show or hide the operations overview page for this organization.">
+                        <span>Operations overview</span>
+                        <select
+                          value={formState.operations_module_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            operations_module_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
                       <label className="field" data-help="Allow staff to use the in-app camera scanner.">
                         <span>Barcode scanning</span>
                         <select

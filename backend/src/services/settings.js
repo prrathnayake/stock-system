@@ -69,6 +69,27 @@ export async function getSetting(key, defaultValue = null, organizationId) {
   return settings.has(key) ? settings.get(key) : defaultValue;
 }
 
+export async function getFeatureFlags(organizationId) {
+  const [
+    barcodeScanning,
+    workOrders,
+    salesModule,
+    operationsModule
+  ] = await Promise.all([
+    getSetting('barcode_scanning_enabled', true, organizationId),
+    getSetting('work_orders_enabled', true, organizationId),
+    getSetting('sales_module_enabled', true, organizationId),
+    getSetting('operations_module_enabled', true, organizationId)
+  ]);
+
+  return {
+    barcode_scanning_enabled: barcodeScanning !== false,
+    work_orders_enabled: workOrders !== false,
+    sales_module_enabled: salesModule !== false,
+    operations_module_enabled: operationsModule !== false
+  };
+}
+
 export async function upsertSettings(entries, organizationId) {
   const orgId = ensureOrganizationId(organizationId);
   const updates = [];

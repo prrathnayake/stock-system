@@ -20,7 +20,10 @@ const UpdateSchema = z.object({
   auto_product_sku: z.boolean().optional(),
   auto_customer_id: z.boolean().optional(),
   auto_warehouse_id: z.boolean().optional(),
-  barcode_scanning_enabled: z.boolean().optional()
+  barcode_scanning_enabled: z.boolean().optional(),
+  work_orders_enabled: z.boolean().optional(),
+  sales_module_enabled: z.boolean().optional(),
+  operations_module_enabled: z.boolean().optional()
 });
 
 const router = Router();

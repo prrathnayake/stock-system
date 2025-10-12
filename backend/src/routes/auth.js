@@ -11,7 +11,7 @@ import { createPasswordSchema } from '../utils/passwordPolicy.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/tokenService.js';
 import { recordActivity } from '../services/activityLog.js';
 import { touchUserPresence } from '../services/userPresence.js';
-import { getSetting } from '../services/settings.js';
+import { getSetting, getFeatureFlags } from '../services/settings.js';
 
 const router = Router();
 
@@ -66,7 +66,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     description: `User ${user.full_name} signed in`
   }).catch(() => {});
   const bannerImages = await getSetting('organization_banner_images', [], organization.id);
-  const barcodeScanningEnabled = await getSetting('barcode_scanning_enabled', true, organization.id);
+  const featureFlags = await getFeatureFlags(organization.id);
 
   res.json({
     access,
@@ -100,9 +100,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         invoicing_enabled: organization.invoicing_enabled,
         logo_updated_at: organization.updatedAt ? organization.updatedAt.toISOString?.() || new Date(organization.updatedAt).toISOString() : null,
         banner_images: Array.isArray(bannerImages) ? bannerImages : [],
-        features: {
-          barcode_scanning_enabled: barcodeScanningEnabled !== false
-        }
+        features: featureFlags
       } : null,
       ui_variant: user.ui_variant
     }
@@ -173,9 +171,9 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
   const bannerImages = organization
     ? await getSetting('organization_banner_images', [], organization.id)
     : [];
-  const barcodeScanningEnabled = organization
-    ? await getSetting('barcode_scanning_enabled', true, organization.id)
-    : true;
+  const featureFlags = organization
+    ? await getFeatureFlags(organization.id)
+    : { barcode_scanning_enabled: true, work_orders_enabled: true, sales_module_enabled: true, operations_module_enabled: true };
 
   const access = signAccessToken(user);
   const refresh = signRefreshToken(user.id);
@@ -211,9 +209,7 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
         invoicing_enabled: organization.invoicing_enabled,
         logo_updated_at: organization.updatedAt ? organization.updatedAt.toISOString?.() || new Date(organization.updatedAt).toISOString() : null,
         banner_images: Array.isArray(bannerImages) ? bannerImages : [],
-        features: {
-          barcode_scanning_enabled: barcodeScanningEnabled !== false
-        }
+        features: featureFlags
       } : null,
       ui_variant: user.ui_variant
     }

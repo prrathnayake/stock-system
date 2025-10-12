@@ -10,7 +10,7 @@ import { HttpError } from '../utils/httpError.js';
 import { notifyOrganizationProfileUpdated, primeOrganizationContact } from '../services/notificationService.js';
 import { config } from '../config.js';
 import { bannerUpload, logoUpload } from '../middleware/uploads.js';
-import { getSetting, upsertSettings } from '../services/settings.js';
+import { getSetting, upsertSettings, getFeatureFlags } from '../services/settings.js';
 
 const router = Router();
 
@@ -126,7 +126,8 @@ router.get('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, re
   }
   primeOrganizationContact(organization);
   const bannerImages = await getSetting('organization_banner_images', [], organization.id);
-  res.json(serializeOrganization(organization, { bannerImages }));
+  const features = await getFeatureFlags(organization.id);
+  res.json({ ...serializeOrganization(organization, { bannerImages }), features });
 }));
 
 router.put('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
@@ -158,7 +159,8 @@ router.put('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, re
   const bannerImages = bannerImagesUpdate !== undefined
     ? bannerImagesUpdate
     : await getSetting('organization_banner_images', [], organization.id);
-  res.json(serializeOrganization(organization, { bannerImages }));
+  const features = await getFeatureFlags(organization.id);
+  res.json({ ...serializeOrganization(organization, { bannerImages }), features });
   notifyOrganizationProfileUpdated({ organization, actor: req.user }).catch((error) => {
     console.error('[notify] failed to send organization update email', error);
   });
