@@ -19,7 +19,9 @@ export default function AppLayout() {
     return window.matchMedia('(max-width: 960px)').matches
   })
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [routeLoading, setRouteLoading] = useState(false)
   const menuRef = useRef(null)
+  const loaderTimer = useRef(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -41,6 +43,34 @@ export default function AppLayout() {
     if (!isMobile) return
     setIsSidebarOpen(false)
   }, [location.pathname, isMobile])
+
+  useEffect(() => {
+    if (!user?.transition_loading_enabled) {
+      setRouteLoading(false)
+      return undefined
+    }
+    if (loaderTimer.current) {
+      window.clearTimeout(loaderTimer.current)
+    }
+    setRouteLoading(true)
+    loaderTimer.current = window.setTimeout(() => {
+      setRouteLoading(false)
+      loaderTimer.current = null
+    }, 450)
+    return () => {
+      if (loaderTimer.current) {
+        window.clearTimeout(loaderTimer.current)
+        loaderTimer.current = null
+      }
+    }
+  }, [location.pathname, user?.transition_loading_enabled])
+
+  useEffect(() => () => {
+    if (loaderTimer.current) {
+      window.clearTimeout(loaderTimer.current)
+      loaderTimer.current = null
+    }
+  }, [])
 
   const toggleSidebar = () => {
     setIsSidebarOpen((prev) => !prev)
@@ -75,7 +105,7 @@ export default function AppLayout() {
     const items = [
       { to: '/', label: 'Dashboard', end: true, roles: ['admin', 'user'] },
       { to: '/inventory', label: variant === 'tabular' ? 'Inventory Table' : 'Inventory', roles: ['admin', 'user'] },
-      { to: '/storage-bins', label: 'Storage bins', roles: ['admin', 'user'] },
+      { to: '/storage-bins', label: 'Braces & hoses', roles: ['admin', 'user'] },
       { to: '/sales', label: 'Sales', roles: ['admin', 'user'] },
       { to: '/invoices', label: 'Invoices', roles: ['admin'] },
       { to: '/scan', label: variant === 'minimal' ? 'Quick scan' : 'Scan', roles: ['admin', 'user'] },
@@ -92,7 +122,7 @@ export default function AppLayout() {
     [
       { to: '/', label: 'Home', roles: ['admin', 'user'] },
       { to: '/inventory', label: 'Inventory', roles: ['admin', 'user'] },
-      { to: '/storage-bins', label: 'Bins', roles: ['admin', 'user'] },
+      { to: '/storage-bins', label: 'Braces & hoses', roles: ['admin', 'user'] },
       { to: '/sales', label: 'Sales', roles: ['admin', 'user'] },
       { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user'] }
     ]
@@ -172,6 +202,12 @@ export default function AppLayout() {
         />
       )}
       <div className="main">
+        {routeLoading && (
+          <div className="route-loader" role="status" aria-live="polite">
+            <div className="route-loader__spinner" aria-hidden="true" />
+            <span className="route-loader__text">Switching views…</span>
+          </div>
+        )}
         <header className="topbar">
           <div className="topbar__lead">
             <button

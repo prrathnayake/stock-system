@@ -7,7 +7,21 @@ function formatDateLabel(date) {
   }).format(date)
 }
 
+function formatDateTime(date) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(date)
+}
+
 export default function StockHistoryChart({ points = [], height = 200 }) {
+  const gradientId = useMemo(
+    () => `stockGradient-${Math.random().toString(36).slice(2, 8)}`,
+    []
+  )
+
   const prepared = useMemo(() => {
     if (!points || points.length === 0) return []
     return points
@@ -37,6 +51,18 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
     value: point.y
   }))
 
+  const trendPoints = normalized.map((point, index) => {
+    const previous = index > 0 ? normalized[index - 1] : null
+    const delta = previous ? point.value - previous.value : 0
+    const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'
+    return {
+      ...point,
+      timestamp: prepared[index].x,
+      delta,
+      direction
+    }
+  })
+
   const path = normalized.reduce((acc, point, index) => (
     index === 0 ? `M ${point.x},${point.y}` : `${acc} L ${point.x},${point.y}`
   ), '')
@@ -53,13 +79,33 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
     <div className="chart" style={{ height }}>
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Stock level trend">
         <defs>
-          <linearGradient id="stockGradient" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(99,102,241,0.28)" />
             <stop offset="100%" stopColor="rgba(99,102,241,0.02)" />
           </linearGradient>
         </defs>
-        <path d={areaPath} fill="url(#stockGradient)" stroke="none" />
-        <path d={path} fill="none" stroke="var(--color-primary)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" />
+        <path
+          d={path}
+          className="chart__trend-line"
+          fill="none"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {trendPoints.map((point, index) => (
+          <circle
+            key={`${point.timestamp}-${index}`}
+            cx={point.x}
+            cy={point.y}
+            r={1.8}
+            className={`chart__point chart__point--${point.direction}`}
+          >
+            <title>
+              {`${formatDateTime(new Date(point.timestamp))} · ${point.value} on hand${point.delta ? ` (${point.delta > 0 ? '+' : ''}${point.delta})` : ''}`}
+            </title>
+          </circle>
+        ))}
       </svg>
       <div className="chart__labels">
         <div className="chart__y-axis">
@@ -72,6 +118,22 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
           <span>{formatDateLabel(new Date(maxX))}</span>
         </div>
       </div>
+      <ul className="chart__legend">
+        {trendPoints.map((point, index) => {
+          const change = point.delta === 0
+            ? 'No change'
+            : `${point.delta > 0 ? '+' : ''}${point.delta} since previous move`
+          return (
+            <li key={`${point.timestamp}-legend`}>
+              <span className={`chart__legend-indicator chart__legend-indicator--${point.direction}`} aria-hidden="true" />
+              <div>
+                <strong>{formatDateTime(new Date(point.timestamp))}</strong>
+                <span>{point.value} on hand · {change}</span>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }

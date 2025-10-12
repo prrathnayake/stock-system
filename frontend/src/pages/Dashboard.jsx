@@ -349,8 +349,8 @@ export default function Dashboard() {
       </div>
 
       <div className="card">
-        <h3>Top stocked bins</h3>
-        <p className="muted">Understand where inventory is concentrated across your network.</p>
+        <h3>Top stocked brace &amp; hose locations</h3>
+        <p className="muted">Understand where inventory is concentrated across your brace and hose network.</p>
         <TablePagination
           page={topBinsPage}
           totalPages={topBinsTotalPages}
@@ -361,7 +361,7 @@ export default function Dashboard() {
         <table className="table">
           <thead>
             <tr>
-              <th>Bin</th>
+              <th>Brace/hose code</th>
               <th>Location</th>
               <th>SKU</th>
               <th>Product</th>
@@ -372,7 +372,7 @@ export default function Dashboard() {
           <tbody>
             {topBins.length === 0 && (
               <tr>
-                <td colSpan={6} className="muted">No bin allocations recorded.</td>
+                <td colSpan={6} className="muted">No brace or hose allocations recorded.</td>
               </tr>
             )}
             {visibleTopBins.map((bin) => (

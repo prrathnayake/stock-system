@@ -44,6 +44,7 @@ function normalizeUser(value) {
   return {
     ...value,
     ui_variant: value.ui_variant || 'pro',
+    transition_loading_enabled: value.transition_loading_enabled !== false,
     organization: normalizeOrganization(value.organization)
   };
 }

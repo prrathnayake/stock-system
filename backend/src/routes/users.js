@@ -42,7 +42,8 @@ const UpdateUserSchema = z.object({
 });
 
 const PreferenceSchema = z.object({
-  ui_variant: UiVariantEnum
+  ui_variant: UiVariantEnum,
+  transition_loading_enabled: z.boolean().optional()
 });
 
 function presentUser(user) {
@@ -60,6 +61,7 @@ function presentUser(user) {
     created_at: user.createdAt,
     updated_at: user.updatedAt,
     ui_variant: user.ui_variant,
+    transition_loading_enabled: user.transition_loading_enabled,
     last_seen_at: lastSeen,
     online: isUserOnline(lastSeen)
   };
@@ -179,7 +181,11 @@ router.put('/me/preferences', requireAuth(), asyncHandler(async (req, res) => {
   if (!user) {
     throw new HttpError(404, 'User not found');
   }
-  await user.update({ ui_variant: parsed.data.ui_variant });
+  const updates = { ui_variant: parsed.data.ui_variant };
+  if (parsed.data.transition_loading_enabled !== undefined) {
+    updates.transition_loading_enabled = parsed.data.transition_loading_enabled;
+  }
+  await user.update(updates);
   res.json(presentUser(user));
 }));
 

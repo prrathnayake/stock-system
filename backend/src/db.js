@@ -162,6 +162,7 @@ export const User = sequelize.define('user', {
   role: { type: DataTypes.ENUM('admin', 'user'), defaultValue: 'user' },
   must_change_password: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   ui_variant: { type: DataTypes.ENUM('pro', 'analytics', 'tabular', 'minimal', 'visual'), defaultValue: 'pro' },
+  transition_loading_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   last_seen_at: { type: DataTypes.DATE, allowNull: true }
 }, {
   indexes: [

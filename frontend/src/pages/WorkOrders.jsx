@@ -109,6 +109,27 @@ export default function WorkOrders() {
     enabled: isAdmin
   })
 
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: async () => {
+      const { data } = await api.get('/customers')
+      return data
+    },
+    enabled: Boolean(user)
+  })
+
+  const customerOptions = useMemo(() => (
+    customers.map((customer) => {
+      const summaryParts = [customer.company, customer.email, customer.phone].filter(Boolean)
+      return {
+        id: customer.id,
+        name: customer.name,
+        summary: summaryParts.join(' • ')
+      }
+    })
+      .filter((option) => option.name)
+  ), [customers])
+
   const defaultAssignee = useMemo(() => {
     if (!isAdmin) return ''
     if (assignableUsers.length > 0) return String(assignableUsers[0].id)
@@ -235,7 +256,17 @@ export default function WorkOrders() {
               onChange={(e) => setCreateForm((prev) => ({ ...prev, customer_name: e.target.value }))}
               required
               placeholder="Acme Industries"
+              list="workorder-customers"
             />
+            {customerOptions.length > 0 && (
+              <datalist id="workorder-customers">
+                {customerOptions.map((customer) => (
+                  <option key={customer.id ?? customer.name} value={customer.name}>
+                    {customer.summary}
+                  </option>
+                ))}
+              </datalist>
+            )}
           </label>
           <label className="field" data-help="Describe the product received for repair.">
             <span>Device information</span>

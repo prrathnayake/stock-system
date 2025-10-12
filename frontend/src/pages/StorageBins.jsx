@@ -153,7 +153,7 @@ export default function StorageBins() {
     }
     updateBin.mutate({ id: editingId, payload }, {
       onSuccess: () => {
-        setTableFeedback({ type: 'success', message: 'Storage bin updated successfully.' })
+        setTableFeedback({ type: 'success', message: 'Brace & hose location updated successfully.' })
         cancelEdit()
         queryClient.invalidateQueries({ queryKey: ['bins'] })
         queryClient.invalidateQueries({ queryKey: ['inventory'] })
@@ -161,7 +161,7 @@ export default function StorageBins() {
       onError: (error) => {
         setTableFeedback({
           type: 'error',
-          message: error.response?.data?.error || 'Unable to update storage bin.'
+          message: error.response?.data?.error || 'Unable to update brace & hose location.'
         })
       }
     })
@@ -172,7 +172,7 @@ export default function StorageBins() {
     setTableFeedback(null)
     deleteBin.mutate(bin.id, {
       onSuccess: () => {
-        setTableFeedback({ type: 'success', message: 'Storage bin removed.' })
+        setTableFeedback({ type: 'success', message: 'Brace & hose location removed.' })
         if (editingId === bin.id) {
           cancelEdit()
         }
@@ -182,7 +182,7 @@ export default function StorageBins() {
       onError: (error) => {
         setTableFeedback({
           type: 'error',
-          message: error.response?.data?.error || 'Unable to delete storage bin.'
+          message: error.response?.data?.error || 'Unable to delete brace & hose location.'
         })
       }
     })
@@ -206,7 +206,7 @@ export default function StorageBins() {
     }
     createBin.mutate(payload, {
       onSuccess: () => {
-        setFormFeedback({ type: 'success', message: 'Bin created successfully.' })
+        setFormFeedback({ type: 'success', message: 'Brace & hose location created successfully.' })
         setCreateForm(initialCreateForm)
         queryClient.invalidateQueries({ queryKey: ['bins'] })
         queryClient.invalidateQueries({ queryKey: ['inventory'] })
@@ -214,7 +214,7 @@ export default function StorageBins() {
       onError: (error) => {
         setFormFeedback({
           type: 'error',
-          message: error.response?.data?.error || 'Unable to create storage bin.'
+          message: error.response?.data?.error || 'Unable to create brace & hose location.'
         })
       }
     })
@@ -226,8 +226,8 @@ export default function StorageBins() {
     <div className="page storage-bins">
       <div className="card storage-bins__intro">
         <div>
-          <h2>Storage locations</h2>
-          <p className="muted">Manage bin codes and physical locations for {organizationName}.</p>
+          <h2>Brace &amp; hose locations</h2>
+          <p className="muted">Manage brace and hose location codes and physical storage points for {organizationName}.</p>
         </div>
         <div className="storage-bins__status">
           <span className="badge badge--muted">{overview.length} locations</span>
@@ -249,8 +249,8 @@ export default function StorageBins() {
         <section className="card storage-bins__table">
           <header className="card__header">
             <div>
-              <h3>Registered bins</h3>
-              <p className="muted">Track where inventory lives and how it is distributed.</p>
+              <h3>Registered braces &amp; hoses</h3>
+              <p className="muted">Track where critical brace and hose inventory lives and how it is distributed.</p>
             </div>
           </header>
           {tableFeedback && (
@@ -269,7 +269,7 @@ export default function StorageBins() {
             <table className="table table--compact">
               <thead>
                 <tr>
-                  <th>Bin</th>
+                  <th>Brace/hose code</th>
                   <th>Location</th>
                   <th>Products</th>
                   <th>On hand</th>
@@ -280,7 +280,7 @@ export default function StorageBins() {
               <tbody>
                 {overview.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="muted">No storage bins recorded yet.</td>
+                    <td colSpan={6} className="muted">No brace or hose locations recorded yet.</td>
                   </tr>
                 ) : (
                   visibleBins.map((bin) => (
@@ -318,7 +318,7 @@ export default function StorageBins() {
                             <form className="storage-bins__edit-form" onSubmit={handleUpdateBin}>
                               <div className="storage-bins__edit-grid">
                                 <label className="field">
-                                  <span>Bin code</span>
+                                  <span>Location code</span>
                                   <input
                                     value={editForm.code}
                                     onChange={(e) => setEditForm((prev) => ({ ...prev, code: e.target.value }))}
@@ -377,15 +377,15 @@ export default function StorageBins() {
         </section>
 
         <form className="card storage-bins__form" onSubmit={handleCreateBin}>
-          <h3>Create storage bin</h3>
-          <p className="muted">Give every location a clear identifier to make put-away and picking faster.</p>
+          <h3>Create brace &amp; hose location</h3>
+          <p className="muted">Give every brace and hose location a clear identifier to make put-away and picking faster.</p>
           {formFeedback && (
             <div className={`banner banner--${formFeedback.type === 'error' ? 'danger' : 'info'}`}>
               {formFeedback.message}
             </div>
           )}
           <label className="field" data-help="Unique identifier used when allocating or picking stock.">
-            <span>Bin code</span>
+            <span>Location code</span>
             <input
               value={createForm.code}
               onChange={(e) => setCreateForm((prev) => ({ ...prev, code: e.target.value }))}
@@ -393,7 +393,7 @@ export default function StorageBins() {
               required
             />
           </label>
-          <label className="field" data-help="Optional location name to help your team locate the bin.">
+          <label className="field" data-help="Optional location name to help your team locate the brace or hose storage point.">
             <span>Location</span>
             <input
               value={createForm.site}
@@ -409,10 +409,10 @@ export default function StorageBins() {
               placeholder="Aisle 3"
             />
           </label>
-          <p className="muted field--span">Bins can be assigned to products later from the stock adjustment tools.</p>
+          <p className="muted field--span">Locations can be assigned to products later from the stock adjustment tools.</p>
           <div className="form-actions">
             <button className="button button--primary" type="submit" disabled={createBin.isLoading}>
-              {createBin.isLoading ? 'Creating…' : 'Create bin'}
+              {createBin.isLoading ? 'Creating…' : 'Create location'}
             </button>
           </div>
         </form>

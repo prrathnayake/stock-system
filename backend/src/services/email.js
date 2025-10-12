@@ -62,7 +62,11 @@ async function createTransporter() {
       return null;
     }
   })();
-  return transporterPromise;
+  const transport = await transporterPromise;
+  if (!transport) {
+    transporterPromise = null;
+  }
+  return transport;
 }
 
 export async function sendEmail({ to, subject, text, html }) {
@@ -90,6 +94,7 @@ export async function sendEmail({ to, subject, text, html }) {
   } catch (error) {
     console.error('[mail] Failed to send email:', error.message);
     markTransportError(error.message || 'send-failed');
+    transporterPromise = null;
     return { delivered: false, error: error.message };
   }
 }
