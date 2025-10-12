@@ -303,7 +303,7 @@ async function fulfilInvoiceStock(invoice, transaction, userId, io) {
 export default function createInvoiceRoutes(io) {
   const router = Router();
 
-  router.get('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.get('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     await ensureInvoicingEnabled(req.user.organization_id);
     const status = req.query.status;
     const where = {};
@@ -321,7 +321,7 @@ export default function createInvoiceRoutes(io) {
     res.json(invoices.map(presentInvoice));
   }));
 
-  router.post('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
     const parsed = BaseInvoiceSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid invoice payload', parsed.error.flatten());
@@ -392,7 +392,7 @@ export default function createInvoiceRoutes(io) {
     });
   }));
 
-  router.get('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.get('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     await ensureInvoicingEnabled(req.user.organization_id);
     const invoice = await Invoice.findByPk(req.params.id, {
       include: [
@@ -406,7 +406,7 @@ export default function createInvoiceRoutes(io) {
     res.json(presentInvoice(invoice));
   }));
 
-  router.put('/:id', requireAuth(['admin']), asyncHandler(async (req, res) => {
+  router.put('/:id', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
     const parsed = BaseInvoiceSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid invoice payload', parsed.error.flatten());
@@ -492,7 +492,7 @@ export default function createInvoiceRoutes(io) {
     });
   }));
 
-  router.patch('/:id/status', requireAuth(['admin']), asyncHandler(async (req, res) => {
+  router.patch('/:id/status', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
     const parsed = StatusSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid status payload', parsed.error.flatten());
@@ -557,7 +557,7 @@ export default function createInvoiceRoutes(io) {
     });
   }));
 
-  router.get('/:id/activity', requireAuth(['admin']), asyncHandler(async (req, res) => {
+  router.get('/:id/activity', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
     await ensureInvoicingEnabled(req.user.organization_id);
     const activities = await UserActivity.findAll({
       where: { entity_type: 'invoice', entity_id: String(req.params.id) },

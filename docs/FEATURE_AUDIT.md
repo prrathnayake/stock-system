@@ -1,4 +1,4 @@
-# Stock System – Capability Audit
+# Stock Management System – Capability Audit
 
 This audit cross-checks the repository against the requested capabilities and highlights the highest-impact additions.
 

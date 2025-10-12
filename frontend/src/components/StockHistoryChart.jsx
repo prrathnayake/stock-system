@@ -27,7 +27,8 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
     return points
       .map((point) => ({
         x: new Date(point.occurredAt).getTime(),
-        y: point.level
+        y: point.level,
+        raw: point
       }))
       .sort((a, b) => a.x - b.x)
   }, [points])
@@ -48,7 +49,8 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
   const normalized = prepared.map((point) => ({
     x: ((point.x - minX) / xRange) * 100,
     y: 100 - ((point.y - minY) / yRange) * 100,
-    value: point.y
+    value: point.y,
+    raw: point.raw
   }))
 
   const trendPoints = normalized.map((point, index) => {
@@ -59,7 +61,9 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
       ...point,
       timestamp: prepared[index].x,
       delta,
-      direction
+      direction,
+      reservedLevel: prepared[index].raw?.reservedLevel ?? null,
+      reservedDelta: prepared[index].raw?.reservedDelta ?? 0
     }
   })
 
@@ -102,7 +106,7 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
             className={`chart__point chart__point--${point.direction}`}
           >
             <title>
-              {`${formatDateTime(new Date(point.timestamp))} · ${point.value} on hand${point.delta ? ` (${point.delta > 0 ? '+' : ''}${point.delta})` : ''}`}
+              {`${formatDateTime(new Date(point.timestamp))} · ${point.value} on hand${point.delta ? ` (${point.delta > 0 ? '+' : ''}${point.delta})` : ''}${typeof point.reservedLevel === 'number' ? ` · ${point.reservedLevel} reserved` : ''}`}
             </title>
           </circle>
         ))}
@@ -128,7 +132,7 @@ export default function StockHistoryChart({ points = [], height = 200 }) {
               <span className={`chart__legend-indicator chart__legend-indicator--${point.direction}`} aria-hidden="true" />
               <div>
                 <strong>{formatDateTime(new Date(point.timestamp))}</strong>
-                <span>{point.value} on hand · {change}</span>
+                <span>{point.value} on hand · {change}{typeof point.reservedLevel === 'number' ? ` · ${point.reservedLevel} reserved` : ''}</span>
               </div>
             </li>
           )

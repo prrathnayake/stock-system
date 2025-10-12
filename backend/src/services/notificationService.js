@@ -64,7 +64,7 @@ async function getNotificationContext(organizationId) {
   }
   return {
     contact,
-    orgName: contact?.name || 'Stock System',
+    orgName: contact?.name || 'Stock Management System',
     recipients: Array.from(recipients)
   };
 }

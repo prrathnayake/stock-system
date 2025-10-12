@@ -137,6 +137,10 @@ export default function createStockRoutes(io) {
       throw new HttpError(404, 'Product not found');
     }
 
+    const levels = await StockLevel.findAll({ where: { productId } });
+    const currentOnHand = levels.reduce((sum, level) => sum + Number(level.on_hand || 0), 0);
+    const currentReserved = levels.reduce((sum, level) => sum + Number(level.reserved || 0), 0);
+
     const moves = await StockMove.findAll({
       where: { productId },
       order: [['createdAt', 'ASC']],
@@ -147,22 +151,47 @@ export default function createStockRoutes(io) {
       ]
     });
 
-    let level = 0;
-    const datapoints = moves.map((move) => {
-      const decrease = move.from_bin_id ? move.qty : 0;
-      const increase = move.to_bin_id ? move.qty : 0;
+    const neutralReasons = new Set(['reserve', 'release', 'transfer']);
+
+    const rawMoves = moves.map((move) => {
+      const qty = Number(move.qty || 0);
+      const decrease = neutralReasons.has(move.reason) ? 0 : (move.from_bin_id ? qty : 0);
+      const increase = neutralReasons.has(move.reason) ? 0 : (move.to_bin_id ? qty : 0);
       const delta = increase - decrease;
-      level += delta;
+      const reservedDelta = move.reason === 'reserve'
+        ? qty
+        : move.reason === 'release'
+          ? -qty
+          : 0;
       return {
         id: move.id,
         occurredAt: move.createdAt,
-        qty: move.qty,
+        qty,
         delta,
-        level,
         reason: move.reason,
         fromBin: move.fromBin ? move.fromBin.code : null,
         toBin: move.toBin ? move.toBin.code : null,
-        performedBy: move.performedBy ? move.performedBy.full_name : null
+        performedBy: move.performedBy ? move.performedBy.full_name : null,
+        reservedDelta
+      };
+    });
+
+    const netDelta = rawMoves.reduce((sum, move) => sum + move.delta, 0);
+    const reservedNetDelta = rawMoves.reduce((sum, move) => sum + move.reservedDelta, 0);
+
+    const startingLevel = Math.max(0, currentOnHand - netDelta);
+    const startingReserved = Math.max(0, currentReserved - reservedNetDelta);
+
+    let level = startingLevel;
+    let reservedLevel = startingReserved;
+
+    const datapoints = rawMoves.map((move) => {
+      level = Math.max(0, level + move.delta);
+      reservedLevel = Math.max(0, reservedLevel + move.reservedDelta);
+      return {
+        ...move,
+        level,
+        reservedLevel
       };
     });
 
@@ -178,7 +207,10 @@ export default function createStockRoutes(io) {
       summary: {
         lastUpdated: lastMove ? lastMove.createdAt : product.updatedAt,
         totalMoves: moves.length,
-        currentLevel: level
+        currentLevel: currentOnHand,
+        currentReserved,
+        startingLevel,
+        startingReserved
       }
     });
   }));
@@ -198,7 +230,7 @@ export default function createStockRoutes(io) {
     message: 'Provide at least one field to update.'
   });
 
-  router.post('/move', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+  router.post('/move', requireAuth(['admin','user','developer']), asyncHandler(async (req, res) => {
     const parsed = MoveSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -279,7 +311,7 @@ export default function createStockRoutes(io) {
     });
   }));
 
-  router.patch('/:productId/levels', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+  router.patch('/:productId/levels', requireAuth(['admin','user','developer']), asyncHandler(async (req, res) => {
     const parsed = LevelUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());

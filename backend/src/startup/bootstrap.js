@@ -60,7 +60,7 @@ async function ensureDefaultOrganization(transaction) {
   return organization;
 }
 
-async function cleanupDuplicateOrganizationSlugIndexes() {
+export async function cleanupDuplicateOrganizationSlugIndexes() {
   const queryInterface = sequelize.getQueryInterface();
   let tables;
   try {
@@ -125,7 +125,7 @@ async function cleanupDuplicateOrganizationSlugIndexes() {
   }
 }
 
-async function cleanupDuplicateCustomerPhoneIndexes() {
+export async function cleanupDuplicateCustomerPhoneIndexes() {
   const queryInterface = sequelize.getQueryInterface();
   let tables;
 

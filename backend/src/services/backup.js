@@ -47,7 +47,7 @@ export async function runBackup() {
 
 async function generateMysqlDump(targetPath) {
   const header = [
-    '-- Stock System SQL backup',
+    '-- Stock Management System SQL backup',
     `-- Generated at ${new Date().toISOString()}`,
     'SET FOREIGN_KEY_CHECKS=0;'
   ];

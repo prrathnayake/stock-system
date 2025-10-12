@@ -104,7 +104,7 @@ function serializeOrganization(org, extras = {}) {
   };
 }
 
-router.get('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.get('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const organization = await Organization.findByPk(req.user.organization_id, { skipOrganizationScope: true });
   if (!organization) {
     throw new HttpError(404, 'Organization not found');
@@ -114,7 +114,7 @@ router.get('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   res.json(serializeOrganization(organization, { bannerImages }));
 }));
 
-router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
+router.put('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, res) => {
   const parsed = UpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -149,7 +149,7 @@ router.put('/', requireAuth(['admin']), asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/logo', requireAuth(['admin']), uploadLogoMiddleware, asyncHandler(async (req, res) => {
+router.post('/logo', requireAuth(['admin', 'developer']), uploadLogoMiddleware, asyncHandler(async (req, res) => {
   if (!req.file) {
     throw new HttpError(400, 'Logo file is required');
   }

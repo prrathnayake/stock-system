@@ -46,7 +46,7 @@ function sanitizeCustomerPayload(payload) {
 export default function createCustomerRoutes() {
   const router = Router();
 
-  router.get('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.get('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const search = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
     const customers = await Customer.findAll({
       order: [['name', 'ASC']],
@@ -66,7 +66,7 @@ export default function createCustomerRoutes() {
     res.json(filtered);
   }));
 
-  router.post('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const parsed = CustomerSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -88,7 +88,7 @@ export default function createCustomerRoutes() {
     res.status(201).json(customer);
   }));
 
-  router.put('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.put('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid customer id');
@@ -119,7 +119,7 @@ export default function createCustomerRoutes() {
     res.json(customer);
   }));
 
-  router.delete('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.delete('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid customer id');

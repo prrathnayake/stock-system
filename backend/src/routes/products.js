@@ -33,7 +33,7 @@ router.get('/', requireAuth(), asyncHandler(async (_req, res) => {
   res.json(products);
 }));
 
-router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+router.post('/', requireAuth(['admin','user','developer']), asyncHandler(async (req, res) => {
   const parse = ProductSchema.safeParse(req.body);
   if (!parse.success) {
     throw new HttpError(400, 'Invalid request payload', parse.error.flatten());
@@ -55,7 +55,7 @@ router.post('/', requireAuth(['admin','user']), asyncHandler(async (req, res) =>
   });
 }));
 
-router.patch('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+router.patch('/:id', requireAuth(['admin','user','developer']), asyncHandler(async (req, res) => {
   const parsed = UpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -98,7 +98,7 @@ router.patch('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res
   });
 }));
 
-router.delete('/:id', requireAuth(['admin','user']), asyncHandler(async (req, res) => {
+router.delete('/:id', requireAuth(['admin','user','developer']), asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     throw new HttpError(400, 'Invalid product id');

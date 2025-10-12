@@ -95,6 +95,10 @@ export default function Dashboard() {
       reserved: item.reserved
     }))
 
+  const [activeBanner, setActiveBanner] = useState(0)
+  const [lowStockPage, setLowStockPage] = useState(1)
+  const [topBinsPage, setTopBinsPage] = useState(1)
+
   const maxStackTotal = chartData.reduce((max, row) => Math.max(max, row.available + row.reserved), 0) || 1
 
   const TABLE_PAGE_SIZE = 10
@@ -136,10 +140,6 @@ export default function Dashboard() {
       'https://images.unsplash.com/photo-1515165562835-c4c2b1c9d0e2?auto=format&fit=crop&w=1200&q=80'
     ]
   }, [organization?.banner_images])
-
-  const [activeBanner, setActiveBanner] = useState(0)
-  const [lowStockPage, setLowStockPage] = useState(1)
-  const [topBinsPage, setTopBinsPage] = useState(1)
 
   useEffect(() => {
     setActiveBanner(0)
@@ -349,8 +349,8 @@ export default function Dashboard() {
       </div>
 
       <div className="card">
-        <h3>Top stocked brace &amp; hose locations</h3>
-        <p className="muted">Understand where inventory is concentrated across your brace and hose network.</p>
+        <h3>Top stocked branch locations</h3>
+        <p className="muted">Understand where inventory is concentrated across your branch network.</p>
         <TablePagination
           page={topBinsPage}
           totalPages={topBinsTotalPages}
@@ -361,8 +361,8 @@ export default function Dashboard() {
         <table className="table">
           <thead>
             <tr>
-              <th>Brace/hose code</th>
-              <th>Location</th>
+              <th>Branch code</th>
+              <th>Branch</th>
               <th>SKU</th>
               <th>Product</th>
               <th>On hand</th>
@@ -372,7 +372,7 @@ export default function Dashboard() {
           <tbody>
             {topBins.length === 0 && (
               <tr>
-                <td colSpan={6} className="muted">No brace or hose allocations recorded.</td>
+                <td colSpan={6} className="muted">No branch allocations recorded.</td>
               </tr>
             )}
             {visibleTopBins.map((bin) => (

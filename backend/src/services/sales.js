@@ -503,6 +503,10 @@ export async function updateSaleDetails(id, updates, actor) {
       throw new HttpError(404, 'Sale not found');
     }
 
+    if (['complete', 'canceled'].includes(sale.status)) {
+      throw new HttpError(409, 'Completed or canceled sales cannot be updated');
+    }
+
     const changes = {};
 
     if (Object.prototype.hasOwnProperty.call(updates, 'reference')) {

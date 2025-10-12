@@ -38,14 +38,14 @@ const UpdateSaleSchema = z.object({
 export default function createSalesRoutes(io) {
   const router = Router();
 
-  router.get('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.get('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const status = typeof req.query.status === 'string' ? StatusQuery.parse(req.query.status) : undefined;
     const search = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
     const sales = await listSales({ status, search });
     res.json(sales);
   }));
 
-  router.get('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.get('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid sale id');
@@ -54,7 +54,7 @@ export default function createSalesRoutes(io) {
     res.json(sale);
   }));
 
-  router.post('/', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const parsed = CreateSaleSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -65,7 +65,7 @@ export default function createSalesRoutes(io) {
     res.status(201).json(sale);
   }));
 
-  router.post('/:id/reserve', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.post('/:id/reserve', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid sale id');
@@ -76,7 +76,7 @@ export default function createSalesRoutes(io) {
     res.json(sale);
   }));
 
-  router.post('/:id/complete', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.post('/:id/complete', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid sale id');
@@ -87,7 +87,7 @@ export default function createSalesRoutes(io) {
     res.json(sale);
   }));
 
-  router.post('/:id/cancel', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.post('/:id/cancel', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid sale id');
@@ -98,7 +98,7 @@ export default function createSalesRoutes(io) {
     res.json(sale);
   }));
 
-  router.patch('/:id', requireAuth(['admin', 'user']), asyncHandler(async (req, res) => {
+  router.patch('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       throw new HttpError(400, 'Invalid sale id');
