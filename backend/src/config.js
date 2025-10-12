@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -108,12 +109,46 @@ const parseFileSize = (value, fallback) => {
   return size > 0 ? size * multipliers[unit] : fallback;
 };
 
+const runningInsideContainer = () => {
+  if (process.env.FORCE_DOCKER_ENV === 'true') {
+    return true;
+  }
+  try {
+    if (fs.existsSync('/.dockerenv')) {
+      return true;
+    }
+    const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
+    return cgroup.includes('docker') || cgroup.includes('kubepods');
+  } catch {
+    return false;
+  }
+};
+
+const resolveDbHost = () => {
+  const configuredHost = (process.env.DB_HOST || '').trim();
+  if (configuredHost && !['127.0.0.1', 'localhost'].includes(configuredHost)) {
+    return configuredHost;
+  }
+
+  if (runningInsideContainer()) {
+    const serviceName = (process.env.DB_SERVICE_NAME || '').trim();
+    if (serviceName) {
+      return serviceName;
+    }
+    if (!configuredHost) {
+      return 'mysql';
+    }
+  }
+
+  return configuredHost || '127.0.0.1';
+};
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: process.env.PORT || 8080,
   db: {
     dialect: process.env.DB_DIALECT || 'mysql',
-    host: process.env.DB_HOST || '127.0.0.1',
+    host: resolveDbHost(),
     port: Number(process.env.DB_PORT || 3306),
     name: process.env.DB_NAME || 'repair_center',
     user: process.env.DB_USER || 'root',
