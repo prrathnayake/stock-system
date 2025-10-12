@@ -7,6 +7,7 @@ import { getAccessToken, setUserProfile as persistUserProfile } from '../lib/aut
 import { resolveAssetUrl } from '../lib/urls'
 import { APP_NAME, ORGANIZATION_TYPES, PASSWORD_REQUIREMENTS, STRONG_PASSWORD_PATTERN } from '../lib/appInfo.js'
 import TablePagination from '../components/TablePagination.jsx'
+import DeveloperTerminal from '../components/DeveloperTerminal.jsx'
 
 const uiVariants = [
   {
@@ -105,11 +106,19 @@ export default function Settings() {
   const { user, setUser, organization } = useAuth()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const isAdmin = user?.role === 'admin' || user?.role === 'developer'
+  const isAdmin = user?.role === 'admin'
   const isDeveloper = user?.role === 'developer'
   const activeVariant = uiVariants.find((variant) => variant.id === (user?.ui_variant || 'pro')) || uiVariants[0]
 
   const navigationItems = useMemo(() => {
+    if (isDeveloper) {
+      return [
+        { id: 'readiness', label: 'Security & readiness' },
+        { id: 'organization', label: 'Organization profile' },
+        { id: 'operations', label: 'Operations & alerts' },
+        { id: 'developer', label: 'Developer tools' }
+      ]
+    }
     const base = [
       { id: 'profile', label: 'Profile & preferences' },
       { id: 'readiness', label: 'Security & readiness' }
@@ -121,9 +130,6 @@ export default function Settings() {
         { id: 'operations', label: 'Operations & alerts' },
         { id: 'records', label: 'Audit & backups' }
       )
-    }
-    if (isDeveloper) {
-      base.push({ id: 'developer', label: 'Developer tools' })
     }
     return base
   }, [isAdmin, isDeveloper])
@@ -152,7 +158,16 @@ export default function Settings() {
       const { data } = await api.get('/settings')
       return data
     },
-    enabled: isAdmin
+    enabled: isAdmin || isDeveloper
+  })
+
+  const { data: readinessReport } = useQuery({
+    queryKey: ['readiness-report'],
+    queryFn: async () => {
+      const { data } = await api.get('/readiness')
+      return data
+    },
+    enabled: isAdmin || isDeveloper
   })
 
   const { data: users = [] } = useQuery({
@@ -169,8 +184,9 @@ export default function Settings() {
   const [activityPage, setActivityPage] = useState(1)
   const [backupPage, setBackupPage] = useState(1)
   const [seedPayload, setSeedPayload] = useState(null)
-  const [seedBanner, setSeedBanner] = useState(null)
+  const [developerBanner, setDeveloperBanner] = useState(null)
   const [seedResult, setSeedResult] = useState(null)
+  const [terminalSession, setTerminalSession] = useState(null)
   const [seedFileName, setSeedFileName] = useState('')
   const seedInputRef = useRef(null)
 
@@ -234,6 +250,10 @@ export default function Settings() {
     return backups.slice(start, start + BACKUPS_PAGE_SIZE)
   }, [backups, backupPage])
 
+  const readinessChecks = useMemo(() => readinessReport?.checks || [], [readinessReport?.checks])
+  const readinessGeneratedAt = readinessReport?.generated_at || null
+  const readinessSummary = readinessReport?.summary || null
+
   const seedPreview = useMemo(() => {
     if (!seedPayload) return null
     const count = (collection) => (Array.isArray(collection) ? collection.length : 0)
@@ -263,7 +283,7 @@ export default function Settings() {
       const { data } = await api.get('/organization')
       return data
     },
-    enabled: isAdmin
+    enabled: isAdmin || isDeveloper
   })
 
   const [formState, setFormState] = useState({
@@ -574,7 +594,7 @@ export default function Settings() {
       return data
     },
     onSuccess: (data) => {
-      setSeedBanner({ type: 'success', message: 'Seed data applied successfully.' })
+      setDeveloperBanner({ type: 'success', message: 'Seed data applied successfully.' })
       setSeedResult(data || null)
       setSeedPayload(null)
       setSeedFileName('')
@@ -586,7 +606,56 @@ export default function Settings() {
     },
     onError: (error) => {
       const message = error.response?.data?.error || 'Unable to seed data.'
-      setSeedBanner({ type: 'error', message })
+      setDeveloperBanner({ type: 'error', message })
+    }
+  })
+
+  const launchTerminalMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/developer/sessions/terminal', {}, {
+        headers: developerHeaders()
+      })
+      return data
+    },
+    onSuccess: (sessionData) => {
+      setTerminalSession(sessionData)
+      setDeveloperBanner({ type: 'info', message: 'Web terminal session initialised.' })
+    },
+    onError: (error) => {
+      setTerminalSession(null)
+      const message = error.response?.data?.error || 'Unable to start terminal session.'
+      setDeveloperBanner({ type: 'error', message })
+    }
+  })
+
+  const exportDatabaseMutation = useMutation({
+    mutationFn: async () => {
+      return api.get('/developer/export', {
+        responseType: 'blob',
+        headers: developerHeaders()
+      })
+    },
+    onSuccess: (response) => {
+      if (typeof window === 'undefined') return
+      const disposition = response.headers?.['content-disposition'] || ''
+      const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i)
+      const fallbackName = 'stock-export.json'
+      const fileName = fileNameMatch ? fileNameMatch[1] : fallbackName
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      setDeveloperBanner({ type: 'info', message: `Database export downloaded as ${fileName}.` })
+    },
+    onError: (error) => {
+      setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to export database.' })
     }
   })
 
@@ -889,7 +958,7 @@ export default function Settings() {
 
   const ensureDeveloperSecrets = () => {
     if (!developerKey.trim() || !developerOtp.trim()) {
-      setSeedBanner({ type: 'error', message: 'Provide the developer key and one-time passcode.' })
+      setDeveloperBanner({ type: 'error', message: 'Provide the developer key and one-time passcode.' })
       return false
     }
     return true
@@ -898,7 +967,7 @@ export default function Settings() {
   const handleSeedFileChange = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
-    setSeedBanner(null)
+    setDeveloperBanner(null)
     setSeedResult(null)
     try {
       const text = await file.text()
@@ -909,7 +978,7 @@ export default function Settings() {
       console.error('Unable to parse seed file', error)
       setSeedPayload(null)
       setSeedFileName('')
-      setSeedBanner({ type: 'error', message: 'Seed file must be valid JSON.' })
+      setDeveloperBanner({ type: 'error', message: 'Seed file must be valid JSON.' })
       if (seedInputRef.current) {
         seedInputRef.current.value = ''
       }
@@ -926,7 +995,7 @@ export default function Settings() {
   }
 
   const handleSeedDownload = async () => {
-    setSeedBanner(null)
+    setDeveloperBanner(null)
     setSeedResult(null)
     if (!ensureDeveloperSecrets()) return
     try {
@@ -946,22 +1015,40 @@ export default function Settings() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-      setSeedBanner({ type: 'info', message: 'Sample JSON downloaded.' })
+      setDeveloperBanner({ type: 'info', message: 'Sample JSON downloaded.' })
     } catch (error) {
-      setSeedBanner({ type: 'error', message: error.response?.data?.error || 'Unable to download sample file.' })
+      setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to download sample file.' })
     }
   }
 
   const handleSeedSubmit = (event) => {
     event.preventDefault()
     if (!seedPayload) {
-      setSeedBanner({ type: 'error', message: 'Select a JSON file containing seed data first.' })
+      setDeveloperBanner({ type: 'error', message: 'Select a JSON file containing seed data first.' })
       return
     }
     if (!ensureDeveloperSecrets()) return
-    setSeedBanner(null)
+    setDeveloperBanner(null)
     setSeedResult(null)
     developerSeedMutation.mutate(seedPayload)
+  }
+
+  const handleLaunchTerminal = () => {
+    setDeveloperBanner(null)
+    if (!ensureDeveloperSecrets()) return
+    setTerminalSession(null)
+    launchTerminalMutation.mutate()
+  }
+
+  const handleExportDatabase = () => {
+    setDeveloperBanner(null)
+    if (!ensureDeveloperSecrets()) return
+    exportDatabaseMutation.mutate()
+  }
+
+  const handleCloseTerminal = () => {
+    setTerminalSession(null)
+    setDeveloperBanner((prev) => (prev?.type === 'error' ? prev : { type: 'info', message: 'Terminal session closed.' }))
   }
 
   const handleCreateUser = (event) => {
@@ -1072,6 +1159,7 @@ export default function Settings() {
       </nav>
 
       <div className="settings-content">
+        {!isDeveloper && (
           <section
             id="settings-profile"
             className="settings-section"
@@ -1165,6 +1253,7 @@ export default function Settings() {
               </div>
             </div>
           </section>
+        )}
 
           <section
             id="settings-readiness"
@@ -1179,29 +1268,63 @@ export default function Settings() {
             <div className="settings-section__cards">
               <div className="card settings-card">
                 <h3>Deployment checklist</h3>
-                <ul className="checklist">
-                  <li>
-                    <strong>Environment variables</strong>
-                    <p className="muted">Define secure JWT secrets, database credentials and the allowed CORS origin before going live.</p>
-                  </li>
-                  <li>
-                    <strong>Database backups</strong>
-                    <p className="muted">Schedule nightly backups of the MySQL database and verify the restoration procedure.</p>
-                  </li>
-                  <li>
-                    <strong>Access control</strong>
-                    <p className="muted">Provision accounts for staff using the admin console or SQL migrations.</p>
-                  </li>
-                  <li>
-                    <strong>Legal documents</strong>
-                    <p className="muted">Add your terms of service, privacy notice and any other required files to the repository.</p>
-                  </li>
+                <ul className="checklist checklist--status">
+                  {readinessChecks.length === 0 && (
+                    <li className="checklist__item">
+                      <span className="checklist__status" aria-hidden="true">…</span>
+                      <div>
+                        <strong>Compiling readiness report</strong>
+                        <p className="muted">System checks are running. This list will refresh once metrics are available.</p>
+                      </div>
+                    </li>
+                  )}
+                  {readinessChecks.map((check) => (
+                    <li
+                      key={check.id}
+                      className={`checklist__item${check.ok ? ' checklist__item--ok' : ' checklist__item--warn'}`}
+                    >
+                      <span
+                        className={`checklist__status${check.ok ? ' checklist__status--ok' : ' checklist__status--warn'}`}
+                        aria-hidden="true"
+                      >
+                        {check.ok ? '✓' : '!'}
+                      </span>
+                      <div>
+                        <strong>{check.title}</strong>
+                        <p className="muted">{check.description}</p>
+                        {!check.ok && check.recommendation && (
+                          <p className="checklist__recommendation">{check.recommendation}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
+                {readinessSummary && (
+                  <dl className="readiness-summary">
+                    <div>
+                      <dt>Automated backups</dt>
+                      <dd>{readinessSummary.backup_enabled ? 'Enabled' : 'Disabled'}</dd>
+                    </div>
+                    <div>
+                      <dt>Last backup</dt>
+                      <dd>{readinessSummary.latest_backup ? new Date(readinessSummary.latest_backup).toLocaleString() : 'Not recorded'}</dd>
+                    </div>
+                    <div>
+                      <dt>Escalation recipients</dt>
+                      <dd>{readinessSummary.notification_recipients || 0}</dd>
+                    </div>
+                  </dl>
+                )}
+                {readinessGeneratedAt && (
+                  <p className="checklist__generated muted">
+                    Report generated {new Date(readinessGeneratedAt).toLocaleString()}.
+                  </p>
+                )}
               </div>
             </div>
           </section>
 
-          {isAdmin && (
+          {(isAdmin || isDeveloper) && (
             <>
               <section
                 id="settings-organization"
@@ -1430,12 +1553,13 @@ export default function Settings() {
                 </div>
               </section>
 
-              <section
-                id="settings-team"
-                className="settings-section"
-                hidden={activeSection !== 'team'}
-                aria-hidden={activeSection !== 'team'}
-              >
+              {!isDeveloper && (
+                <section
+                  id="settings-team"
+                  className="settings-section"
+                  hidden={activeSection !== 'team'}
+                  aria-hidden={activeSection !== 'team'}
+                >
                 <header className="settings-section__header">
                   <h2>User management</h2>
                   <p className="muted">Control who can access the platform and enforce secure practices.</p>
@@ -1447,7 +1571,7 @@ export default function Settings() {
                         {userBanner.message}
                       </div>
                     )}
-                    <div className="grid split settings-card__user-grid">
+                    <div className="settings-card__user-grid">
                       <form className="form-grid" onSubmit={handleCreateUser}>
                         <h3>Invite a team member</h3>
                         <label className="field" data-help="Name shown to other teammates and on activity logs.">
@@ -1689,7 +1813,8 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
-              </section>
+                </section>
+              )}
 
               <section
                 id="settings-operations"
@@ -1892,12 +2017,13 @@ export default function Settings() {
                 </div>
               </section>
 
-              <section
-                id="settings-records"
-                className="settings-section"
-                hidden={activeSection !== 'records'}
-                aria-hidden={activeSection !== 'records'}
-              >
+              {!isDeveloper && (
+                <section
+                  id="settings-records"
+                  className="settings-section"
+                  hidden={activeSection !== 'records'}
+                  aria-hidden={activeSection !== 'records'}
+                >
                 <header className="settings-section__header">
                   <h2>Audit & backups</h2>
                   <p className="muted">Track administrator activity and safeguard your data.</p>
@@ -2017,7 +2143,8 @@ export default function Settings() {
                     />
                   </div>
                 </div>
-              </section>
+                </section>
+              )}
 
               {isDeveloper && (
                 <section
@@ -2032,9 +2159,9 @@ export default function Settings() {
                   </header>
                   <div className="settings-section__cards">
                     <div className="card settings-card">
-                      {seedBanner && (
-                        <div className={`banner banner--${seedBanner.type === 'error' ? 'danger' : 'info'}`}>
-                          {seedBanner.message}
+                      {developerBanner && (
+                        <div className={`banner banner--${developerBanner.type === 'error' ? 'danger' : 'info'}`}>
+                          {developerBanner.message}
                         </div>
                       )}
                       <form className="form-grid" onSubmit={handleSeedSubmit}>
@@ -2106,6 +2233,42 @@ export default function Settings() {
                           </button>
                         </div>
                       </form>
+                      <div className="developer-tools__actions">
+                        <div className="developer-tools__action">
+                          <h3>Maintenance console</h3>
+                          <p className="muted">Launch an ephemeral shell session secured by multi-factor credentials.</p>
+                          <div className="developer-tools__buttons">
+                            <button
+                              className="button button--primary"
+                              type="button"
+                              onClick={handleLaunchTerminal}
+                              disabled={launchTerminalMutation.isLoading}
+                            >
+                              {launchTerminalMutation.isLoading ? 'Starting…' : 'Launch web terminal'}
+                            </button>
+                          </div>
+                          {terminalSession && (
+                            <>
+                              <p className="muted developer-tools__session-meta">
+                                Session expires in approximately {Math.max(1, Math.round((terminalSession.expires_in || 0) / 60))} minutes.
+                              </p>
+                              <DeveloperTerminal session={terminalSession} onClose={handleCloseTerminal} />
+                            </>
+                          )}
+                        </div>
+                        <div className="developer-tools__action">
+                          <h3>Data export</h3>
+                          <p className="muted">Download the latest workspace data as structured JSON for offline analysis.</p>
+                          <button
+                            className="button button--ghost"
+                            type="button"
+                            onClick={handleExportDatabase}
+                            disabled={exportDatabaseMutation.isLoading}
+                          >
+                            {exportDatabaseMutation.isLoading ? 'Preparing…' : 'Download export JSON'}
+                          </button>
+                        </div>
+                      </div>
                       {seedResult?.summary && (
                         <div className="seed-summary">
                           <h4>Last seed summary</h4>

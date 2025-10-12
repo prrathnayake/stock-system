@@ -708,9 +708,19 @@ export async function initialiseDatabase() {
 
     await runAsOrganization(organization.id, async () => {
       const adminDefaults = config.bootstrap.admin;
-      const users = await User.count();
-      if (users === 0) {
-        const bcrypt = (await import('bcryptjs')).default;
+      const developerDefaults = config.bootstrap.developer;
+      let bcryptModule;
+
+      const ensureHasher = async () => {
+        if (!bcryptModule) {
+          bcryptModule = (await import('bcryptjs')).default;
+        }
+        return bcryptModule;
+      };
+
+      const totalUsers = await User.count();
+      if (totalUsers === 0) {
+        const bcrypt = await ensureHasher();
         const hash = await bcrypt.hash(adminDefaults.password, 10);
         await User.create({
           full_name: adminDefaults.name || 'Admin',
@@ -725,18 +735,45 @@ export async function initialiseDatabase() {
         }
       }
 
-    if (config.env !== 'production') {
-      const locs = await Location.count();
-      if (locs === 0) {
-        const loc = await Location.create({ site: 'Main', room: 'Store' });
-        const binA = await Bin.create({ code: 'A-01', locationId: loc.id });
-        const binB = await Bin.create({ code: 'B-01', locationId: loc.id });
-        const p1 = await Product.create({ sku: 'BATT-IPHONE', name: 'iPhone Battery', reorder_point: 5 });
-        const p2 = await Product.create({ sku: 'SCRN-ANDR-6', name: 'Android Screen 6"', reorder_point: 3 });
-        await StockLevel.create({ productId: p1.id, binId: binA.id, on_hand: 10, reserved: 0 });
-        await StockLevel.create({ productId: p2.id, binId: binB.id, on_hand: 6, reserved: 0 });
-        console.log('Seeded demo data');
+      const developerCount = await User.count({ where: { role: 'developer' } });
+      if (developerCount === 0) {
+        const existingByEmail = await User.findOne({ where: { email: developerDefaults.email } });
+        if (existingByEmail) {
+          if (existingByEmail.role !== 'developer') {
+            await existingByEmail.update({ role: 'developer', must_change_password: true });
+            if (config.env !== 'production') {
+              console.log(`Promoted ${existingByEmail.email} to developer role per DEFAULT_DEVELOPER_EMAIL.`);
+            }
+          }
+        } else {
+          const bcrypt = await ensureHasher();
+          const hash = await bcrypt.hash(developerDefaults.password, 10);
+          await User.create({
+            full_name: developerDefaults.name || 'Developer',
+            email: developerDefaults.email,
+            password_hash: hash,
+            role: 'developer',
+            must_change_password: true,
+            ui_variant: 'tabular'
+          });
+          if (config.env !== 'production') {
+            console.log(`Seeded developer user ${developerDefaults.email} with password from DEFAULT_DEVELOPER_PASSWORD.`);
+          }
+        }
       }
-    }
-  });
+
+      if (config.env !== 'production') {
+        const locs = await Location.count();
+        if (locs === 0) {
+          const loc = await Location.create({ site: 'Main', room: 'Store' });
+          const binA = await Bin.create({ code: 'A-01', locationId: loc.id });
+          const binB = await Bin.create({ code: 'B-01', locationId: loc.id });
+          const p1 = await Product.create({ sku: 'BATT-IPHONE', name: 'iPhone Battery', reorder_point: 5 });
+          const p2 = await Product.create({ sku: 'SCRN-ANDR-6', name: 'Android Screen 6"', reorder_point: 3 });
+          await StockLevel.create({ productId: p1.id, binId: binA.id, on_hand: 10, reserved: 0 });
+          await StockLevel.create({ productId: p2.id, binId: binB.id, on_hand: 6, reserved: 0 });
+          console.log('Seeded demo data');
+        }
+      }
+    });
 }
