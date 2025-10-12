@@ -220,7 +220,7 @@ export default function Dashboard() {
         <div className="card stat-card">
           <p className="muted">At-risk reservations</p>
           <h2>{overview?.reservedCount ?? '—'}</h2>
-          <p className="stat-card__hint">Products with reservations exceeding on-hand stock.</p>
+          <p className="stat-card__hint">Reservations that will exhaust on-hand stock once fulfilled.</p>
         </div>
       </div>
 
