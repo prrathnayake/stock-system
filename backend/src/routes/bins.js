@@ -75,12 +75,23 @@ router.post('/', requireAuth(['admin', 'user', 'developer']), asyncHandler(async
     const locationPayload = {
       site: parsed.data.location.site.trim(),
       room: parsed.data.location.room?.trim() || null,
-      notes: parsed.data.location.notes?.trim() || null
+      notes: parsed.data.location.notes?.trim() || null,
+      organizationId: req.user.organization_id
     };
-    const [location] = await Location.findOrCreate({
-      where: { site: locationPayload.site },
+    const [location, created] = await Location.findOrCreate({
+      where: { organizationId: req.user.organization_id, site: locationPayload.site },
       defaults: locationPayload
     });
+    if (!created) {
+      const roomChanged = location.room !== locationPayload.room;
+      const notesChanged = location.notes !== locationPayload.notes;
+      if (roomChanged || notesChanged) {
+        await location.update({
+          room: locationPayload.room,
+          notes: locationPayload.notes
+        });
+      }
+    }
     locationId = location.id;
   }
 
@@ -148,12 +159,23 @@ router.patch('/:id', requireAuth(['admin', 'user', 'developer']), asyncHandler(a
     const payload = {
       site: parsed.data.location.site.trim(),
       room: parsed.data.location.room?.trim() || null,
-      notes: parsed.data.location.notes?.trim() || null
+      notes: parsed.data.location.notes?.trim() || null,
+      organizationId: req.user.organization_id
     };
-    const [location] = await Location.findOrCreate({
-      where: { site: payload.site },
+    const [location, created] = await Location.findOrCreate({
+      where: { organizationId: req.user.organization_id, site: payload.site },
       defaults: payload
     });
+    if (!created) {
+      const roomChanged = location.room !== payload.room;
+      const notesChanged = location.notes !== payload.notes;
+      if (roomChanged || notesChanged) {
+        await location.update({
+          room: payload.room,
+          notes: payload.notes
+        });
+      }
+    }
     locationId = location.id;
   }
 
