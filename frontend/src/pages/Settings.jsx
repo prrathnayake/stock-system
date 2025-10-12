@@ -111,27 +111,32 @@ export default function Settings() {
   const activeVariant = uiVariants.find((variant) => variant.id === (user?.ui_variant || 'pro')) || uiVariants[0]
 
   const navigationItems = useMemo(() => {
+    const items = []
+
+    if (!isDeveloper) {
+      items.push({ id: 'profile', label: 'Profile & preferences' })
+    }
+
     if (isDeveloper) {
-      return [
+      items.push(
         { id: 'readiness', label: 'Security & readiness' },
         { id: 'organization', label: 'Organization profile' },
-        { id: 'operations', label: 'Operations & alerts' },
-        { id: 'developer', label: 'Developer tools' }
-      ]
+        { id: 'operations', label: 'Operations & alerts' }
+      )
     }
-    const base = [
-      { id: 'profile', label: 'Profile & preferences' },
-      { id: 'readiness', label: 'Security & readiness' }
-    ]
-    if (isAdmin) {
-      base.push(
-        { id: 'organization', label: 'Organization profile' },
+
+    if (isAdmin && !isDeveloper) {
+      items.push(
         { id: 'team', label: 'User management' },
-        { id: 'operations', label: 'Operations & alerts' },
         { id: 'records', label: 'Audit & backups' }
       )
     }
-    return base
+
+    if (isDeveloper) {
+      items.push({ id: 'developer', label: 'Developer tools' })
+    }
+
+    return items
   }, [isAdmin, isDeveloper])
 
   const [activeSection, setActiveSection] = useState(() => navigationItems[0]?.id || 'profile')
@@ -158,7 +163,7 @@ export default function Settings() {
       const { data } = await api.get('/settings')
       return data
     },
-    enabled: isAdmin || isDeveloper
+    enabled: isDeveloper
   })
 
   const { data: readinessReport } = useQuery({
@@ -167,7 +172,7 @@ export default function Settings() {
       const { data } = await api.get('/readiness')
       return data
     },
-    enabled: isAdmin || isDeveloper
+    enabled: isDeveloper
   })
 
   const { data: users = [] } = useQuery({
@@ -1255,6 +1260,7 @@ export default function Settings() {
           </section>
         )}
 
+        {isDeveloper && (
           <section
             id="settings-readiness"
             className="settings-section"
@@ -1323,9 +1329,11 @@ export default function Settings() {
               </div>
             </div>
           </section>
+        )}
 
-          {(isAdmin || isDeveloper) && (
-            <>
+        {(isAdmin || isDeveloper) && (
+          <>
+          {isDeveloper && (
               <section
                 id="settings-organization"
                 className="settings-section"
@@ -1552,8 +1560,9 @@ export default function Settings() {
                   </div>
                 </div>
               </section>
+            )}
 
-              {!isDeveloper && (
+          {isAdmin && (
                 <section
                   id="settings-team"
                   className="settings-section"
@@ -1816,6 +1825,7 @@ export default function Settings() {
                 </section>
               )}
 
+          {isDeveloper && (
               <section
                 id="settings-operations"
                 className="settings-section"
@@ -2016,8 +2026,9 @@ export default function Settings() {
                   </div>
                 </div>
               </section>
+            )}
 
-              {!isDeveloper && (
+          {!isDeveloper && (
                 <section
                   id="settings-records"
                   className="settings-section"
