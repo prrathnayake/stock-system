@@ -630,5 +630,36 @@ export default function createWorkOrderRoutes(io) {
     res.json({ ok: true });
   }));
 
+  router.delete('/:id', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+    const wo = await WorkOrder.findOne({
+      where: { id: req.params.id },
+      include: [{ model: WorkOrderPart }]
+    });
+
+    if (!wo) {
+      throw new HttpError(404, 'Work order not found');
+    }
+
+    const parts = Array.isArray(wo.work_order_parts) ? wo.work_order_parts : [];
+    const hasActiveParts = parts.some((part) => (part.qty_reserved ?? 0) > 0 || (part.qty_picked ?? 0) > 0);
+    if (hasActiveParts) {
+      throw new HttpError(400, 'Cannot delete a work order with reserved or picked parts. Release stock before deleting.');
+    }
+
+    await SerialAssignment.destroy({ where: { workOrderId: wo.id } });
+    await WorkOrderStatusHistory.destroy({ where: { workOrderId: wo.id } });
+    await WorkOrderPart.destroy({ where: { workOrderId: wo.id } });
+    await SerialNumber.update({ workOrderId: null }, { where: { workOrderId: wo.id } });
+    await WorkOrder.destroy({ where: { id: wo.id } });
+
+    io.emit('workorders:update', {
+      work_order_id: Number(wo.id),
+      action: 'deleted',
+      organization_id: req.user.organization_id
+    });
+
+    res.status(204).send();
+  }));
+
   return router;
 }

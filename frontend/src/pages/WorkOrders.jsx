@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import TablePagination from '../components/TablePagination.jsx'
 import { useAuth } from '../providers/AuthProvider.jsx'
 
 const statusLabels = {
@@ -90,6 +91,8 @@ export default function WorkOrders() {
   const [banner, setBanner] = useState(null)
   const [createForm, setCreateForm] = useState(emptyCreateForm)
   const [createBanner, setCreateBanner] = useState(null)
+  const [tablePage, setTablePage] = useState(1)
+  const TABLE_PAGE_SIZE = 10
 
   const { data = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ['work-orders', user?.role, user?.id],
@@ -182,6 +185,19 @@ export default function WorkOrders() {
     }
   })
 
+  const deleteWorkOrderMutation = useMutation({
+    mutationFn: async (id) => {
+      await api.delete(`/work-orders/${id}`)
+    },
+    onSuccess: () => {
+      setBanner(null)
+      refetch()
+    },
+    onError: (error) => {
+      setBanner(error.response?.data?.error || 'Unable to delete work order.')
+    }
+  })
+
   const grouped = useMemo(() => {
     return data.reduce((acc, order) => {
       if (!acc[order.status]) acc[order.status] = []
@@ -189,6 +205,28 @@ export default function WorkOrders() {
       return acc
     }, Object.fromEntries(statusOrder.map((status) => [status, []])))
   }, [data])
+
+  const sortedOrders = useMemo(() => {
+    return data
+      .slice()
+      .sort((a, b) => {
+        const aDate = a.updatedAt || a.createdAt || 0
+        const bDate = b.updatedAt || b.createdAt || 0
+        return new Date(bDate).getTime() - new Date(aDate).getTime()
+      })
+  }, [data])
+
+  const tableTotalPages = Math.max(1, Math.ceil(sortedOrders.length / TABLE_PAGE_SIZE))
+  const visibleOrders = useMemo(() => {
+    const start = (tablePage - 1) * TABLE_PAGE_SIZE
+    return sortedOrders.slice(start, start + TABLE_PAGE_SIZE)
+  }, [sortedOrders, tablePage])
+
+  useEffect(() => {
+    if (tablePage > tableTotalPages) {
+      setTablePage(tableTotalPages)
+    }
+  }, [tablePage, tableTotalPages])
 
   const handleCreateWorkOrder = (event) => {
     event.preventDefault()
@@ -223,6 +261,24 @@ export default function WorkOrders() {
     const draft = diagnosticDraft[order.id]
     if (draft === undefined || draft === order.diagnostic_findings) return
     updateMutation.mutate({ id: order.id, payload: { diagnostic_findings: draft } })
+  }
+
+  const handleTableStatusUpdate = (order) => {
+    if (!isAdmin) return
+    const nextStatus = statusDraft[order.id] || order.status
+    updateMutation.mutate({ id: order.id, payload: { status: nextStatus } })
+  }
+
+  const handleCancelWorkOrder = (order) => {
+    if (!isAdmin) return
+    if (order.status === 'canceled') return
+    updateMutation.mutate({ id: order.id, payload: { status: 'canceled' } })
+  }
+
+  const handleDeleteWorkOrder = (order) => {
+    if (!isAdmin) return
+    if (!window.confirm(`Delete work order #${order.id}? This cannot be undone.`)) return
+    deleteWorkOrderMutation.mutate(order.id)
   }
 
   return (
@@ -337,7 +393,105 @@ export default function WorkOrders() {
         </form>
       )}
       {banner && <div className="banner banner--warning">{banner}</div>}
-        {isLoading && <p className="muted">Loading work orders…</p>}
+      {isLoading && <p className="muted">Loading work orders…</p>}
+      {isAdmin && (
+        <div className="workorder-table">
+          <div className="card__header">
+            <div>
+              <h3>Manage work orders</h3>
+              <p className="muted">Update statuses, cancel jobs or remove work orders in bulk.</p>
+            </div>
+          </div>
+          <TablePagination
+            page={tablePage}
+            totalPages={tableTotalPages}
+            onPrev={() => setTablePage((page) => Math.max(1, page - 1))}
+            onNext={() => setTablePage((page) => Math.min(tableTotalPages, page + 1))}
+            className="table-pagination--inline"
+          />
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Customer</th>
+                  <th>Device</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Assigned</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="muted">No work orders available.</td>
+                  </tr>
+                )}
+                {visibleOrders.map((order) => {
+                  const deleting = deleteWorkOrderMutation.isPending && deleteWorkOrderMutation.variables === order.id
+                  const saving = updateMutation.isLoading
+                  return (
+                    <tr key={order.id}>
+                      <td>#{order.id}</td>
+                      <td>{order.customer_name}</td>
+                      <td>{order.device_info}</td>
+                      <td>
+                        <select
+                          value={statusDraft[order.id] || order.status}
+                          onChange={(e) => setStatusDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                        >
+                          {statusOrder.map((statusKey) => (
+                            <option key={statusKey} value={statusKey}>{statusLabels[statusKey]}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>{priorityLabels[order.priority] || 'Normal'}</td>
+                      <td>{order.assignee?.full_name || order.assignee?.email || 'Unassigned'}</td>
+                      <td>{order.updatedAt ? new Date(order.updatedAt).toLocaleString() : '—'}</td>
+                      <td>
+                        <div className="table-actions">
+                          <button
+                            className="button button--small"
+                            type="button"
+                            onClick={() => handleTableStatusUpdate(order)}
+                            disabled={saving}
+                          >
+                            {saving ? 'Saving…' : 'Update'}
+                          </button>
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            onClick={() => handleCancelWorkOrder(order)}
+                            disabled={saving || order.status === 'canceled'}
+                          >
+                            {order.status === 'canceled' ? 'Canceled' : 'Cancel'}
+                          </button>
+                          <button
+                            className="button button--ghost button--danger button--small"
+                            type="button"
+                            onClick={() => handleDeleteWorkOrder(order)}
+                            disabled={deleting}
+                          >
+                            {deleting ? 'Deleting…' : 'Delete'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination
+            page={tablePage}
+            totalPages={tableTotalPages}
+            onPrev={() => setTablePage((page) => Math.max(1, page - 1))}
+            onNext={() => setTablePage((page) => Math.min(tableTotalPages, page + 1))}
+          />
+        </div>
+      )}
         <div className="kanban">
           {statusOrder.map((status) => {
             const orders = grouped[status] || []
