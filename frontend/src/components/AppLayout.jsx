@@ -10,7 +10,11 @@ export default function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const variant = user?.ui_variant || 'pro'
-  const barcodeEnabled = organization?.features?.barcode_scanning_enabled !== false
+  const features = organization?.features || {}
+  const barcodeEnabled = features.barcode_scanning_enabled !== false
+  const workOrdersEnabled = features.work_orders_enabled !== false
+  const salesEnabled = features.sales_module_enabled !== false
+  const operationsEnabled = features.operations_module_enabled !== false
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return true
     return !window.matchMedia('(max-width: 960px)').matches
@@ -123,20 +127,38 @@ export default function AppLayout() {
     if (!barcodeEnabled) {
       filtered = filtered.filter((item) => item.to !== '/scan')
     }
+    if (!operationsEnabled) {
+      filtered = filtered.filter((item) => item.to !== '/operations')
+    }
+    if (!salesEnabled) {
+      filtered = filtered.filter((item) => item.to !== '/sales')
+    }
+    if (!workOrdersEnabled) {
+      filtered = filtered.filter((item) => item.to !== '/work-orders')
+    }
     return filtered
-  }, [user?.role, variant, organization?.invoicing_enabled, barcodeEnabled])
+  }, [
+    user?.role,
+    variant,
+    organization?.invoicing_enabled,
+    barcodeEnabled,
+    operationsEnabled,
+    salesEnabled,
+    workOrdersEnabled
+  ])
 
   const quickLinks = useMemo(() => (
     [
       { to: '/', label: 'Home', roles: ['admin', 'user', 'developer'] },
       { to: '/inventory', label: 'Inventory', roles: ['admin', 'user', 'developer'] },
-      { to: '/operations', label: 'Operations', roles: ['admin', 'user', 'developer'] },
+      operationsEnabled ? { to: '/operations', label: 'Operations', roles: ['admin', 'user', 'developer'] } : null,
       { to: '/storage-bins', label: 'Branch locations', roles: ['admin', 'user', 'developer'] },
-      { to: '/sales', label: 'Sales', roles: ['admin', 'user', 'developer'] },
-      { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user', 'developer'] }
+      salesEnabled ? { to: '/sales', label: 'Sales', roles: ['admin', 'user', 'developer'] } : null,
+      workOrdersEnabled ? { to: '/work-orders', label: 'Work orders', roles: ['admin', 'user', 'developer'] } : null
     ]
+      .filter(Boolean)
       .filter((item) => (!item.roles || item.roles.includes(user?.role)))
-  ), [user?.role])
+  ), [user?.role, operationsEnabled, salesEnabled, workOrdersEnabled])
 
   const pageTitle = useMemo(() => {
     const match = navItems.find((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)))

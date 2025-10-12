@@ -22,7 +22,15 @@ import { getSetting } from '../services/settings.js';
 export default function createWorkOrderRoutes(io) {
   const router = Router();
 
-  router.get('/', requireAuth(['admin','user','developer']), asyncHandler(async (req, res) => {
+  const ensureWorkOrdersEnabled = asyncHandler(async (req, res, next) => {
+    const enabled = await getSetting('work_orders_enabled', true, req.user.organization_id);
+    if (enabled === false) {
+      throw new HttpError(404, 'Work orders are disabled for this organization');
+    }
+    next();
+  });
+
+  router.get('/', requireAuth(['admin','user','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const where = {};
     if (!['admin', 'developer'].includes(req.user.role)) {
       where.assignedTo = req.user.id;
@@ -61,7 +69,7 @@ export default function createWorkOrderRoutes(io) {
     })).default([])
   });
 
-  router.post('/', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+  router.post('/', requireAuth(['admin','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const parsed = CreateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -142,7 +150,7 @@ export default function createWorkOrderRoutes(io) {
     assigned_to: z.number().int().positive().optional()
   });
 
-  router.patch('/:id', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+  router.patch('/:id', requireAuth(['admin','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const parsed = UpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'Invalid request payload', parsed.error.flatten());
@@ -221,7 +229,7 @@ export default function createWorkOrderRoutes(io) {
     }))
   });
 
-  router.post('/:id/reserve', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+  router.post('/:id/reserve', requireAuth(['admin','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const parsed = ReserveSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -343,7 +351,7 @@ export default function createWorkOrderRoutes(io) {
     serials: z.array(z.number().int().positive()).optional()
   });
 
-  router.post('/:id/pick', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+  router.post('/:id/pick', requireAuth(['admin','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const parsed = PickSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -462,7 +470,7 @@ export default function createWorkOrderRoutes(io) {
     mark_faulty: z.boolean().optional()
   });
 
-  router.post('/:id/return', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+  router.post('/:id/return', requireAuth(['admin','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const { id } = req.params;
     const parsed = ReturnSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -630,7 +638,7 @@ export default function createWorkOrderRoutes(io) {
     res.json({ ok: true });
   }));
 
-  router.delete('/:id', requireAuth(['admin','developer']), asyncHandler(async (req, res) => {
+  router.delete('/:id', requireAuth(['admin','developer']), ensureWorkOrdersEnabled, asyncHandler(async (req, res) => {
     const wo = await WorkOrder.findOne({
       where: { id: req.params.id },
       include: [{ model: WorkOrderPart }]
