@@ -177,7 +177,8 @@ export const config = {
   uploads: {
     directory: resolveUploadsPath(),
     publicPath: process.env.UPLOADS_PUBLIC_PATH || '/uploads',
-    maxLogoFileSize: parseFileSize(process.env.UPLOAD_MAX_FILE_SIZE, 2 * 1024 * 1024)
+    maxLogoFileSize: parseFileSize(process.env.UPLOAD_MAX_FILE_SIZE, 2 * 1024 * 1024),
+    maxBannerFileSize: parseFileSize(process.env.UPLOAD_MAX_BANNER_FILE_SIZE, 5 * 1024 * 1024)
   }
 };
 

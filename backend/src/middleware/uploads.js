@@ -27,17 +27,22 @@ const storage = multer.diskStorage({
 
 const allowedMimeTypes = new Set(['image/png', 'image/jpeg']);
 
-function logoFileFilter(_req, file, cb) {
+function imageFileFilter(_req, file, cb) {
   if (!allowedMimeTypes.has(file.mimetype)) {
     const error = new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname);
-    error.message = 'Only PNG or JPEG images are allowed for logos.';
+    error.message = 'Only PNG or JPEG images are allowed.';
     return cb(error);
   }
   cb(null, true);
 }
 
-export const logoUpload = multer({
-  storage,
-  fileFilter: logoFileFilter,
-  limits: { fileSize: config.uploads.maxLogoFileSize }
-});
+function createImageUpload(maxFileSize) {
+  return multer({
+    storage,
+    fileFilter: imageFileFilter,
+    limits: { fileSize: maxFileSize }
+  });
+}
+
+export const logoUpload = createImageUpload(config.uploads.maxLogoFileSize);
+export const bannerUpload = createImageUpload(config.uploads.maxBannerFileSize);

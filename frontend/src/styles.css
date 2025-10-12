@@ -614,14 +614,47 @@ input:focus, select:focus, textarea:focus {
 }
 
 .seed-summary {
-  border-top: 1px solid var(--color-border);
   margin-top: 16px;
-  padding-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seed-summary h4 {
+  margin: 0;
+  font-size: 15px;
 }
 
 .seed-summary ul {
-  margin: 8px 0 0;
+  margin: 0;
   padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.seed-sample {
+  margin-top: 16px;
+}
+
+.seed-sample summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.seed-sample pre {
+  margin: 12px 0 0;
+  padding: 16px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @media (max-width: 960px) {
@@ -1179,7 +1212,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .inventory {
-  gap: 28px;
+  gap: 32px;
 }
 
 .inventory__header {
@@ -1198,7 +1231,7 @@ input:focus, select:focus, textarea:focus {
 .inventory__workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-  gap: 28px;
+  gap: 32px;
   align-items: start;
 }
 
@@ -1233,7 +1266,7 @@ input:focus, select:focus, textarea:focus {
 .inventory__primary {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
 
 .inventory__tools-card {
@@ -1527,7 +1560,7 @@ input:focus, select:focus, textarea:focus {
 
 .inventory__insights {
   display: grid;
-  gap: 28px;
+  gap: 32px;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
@@ -1709,6 +1742,22 @@ input:focus, select:focus, textarea:focus {
   font-size: 14px;
 }
 
+.banner-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.banner-preview-grid img {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
 .subnav {
   display: flex;
   flex-wrap: wrap;
@@ -1748,6 +1797,45 @@ input:focus, select:focus, textarea:focus {
 .sales__panel {
   display: block;
   width: 100%;
+}
+
+.operations-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.operations__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.operations__grid {
+  display: grid;
+  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.operations__card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.operations__card table {
+  width: 100%;
+}
+
+.operations__card .timeline {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .operations__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .banner--warning {

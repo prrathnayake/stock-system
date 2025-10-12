@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { io } from 'socket.io-client'
 import { useAuth } from '../providers/AuthProvider.jsx'
 import { ORGANIZATION_TYPES } from '../lib/appInfo.js'
+import { resolveAssetUrl } from '../lib/urls'
 import TablePagination from '../components/TablePagination.jsx'
 
 const socket = io(import.meta.env.VITE_SOCKET_URL, { autoConnect: false })
@@ -129,7 +130,9 @@ export default function Dashboard() {
 
   const banners = useMemo(() => {
     const orgBanners = Array.isArray(organization?.banner_images)
-      ? organization.banner_images.filter((item) => typeof item === 'string' && item.trim().length > 0)
+      ? organization.banner_images
+        .filter((item) => typeof item === 'string' && item.trim().length > 0)
+        .map((item) => resolveAssetUrl(item))
       : []
     if (orgBanners.length > 0) {
       return orgBanners

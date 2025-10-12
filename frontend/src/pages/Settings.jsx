@@ -36,6 +36,71 @@ const uiVariants = [
   }
 ]
 
+const SAMPLE_SEED_TEMPLATE = `{
+  "products": [
+    {
+      "sku": "TOOL-SET-001",
+      "name": "Technician starter kit",
+      "reorder_point": 5,
+      "lead_time_days": 7,
+      "unit_price": 249.5
+    },
+    {
+      "sku": "LAPTOP-15",
+      "name": "Service laptop 15\"",
+      "reorder_point": 2,
+      "lead_time_days": 5,
+      "unit_price": 1399,
+      "track_serial": true
+    }
+  ],
+  "locations": [
+    {
+      "site": "Sydney HQ",
+      "room": "Service Bay",
+      "notes": "Primary repair hub"
+    },
+    {
+      "site": "Melbourne Depot",
+      "room": "Logistics",
+      "notes": "Forward staging area"
+    }
+  ],
+  "bins": [
+    {
+      "code": "SYD-A1",
+      "location_site": "Sydney HQ"
+    },
+    {
+      "code": "SYD-B2",
+      "location_site": "Sydney HQ"
+    },
+    {
+      "code": "MEL-A1",
+      "location_site": "Melbourne Depot"
+    }
+  ],
+  "stock": [
+    {
+      "sku": "TOOL-SET-001",
+      "bin": "SYD-A1",
+      "on_hand": 12
+    },
+    {
+      "sku": "TOOL-SET-001",
+      "bin": "MEL-A1",
+      "on_hand": 4,
+      "reserved": 1
+    },
+    {
+      "sku": "LAPTOP-15",
+      "bin": "SYD-B2",
+      "on_hand": 6,
+      "reserved": 2
+    }
+  ]
+}`
+
 export default function Settings() {
   const { user, setUser, organization } = useAuth()
   const location = useLocation()
@@ -279,6 +344,18 @@ export default function Settings() {
       ? `${resolved}${resolved.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`
       : resolved
   }, [])
+
+  const bannerList = useMemo(() => (
+    orgForm.banner_images
+      .split(/\n|,/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ), [orgForm.banner_images])
+
+  const bannerPreview = useMemo(
+    () => bannerList.map((value) => resolveAssetUrl(value)),
+    [bannerList]
+  )
 
   useEffect(() => {
     if (settingsData) {
@@ -543,6 +620,17 @@ export default function Settings() {
     const logoUrl = data.logo_url || ''
     const logoVersion = data.logo_updated_at || user.organization?.logo_updated_at || null
     const logoAssetUrl = buildLogoAssetUrl(logoUrl, logoVersion)
+    const existingBannerImages = Array.isArray(user.organization?.banner_images)
+      ? user.organization.banner_images
+      : []
+    const normalizedBanners = Array.isArray(data.banner_images)
+      ? data.banner_images
+        .filter((item) => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+      : existingBannerImages
+    const bannerAssets = normalizedBanners.map((item) => resolveAssetUrl(item))
+
     const mergedOrg = {
       ...(user.organization || {}),
       id: data.id ?? user.organization?.id ?? null,
@@ -567,9 +655,8 @@ export default function Settings() {
       invoicing_enabled: data.invoicing_enabled !== undefined
         ? data.invoicing_enabled
         : (user.organization?.invoicing_enabled !== false),
-      banner_images: Array.isArray(data.banner_images)
-        ? data.banner_images
-        : (Array.isArray(user.organization?.banner_images) ? user.organization.banner_images : []),
+      banner_images: normalizedBanners,
+      banner_asset_urls: bannerAssets,
       features: {
         ...(user.organization?.features || {}),
         ...(data.features || {})
@@ -602,6 +689,49 @@ export default function Settings() {
     },
     onError: (error) => {
       setOrgBanner({ type: 'error', message: error.response?.data?.error || 'Unable to upload logo.' })
+    }
+  })
+
+  const uploadBannerMutation = useMutation({
+    mutationFn: async (file) => {
+      const formData = new FormData()
+      formData.append('banner', file)
+      const { data } = await api.post('/organization/banner', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      return data
+    },
+    onSuccess: (data) => {
+      const uploaded = data?.banner_url
+      const bannerList = Array.isArray(data?.banner_images)
+        ? data.banner_images
+        : null
+
+      if (bannerList) {
+        setOrgForm((prev) => ({
+          ...prev,
+          banner_images: bannerList.join('\n')
+        }))
+        updateCachedOrganization({ ...(organization || {}), banner_images: bannerList })
+      } else if (uploaded) {
+        setOrgForm((prev) => {
+          const values = prev.banner_images
+            .split(/\n|,/)
+            .map((value) => value.trim())
+            .filter(Boolean)
+          if (values.includes(uploaded)) {
+            return prev
+          }
+          const next = [...values, uploaded]
+          return { ...prev, banner_images: next.join('\n') }
+        })
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['organization'] })
+      setOrgBanner({ type: 'info', message: 'Banner uploaded and published to the dashboard.' })
+    },
+    onError: (error) => {
+      setOrgBanner({ type: 'error', message: error.response?.data?.error || 'Unable to upload banner image.' })
     }
   })
 
@@ -644,6 +774,28 @@ export default function Settings() {
     })
   }
 
+  const handleBannerUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const input = event.target
+    if (bannerList.length >= 10) {
+      setOrgBanner({ type: 'error', message: 'You can store up to 10 banner images. Remove one before uploading another.' })
+      input.value = ''
+      return
+    }
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      setOrgBanner({ type: 'error', message: 'Please upload a PNG or JPG image.' })
+      input.value = ''
+      return
+    }
+    setOrgBanner(null)
+    uploadBannerMutation.mutate(file, {
+      onSettled: () => {
+        input.value = ''
+      }
+    })
+  }
+
   const toggleInvoicing = () => {
     setOrgForm((prev) => ({
       ...prev,
@@ -672,10 +824,7 @@ export default function Settings() {
       currency: orgForm.currency.trim(),
       invoicing_enabled: Boolean(orgForm.invoicing_enabled)
     }
-    const bannerImages = orgForm.banner_images
-      .split(/\n|,/)
-      .map((value) => value.trim())
-      .filter(Boolean)
+    const bannerImages = bannerList
     payload.banner_images = bannerImages
     if (!payload.name) {
       setOrgBanner({ type: 'error', message: 'Organization name is required.' })
@@ -1175,13 +1324,32 @@ export default function Settings() {
                       </label>
                       <label className="field field--span" data-help="Images displayed on the dashboard banner carousel.">
                         <span>Dashboard banner images</span>
+                        {bannerPreview.length > 0 && (
+                          <div className="banner-preview-grid">
+                            {bannerPreview.map((url, index) => (
+                              <img key={`${url}-${index}`} src={url} alt={`Banner ${index + 1}`} />
+                            ))}
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={handleBannerUpload}
+                          disabled={uploadBannerMutation.isLoading || bannerList.length >= 10}
+                        />
                         <textarea
                           rows={3}
                           value={orgForm.banner_images}
                           onChange={(e) => setOrgForm((prev) => ({ ...prev, banner_images: e.target.value }))}
                           placeholder={`https://example.com/banner-1.jpg\nhttps://example.com/banner-2.jpg`}
                         />
-                        <small className="muted">One URL per line, up to 10 images. Leave blank to use default placeholders.</small>
+                        <small className="muted">
+                          {uploadBannerMutation.isLoading
+                            ? 'Uploading banner…'
+                            : bannerList.length >= 10
+                              ? 'Maximum of 10 banner images reached. Remove a line to upload another.'
+                              : 'Upload PNG or JPG up to 5 MB or paste hosted image URLs. One entry per line, up to 10 images.'}
+                        </small>
                       </label>
                       <div className="field field--span">
                         <span>Invoicing visibility</span>
@@ -1910,6 +2078,10 @@ export default function Settings() {
                           )}
                         </div>
                       )}
+                      <details className="seed-sample">
+                        <summary>View sample JSON structure</summary>
+                        <pre><code>{SAMPLE_SEED_TEMPLATE}</code></pre>
+                      </details>
                     </div>
                   </div>
                 </section>

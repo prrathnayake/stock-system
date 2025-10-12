@@ -9,7 +9,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
 import { notifyOrganizationProfileUpdated, primeOrganizationContact } from '../services/notificationService.js';
 import { config } from '../config.js';
-import { logoUpload } from '../middleware/uploads.js';
+import { bannerUpload, logoUpload } from '../middleware/uploads.js';
 import { getSetting, upsertSettings } from '../services/settings.js';
 
 const router = Router();
@@ -47,7 +47,22 @@ const uploadLogoMiddleware = (req, res, next) => {
   });
 };
 
-const bannerSchema = z.array(urlSchema).max(10, 'Provide up to 10 banner images');
+const uploadBannerMiddleware = (req, res, next) => {
+  bannerUpload.single('banner')(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      return next(new HttpError(400, err.message));
+    }
+    return next(err);
+  });
+};
+
+const bannerUrlSchema = z.union([
+  urlSchema,
+  z.string().regex(uploadsPathPattern, 'Banner image must be a valid URL or uploaded file path')
+]);
+
+const bannerSchema = z.array(bannerUrlSchema).max(10, 'Provide up to 10 banner images');
 
 const ORGANIZATION_TYPES = ['retail', 'service', 'manufacturing', 'distribution', 'education', 'healthcare', 'nonprofit', 'technology', 'other'];
 
@@ -76,7 +91,7 @@ function normaliseBannerImages(value) {
   return value
     .filter((item) => typeof item === 'string')
     .map((item) => item.trim())
-    .filter((item) => item.length > 0);
+    .filter((item) => item.length > 0 && bannerUrlSchema.safeParse(item).success);
 }
 
 function serializeOrganization(org, extras = {}) {
@@ -147,6 +162,37 @@ router.put('/', requireAuth(['admin', 'developer']), asyncHandler(async (req, re
   notifyOrganizationProfileUpdated({ organization, actor: req.user }).catch((error) => {
     console.error('[notify] failed to send organization update email', error);
   });
+}));
+
+router.post('/banner', requireAuth(['admin', 'developer']), uploadBannerMiddleware, asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new HttpError(400, 'Banner file is required');
+  }
+
+  const organization = await Organization.findByPk(req.user.organization_id, { skipOrganizationScope: true });
+  if (!organization) {
+    await fs.unlink(req.file.path).catch(() => {});
+    throw new HttpError(404, 'Organization not found');
+  }
+
+  const existing = await getSetting('organization_banner_images', [], organization.id);
+  const currentBanners = Array.isArray(existing) ? normaliseBannerImages(existing) : [];
+  if (currentBanners.length >= 10) {
+    await fs.unlink(req.file.path).catch(() => {});
+    throw new HttpError(400, 'Maximum of 10 banner images allowed. Remove an existing banner to upload a new one.');
+  }
+
+  const bannerUrl = `${uploadsPublicRoot}/${req.file.filename}`;
+  const nextBanners = normaliseBannerImages([...currentBanners, bannerUrl]);
+
+  try {
+    await upsertSettings({ organization_banner_images: nextBanners }, organization.id);
+  } catch (error) {
+    await fs.unlink(req.file.path).catch(() => {});
+    throw error;
+  }
+
+  res.status(201).json({ banner_url: bannerUrl, banner_images: nextBanners });
 }));
 
 router.post('/logo', requireAuth(['admin', 'developer']), uploadLogoMiddleware, asyncHandler(async (req, res) => {
