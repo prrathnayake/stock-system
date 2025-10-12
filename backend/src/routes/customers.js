@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { Customer, Sale } from '../db.js';
 import { HttpError } from '../utils/httpError.js';
+import { normalizePhone } from '../utils/phone.js';
 
 const CustomerSchema = z.object({
   name: z.string().min(1).max(191),
@@ -17,14 +18,6 @@ const CustomerSchema = z.object({
 const UpdateSchema = CustomerSchema.partial().refine((payload) => Object.keys(payload).length > 0, {
   message: 'At least one field must be provided for an update.'
 });
-
-function normalizePhone(value) {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const digits = trimmed.replace(/[^\d+]/g, '');
-  return digits.length ? digits : null;
-}
 
 function sanitizeCustomerPayload(payload) {
   const result = {};
