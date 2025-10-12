@@ -218,9 +218,9 @@ export default function Dashboard() {
           <p className="stat-card__hint">Below reorder point across all locations.</p>
         </div>
         <div className="card stat-card">
-          <p className="muted">Reserved units</p>
+          <p className="muted">At-risk reservations</p>
           <h2>{overview?.reservedCount ?? '—'}</h2>
-          <p className="stat-card__hint">Allocated to work orders and repairs.</p>
+          <p className="stat-card__hint">Products with reservations exceeding on-hand stock.</p>
         </div>
       </div>
 

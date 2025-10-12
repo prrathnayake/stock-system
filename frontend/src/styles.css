@@ -721,6 +721,10 @@ input:focus, select:focus, textarea:focus {
   align-items: start;
 }
 
+.settings-card__user-grid {
+  grid-template-columns: 1fr;
+}
+
 .stat-card h2 {
   margin: 12px 0 6px;
   font-size: 34px;

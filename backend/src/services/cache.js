@@ -2,7 +2,7 @@ import { redis } from '../redis/client.js';
 import { config } from '../config.js';
 import { getOrganizationId } from './requestContext.js';
 
-const STOCK_OVERVIEW_CACHE_KEY = 'cache:stock:overview:v1';
+const STOCK_OVERVIEW_CACHE_KEY = 'cache:stock:overview:v2';
 
 function overviewCacheKey(organizationId) {
   return `${STOCK_OVERVIEW_CACHE_KEY}:${organizationId}`;

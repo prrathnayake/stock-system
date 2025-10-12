@@ -1432,7 +1432,7 @@ export default function Settings() {
                         {userBanner.message}
                       </div>
                     )}
-                    <div className="grid split">
+                    <div className="grid split settings-card__user-grid">
                       <form className="form-grid" onSubmit={handleCreateUser}>
                         <h3>Invite a team member</h3>
                         <label className="field" data-help="Name shown to other teammates and on activity logs.">

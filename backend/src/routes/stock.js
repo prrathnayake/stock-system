@@ -79,6 +79,7 @@ export default function createStockRoutes(io) {
     });
 
     let reservedCount = 0;
+    let reservedShortageCount = 0;
     let lowStockCount = 0;
 
     products.forEach((product) => {
@@ -89,6 +90,9 @@ export default function createStockRoutes(io) {
         reserved += bin.stock_level.reserved;
       });
       reservedCount += reserved;
+      if (reserved > 0 && onHand < reserved) {
+        reservedShortageCount += 1;
+      }
       if (onHand - reserved <= product.reorder_point) {
         lowStockCount += 1;
       }
@@ -108,7 +112,8 @@ export default function createStockRoutes(io) {
     const payload = {
       productCount: products.length,
       lowStockCount,
-      reservedCount,
+      reservedCount: reservedShortageCount,
+      reservedUnits: reservedCount,
       recentActivity: latestMoves.map(move => ({
         id: move.id,
         sku: move.product?.sku,
