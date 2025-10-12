@@ -8,6 +8,7 @@ export default function Login() {
   const [password, setPassword] = useState('admin123')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const { login } = useAuth()
 
@@ -45,14 +46,33 @@ export default function Login() {
           </label>
           <label className="field" data-help={`Your secure account password. ${PASSWORD_REQUIREMENTS}`}>
             <span>Password</span>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required />
+            <div className="field__input-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e=>setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="field__input-toggle"
+                onClick={() => setShowPassword(v => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </label>
           {error && <p className="error">{String(error)}</p>}
           <button className="button button--primary" type="submit" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p className="muted login__hint">Use the seeded admin credentials to get started, then create dedicated users.</p>
+        <p className="muted login__hint">
+          Use the seeded admin (<code>admin@example.com</code>) or developer (<code>developer@example.com</code>)
+          credentials to get started, then create dedicated users.
+        </p>
       </div>
     </div>
   )
