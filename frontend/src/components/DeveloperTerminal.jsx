@@ -9,8 +9,9 @@ export default function DeveloperTerminal({ session, onClose }) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
   const [lines, setLines] = useState([]);
+  const [command, setCommand] = useState('');
   const socketRef = useRef(null);
-  const textareaRef = useRef(null);
+  const outputRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -58,18 +59,26 @@ export default function DeveloperTerminal({ session, onClose }) {
   }, [session]);
 
   useEffect(() => {
-    if (!textareaRef.current) return;
-    textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+    if (!outputRef.current) return;
+    outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [lines]);
+
+  useEffect(() => {
+    if (!connected) return;
+    inputRef.current?.focus();
+  }, [connected]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
     if (!socketRef.current || !connected) return;
-    const value = inputRef.current?.value ?? '';
-    if (!value) return;
+    const value = command;
+    if (!value.trim()) return;
     socketRef.current.emit('terminal:input', `${value}\n`);
-    setLines((prev) => [...prev, `> ${value}\n`]);
-    inputRef.current.value = '';
+    setLines((prev) => [...prev, `$ ${value}\n`]);
+    setCommand('');
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
   };
 
   return (
@@ -87,22 +96,31 @@ export default function DeveloperTerminal({ session, onClose }) {
         </div>
       </div>
       {error && <div className="banner banner--danger">{error}</div>}
-      <pre className="terminal__output" ref={textareaRef} aria-live="polite">
-        {lines.length === 0 ? 'Initialising session…\n' : lines.join('')}
-      </pre>
-      <form className="terminal__input" onSubmit={handleSubmit}>
-        <label className="sr-only" htmlFor="terminal-command">Run command</label>
-        <input
-          id="terminal-command"
-          ref={inputRef}
-          type="text"
-          placeholder={connected ? 'Enter shell command…' : 'Waiting for connection…'}
-          disabled={!connected}
-        />
-        <button type="submit" className="button button--primary" disabled={!connected}>
-          Send
-        </button>
-      </form>
+      <div className="terminal__output">
+        <pre className="terminal__log" ref={outputRef} aria-live="polite">
+          {lines.length === 0 ? 'Initialising session…\n' : lines.join('')}
+        </pre>
+        <form className="terminal__input" onSubmit={handleSubmit}>
+          <label className="sr-only" htmlFor="terminal-command">Run command</label>
+          <span className="terminal__prompt" aria-hidden="true">
+            {connected ? '$' : '…'}
+          </span>
+          <input
+            id="terminal-command"
+            ref={inputRef}
+            className="terminal__prompt-input"
+            type="text"
+            value={command}
+            onChange={(event) => setCommand(event.target.value)}
+            placeholder={connected ? '' : 'Waiting for connection…'}
+            disabled={!connected}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck="false"
+          />
+        </form>
+      </div>
     </div>
   );
 }

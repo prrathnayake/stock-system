@@ -2328,29 +2328,51 @@ input:focus, select:focus, textarea:focus {
 }
 
 .terminal__output {
-  margin: 0;
   padding: 12px;
   border-radius: var(--radius-md);
   background: rgba(15, 23, 42, 0.5);
   max-height: 260px;
-  overflow: auto;
+  overflow: hidden;
   font-family: 'Fira Mono', 'SFMono-Regular', Menlo, monospace;
   font-size: 13px;
-  white-space: pre-wrap;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.terminal__log {
+  margin: 0;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  white-space: pre-wrap;
 }
 
 .terminal__input {
   display: flex;
-  gap: 12px;
   align-items: center;
+  gap: 8px;
 }
 
-.terminal__input input {
+.terminal__prompt {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.terminal__prompt-input {
   flex: 1;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: transparent;
+  border: none;
   color: inherit;
+  font: inherit;
+  line-height: inherit;
+  padding: 0;
+  min-width: 0;
+}
+
+.terminal__prompt-input:disabled {
+  opacity: 0.6;
 }
 
 .terminal__actions {
