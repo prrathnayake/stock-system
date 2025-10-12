@@ -251,6 +251,7 @@ export default function Settings() {
     ui_variant: 'pro'
   })
   const [selectedVariant, setSelectedVariant] = useState(user?.ui_variant || 'pro')
+  const [transitionLoading, setTransitionLoading] = useState(user?.transition_loading_enabled !== false)
   const [orgBanner, setOrgBanner] = useState(null)
   const [orgForm, setOrgForm] = useState({
     name: organization?.name || user?.organization?.name || '',
@@ -348,6 +349,10 @@ export default function Settings() {
     setLogoPreview(resolveAssetUrl(orgForm.logo_url || ''))
   }, [orgForm.logo_url])
 
+  useEffect(() => {
+    setTransitionLoading(user?.transition_loading_enabled !== false)
+  }, [user?.transition_loading_enabled])
+
   const settingsMutation = useMutation({
     mutationFn: async (payload) => {
       const response = await api.put('/settings', payload)
@@ -369,14 +374,17 @@ export default function Settings() {
       return data
     },
     onSuccess: (updated) => {
+      const transitionEnabled = updated.transition_loading_enabled ?? transitionLoading
       const merged = {
         ...user,
         ...updated,
         name: updated.full_name || updated.name || user?.name,
-        ui_variant: updated.ui_variant || selectedVariant
+        ui_variant: updated.ui_variant || selectedVariant,
+        transition_loading_enabled: transitionEnabled
       }
       setUser(merged)
       persistUserProfile(merged)
+      setTransitionLoading(transitionEnabled)
       setPreferencesBanner({ type: 'success', message: 'Interface preferences updated.' })
     },
     onError: (error) => {
@@ -577,7 +585,10 @@ export default function Settings() {
   const handleSavePreferences = (event) => {
     event.preventDefault()
     setPreferencesBanner(null)
-    preferencesMutation.mutate({ ui_variant: selectedVariant })
+    preferencesMutation.mutate({
+      ui_variant: selectedVariant,
+      transition_loading_enabled: transitionLoading
+    })
   }
 
   const handleLogoUpload = (event) => {
@@ -853,6 +864,17 @@ export default function Settings() {
                         </div>
                       </label>
                     ))}
+                  </div>
+                  <div className="variant-options__toggles">
+                    <label className="field field--checkbox">
+                      <input
+                        type="checkbox"
+                        checked={transitionLoading}
+                        onChange={(event) => setTransitionLoading(event.target.checked)}
+                      />
+                      <span>Show loading animation between page transitions</span>
+                    </label>
+                    <p className="muted">Disable this if you prefer instant navigation without visual transitions.</p>
                   </div>
                   <div className="form-actions">
                     <button className="button button--primary" type="submit" disabled={preferencesMutation.isLoading}>

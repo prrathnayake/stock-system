@@ -77,6 +77,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
       role: user.role,
       email: user.email,
       must_change_password: user.must_change_password,
+      transition_loading_enabled: user.transition_loading_enabled,
       organization: organization ? {
         id: organization.id,
         name: organization.name,
