@@ -218,6 +218,11 @@ export default function Dashboard() {
           <p className="stat-card__hint">Below reorder point across all locations.</p>
         </div>
         <div className="card stat-card">
+          <p className="muted">Out-of-stock products</p>
+          <h2>{overview?.outOfStockCount ?? '—'}</h2>
+          <p className="stat-card__hint">No available inventory remaining for these items.</p>
+        </div>
+        <div className="card stat-card">
           <p className="muted">At-risk reservations</p>
           <h2>{overview?.reservedCount ?? '—'}</h2>
           <p className="stat-card__hint">Reservations that will exhaust on-hand stock once fulfilled.</p>

@@ -81,6 +81,7 @@ export default function createStockRoutes(io) {
     let reservedCount = 0;
     let reservedShortageCount = 0;
     let lowStockCount = 0;
+    let outOfStockCount = 0;
 
     products.forEach((product) => {
       let onHand = 0;
@@ -95,6 +96,9 @@ export default function createStockRoutes(io) {
       }
       if (onHand - reserved <= product.reorder_point) {
         lowStockCount += 1;
+      }
+      if ((onHand - reserved) <= 0) {
+        outOfStockCount += 1;
       }
     });
 
@@ -112,6 +116,7 @@ export default function createStockRoutes(io) {
     const payload = {
       productCount: products.length,
       lowStockCount,
+      outOfStockCount,
       reservedCount: reservedShortageCount,
       reservedUnits: reservedCount,
       recentActivity: latestMoves.map(move => ({
