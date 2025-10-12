@@ -66,6 +66,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     description: `User ${user.full_name} signed in`
   }).catch(() => {});
   const bannerImages = await getSetting('organization_banner_images', [], organization.id);
+  const barcodeScanningEnabled = await getSetting('barcode_scanning_enabled', true, organization.id);
 
   res.json({
     access,
@@ -98,7 +99,10 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
         currency: organization.currency,
         invoicing_enabled: organization.invoicing_enabled,
         logo_updated_at: organization.updatedAt ? organization.updatedAt.toISOString?.() || new Date(organization.updatedAt).toISOString() : null,
-        banner_images: Array.isArray(bannerImages) ? bannerImages : []
+        banner_images: Array.isArray(bannerImages) ? bannerImages : [],
+        features: {
+          barcode_scanning_enabled: barcodeScanningEnabled !== false
+        }
       } : null,
       ui_variant: user.ui_variant
     }
@@ -169,6 +173,9 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
   const bannerImages = organization
     ? await getSetting('organization_banner_images', [], organization.id)
     : [];
+  const barcodeScanningEnabled = organization
+    ? await getSetting('barcode_scanning_enabled', true, organization.id)
+    : true;
 
   const access = signAccessToken(user);
   const refresh = signRefreshToken(user.id);
@@ -203,7 +210,10 @@ router.post('/update-credentials', requireAuth([], { allowIfMustChangePassword: 
         currency: organization.currency,
         invoicing_enabled: organization.invoicing_enabled,
         logo_updated_at: organization.updatedAt ? organization.updatedAt.toISOString?.() || new Date(organization.updatedAt).toISOString() : null,
-        banner_images: Array.isArray(bannerImages) ? bannerImages : []
+        banner_images: Array.isArray(bannerImages) ? bannerImages : [],
+        features: {
+          barcode_scanning_enabled: barcodeScanningEnabled !== false
+        }
       } : null,
       ui_variant: user.ui_variant
     }

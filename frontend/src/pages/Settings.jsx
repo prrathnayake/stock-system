@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../providers/AuthProvider.jsx'
@@ -41,6 +41,7 @@ export default function Settings() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const isAdmin = user?.role === 'admin' || user?.role === 'developer'
+  const isDeveloper = user?.role === 'developer'
   const activeVariant = uiVariants.find((variant) => variant.id === (user?.ui_variant || 'pro')) || uiVariants[0]
 
   const navigationItems = useMemo(() => {
@@ -56,8 +57,11 @@ export default function Settings() {
         { id: 'records', label: 'Audit & backups' }
       )
     }
+    if (isDeveloper) {
+      base.push({ id: 'developer', label: 'Developer tools' })
+    }
     return base
-  }, [isAdmin])
+  }, [isAdmin, isDeveloper])
 
   const [activeSection, setActiveSection] = useState(() => navigationItems[0]?.id || 'profile')
 
@@ -67,39 +71,6 @@ export default function Settings() {
     }
   }, [activeSection, navigationItems])
 
-  const scrollToSection = useCallback((id) => {
-    if (typeof document === 'undefined') return
-    const element = document.getElementById(`settings-${id}`)
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return undefined
-    const sections = navigationItems
-      .map((item) => document.getElementById(`settings-${item.id}`))
-      .filter(Boolean)
-    if (sections.length === 0) return undefined
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-        if (visible.length > 0) {
-          const id = visible[0].target.id.replace('settings-', '')
-          setActiveSection(id)
-        }
-      },
-      { rootMargin: '-40% 0px -40% 0px', threshold: [0.1, 0.25, 0.5, 0.75] }
-    )
-    sections.forEach((section) => observer.observe(section))
-    return () => {
-      sections.forEach((section) => observer.unobserve(section))
-      observer.disconnect()
-    }
-  }, [navigationItems])
-
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!location.hash) return
@@ -108,10 +79,7 @@ export default function Settings() {
     const exists = navigationItems.some((item) => item.id === target)
     if (!exists) return
     setActiveSection(target)
-    window.requestAnimationFrame(() => {
-      scrollToSection(target)
-    })
-  }, [location.hash, navigationItems, scrollToSection])
+  }, [location.hash, navigationItems])
 
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
@@ -135,6 +103,11 @@ export default function Settings() {
   const [userPage, setUserPage] = useState(1)
   const [activityPage, setActivityPage] = useState(1)
   const [backupPage, setBackupPage] = useState(1)
+  const [seedPayload, setSeedPayload] = useState(null)
+  const [seedBanner, setSeedBanner] = useState(null)
+  const [seedResult, setSeedResult] = useState(null)
+  const [seedFileName, setSeedFileName] = useState('')
+  const seedInputRef = useRef(null)
 
   const filteredUsers = useMemo(() => {
     if (!userSearch) return users
@@ -196,6 +169,17 @@ export default function Settings() {
     return backups.slice(start, start + BACKUPS_PAGE_SIZE)
   }, [backups, backupPage])
 
+  const seedPreview = useMemo(() => {
+    if (!seedPayload) return null
+    const count = (collection) => (Array.isArray(collection) ? collection.length : 0)
+    return {
+      products: count(seedPayload.products),
+      locations: count(seedPayload.locations),
+      bins: count(seedPayload.bins),
+      stock: count(seedPayload.stock)
+    }
+  }, [seedPayload])
+
   useEffect(() => {
     if (activityPage > totalActivityPages) {
       setActivityPage(totalActivityPages)
@@ -228,11 +212,14 @@ export default function Settings() {
     daily_digest_time: '18:00',
     auto_product_sku: false,
     auto_customer_id: false,
-    auto_warehouse_id: false
+    auto_warehouse_id: false,
+    barcode_scanning_enabled: true
   })
   const [banner, setBanner] = useState(null)
   const [userBanner, setUserBanner] = useState(null)
   const [preferencesBanner, setPreferencesBanner] = useState(null)
+  const [developerKey, setDeveloperKey] = useState('')
+  const [developerOtp, setDeveloperOtp] = useState('')
   const [userForm, setUserForm] = useState({
     full_name: '',
     email: '',
@@ -308,7 +295,8 @@ export default function Settings() {
         daily_digest_time: settingsData.daily_digest_time || '18:00',
         auto_product_sku: settingsData.auto_product_sku === true,
         auto_customer_id: settingsData.auto_customer_id === true,
-        auto_warehouse_id: settingsData.auto_warehouse_id === true
+        auto_warehouse_id: settingsData.auto_warehouse_id === true,
+        barcode_scanning_enabled: settingsData.barcode_scanning_enabled !== false
       })
     }
   }, [settingsData])
@@ -358,11 +346,26 @@ export default function Settings() {
       const response = await api.put('/settings', payload)
       return response
     },
-    onSuccess: (response) => {
+    onSuccess: (response, variables) => {
       if (response?.data?.offline) {
         setBanner('Offline update queued. Settings will sync when back online.')
       } else {
         setBanner('Settings saved successfully.')
+      }
+      if (typeof variables?.barcode_scanning_enabled === 'boolean') {
+        setUser((prev) => {
+          if (!prev?.organization) return prev
+          const updatedOrg = {
+            ...prev.organization,
+            features: {
+              ...(prev.organization.features || {}),
+              barcode_scanning_enabled: variables.barcode_scanning_enabled
+            }
+          }
+          const updatedUser = { ...prev, organization: updatedOrg }
+          persistUserProfile(updatedUser)
+          return updatedUser
+        })
       }
       queryClient.invalidateQueries({ queryKey: ['settings'] })
     }
@@ -469,6 +472,35 @@ export default function Settings() {
     }
   })
 
+  const developerHeaders = () => ({
+    'x-developer-key': developerKey.trim(),
+    'x-developer-otp': developerOtp.trim()
+  })
+
+  const developerSeedMutation = useMutation({
+    mutationFn: async (payload) => {
+      const { data } = await api.post('/developer/seed', payload, {
+        headers: developerHeaders()
+      })
+      return data
+    },
+    onSuccess: (data) => {
+      setSeedBanner({ type: 'success', message: 'Seed data applied successfully.' })
+      setSeedResult(data || null)
+      setSeedPayload(null)
+      setSeedFileName('')
+      if (seedInputRef.current) {
+        seedInputRef.current.value = ''
+      }
+      queryClient.invalidateQueries({ queryKey: ['stock-dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['stock-overview'] })
+    },
+    onError: (error) => {
+      const message = error.response?.data?.error || 'Unable to seed data.'
+      setSeedBanner({ type: 'error', message })
+    }
+  })
+
   const organizationMutation = useMutation({
     mutationFn: async (payload) => {
       const { data } = await api.put('/organization', payload)
@@ -537,7 +569,11 @@ export default function Settings() {
         : (user.organization?.invoicing_enabled !== false),
       banner_images: Array.isArray(data.banner_images)
         ? data.banner_images
-        : (Array.isArray(user.organization?.banner_images) ? user.organization.banner_images : [])
+        : (Array.isArray(user.organization?.banner_images) ? user.organization.banner_images : []),
+      features: {
+        ...(user.organization?.features || {}),
+        ...(data.features || {})
+      }
     }
     const mergedUser = {
       ...user,
@@ -681,9 +717,87 @@ export default function Settings() {
       daily_digest_time: formState.daily_digest_time?.trim() || '18:00',
       auto_product_sku: Boolean(formState.auto_product_sku),
       auto_customer_id: Boolean(formState.auto_customer_id),
-      auto_warehouse_id: Boolean(formState.auto_warehouse_id)
+      auto_warehouse_id: Boolean(formState.auto_warehouse_id),
+      barcode_scanning_enabled: Boolean(formState.barcode_scanning_enabled)
     }
     settingsMutation.mutate(payload)
+  }
+
+  const ensureDeveloperSecrets = () => {
+    if (!developerKey.trim() || !developerOtp.trim()) {
+      setSeedBanner({ type: 'error', message: 'Provide the developer key and one-time passcode.' })
+      return false
+    }
+    return true
+  }
+
+  const handleSeedFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setSeedBanner(null)
+    setSeedResult(null)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      setSeedPayload(parsed)
+      setSeedFileName(file.name)
+    } catch (error) {
+      console.error('Unable to parse seed file', error)
+      setSeedPayload(null)
+      setSeedFileName('')
+      setSeedBanner({ type: 'error', message: 'Seed file must be valid JSON.' })
+      if (seedInputRef.current) {
+        seedInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleSeedClear = () => {
+    setSeedPayload(null)
+    setSeedFileName('')
+    setSeedResult(null)
+    if (seedInputRef.current) {
+      seedInputRef.current.value = ''
+    }
+  }
+
+  const handleSeedDownload = async () => {
+    setSeedBanner(null)
+    setSeedResult(null)
+    if (!ensureDeveloperSecrets()) return
+    try {
+      const response = await api.get('/developer/seed/sample', {
+        responseType: 'blob',
+        headers: developerHeaders()
+      })
+      if (typeof window === 'undefined') return
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'stock-seed-sample.json'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      setSeedBanner({ type: 'info', message: 'Sample JSON downloaded.' })
+    } catch (error) {
+      setSeedBanner({ type: 'error', message: error.response?.data?.error || 'Unable to download sample file.' })
+    }
+  }
+
+  const handleSeedSubmit = (event) => {
+    event.preventDefault()
+    if (!seedPayload) {
+      setSeedBanner({ type: 'error', message: 'Select a JSON file containing seed data first.' })
+      return
+    }
+    if (!ensureDeveloperSecrets()) return
+    setSeedBanner(null)
+    setSeedResult(null)
+    developerSeedMutation.mutate(seedPayload)
   }
 
   const handleCreateUser = (event) => {
@@ -786,10 +900,7 @@ export default function Settings() {
             className={`settings-tabs__item${activeSection === item.id ? ' settings-tabs__item--active' : ''}`}
             aria-selected={activeSection === item.id}
             aria-controls={`settings-${item.id}`}
-            onClick={() => {
-              setActiveSection(item.id)
-              scrollToSection(item.id)
-            }}
+            onClick={() => setActiveSection(item.id)}
           >
             {item.label}
           </button>
@@ -797,7 +908,12 @@ export default function Settings() {
       </nav>
 
       <div className="settings-content">
-          <section id="settings-profile" className="settings-section">
+          <section
+            id="settings-profile"
+            className="settings-section"
+            hidden={activeSection !== 'profile'}
+            aria-hidden={activeSection !== 'profile'}
+          >
             <header className="settings-section__header">
               <h2>Profile & preferences</h2>
               <p className="muted">Keep your personal details and workspace layout up to date.</p>
@@ -886,7 +1002,12 @@ export default function Settings() {
             </div>
           </section>
 
-          <section id="settings-readiness" className="settings-section">
+          <section
+            id="settings-readiness"
+            className="settings-section"
+            hidden={activeSection !== 'readiness'}
+            aria-hidden={activeSection !== 'readiness'}
+          >
             <header className="settings-section__header">
               <h2>Security & readiness</h2>
               <p className="muted">Tick through deployment essentials before go-live.</p>
@@ -918,7 +1039,12 @@ export default function Settings() {
 
           {isAdmin && (
             <>
-              <section id="settings-organization" className="settings-section">
+              <section
+                id="settings-organization"
+                className="settings-section"
+                hidden={activeSection !== 'organization'}
+                aria-hidden={activeSection !== 'organization'}
+              >
                 <header className="settings-section__header">
                   <h2>Organization profile</h2>
                   <p className="muted">Manage branding, legal and invoicing defaults for your {APP_NAME} workspace.</p>
@@ -1121,7 +1247,12 @@ export default function Settings() {
                 </div>
               </section>
 
-              <section id="settings-team" className="settings-section">
+              <section
+                id="settings-team"
+                className="settings-section"
+                hidden={activeSection !== 'team'}
+                aria-hidden={activeSection !== 'team'}
+              >
                 <header className="settings-section__header">
                   <h2>User management</h2>
                   <p className="muted">Control who can access the platform and enforce secure practices.</p>
@@ -1377,7 +1508,12 @@ export default function Settings() {
                 </div>
               </section>
 
-              <section id="settings-operations" className="settings-section">
+              <section
+                id="settings-operations"
+                className="settings-section"
+                hidden={activeSection !== 'operations'}
+                aria-hidden={activeSection !== 'operations'}
+              >
                 <header className="settings-section__header">
                   <h2>Operations & alerts</h2>
                   <p className="muted">Tune SLA targets, notifications and automation.</p>
@@ -1386,6 +1522,19 @@ export default function Settings() {
                   <div className="card settings-card">
                     {banner && <div className="banner banner--info">{banner}</div>}
                     <form className="form-grid" onSubmit={handleSubmit}>
+                      <label className="field" data-help="Allow staff to use the in-app camera scanner.">
+                        <span>Barcode scanning</span>
+                        <select
+                          value={formState.barcode_scanning_enabled ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormState((prev) => ({
+                            ...prev,
+                            barcode_scanning_enabled: e.target.value === 'enabled'
+                          }))}
+                        >
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
+                        </select>
+                      </label>
                       <label className="field" data-help="Toggle proactive notifications when products fall below reorder points.">
                         <span>Low stock alerts</span>
                         <select
@@ -1521,7 +1670,12 @@ export default function Settings() {
                 </div>
               </section>
 
-              <section id="settings-records" className="settings-section">
+              <section
+                id="settings-records"
+                className="settings-section"
+                hidden={activeSection !== 'records'}
+                aria-hidden={activeSection !== 'records'}
+              >
                 <header className="settings-section__header">
                   <h2>Audit & backups</h2>
                   <p className="muted">Track administrator activity and safeguard your data.</p>
@@ -1642,6 +1796,124 @@ export default function Settings() {
                   </div>
                 </div>
               </section>
+
+              {isDeveloper && (
+                <section
+                  id="settings-developer"
+                  className="settings-section"
+                  hidden={activeSection !== 'developer'}
+                  aria-hidden={activeSection !== 'developer'}
+                >
+                  <header className="settings-section__header">
+                    <h2>Developer tools</h2>
+                    <p className="muted">Seed sample data and access maintenance utilities.</p>
+                  </header>
+                  <div className="settings-section__cards">
+                    <div className="card settings-card">
+                      {seedBanner && (
+                        <div className={`banner banner--${seedBanner.type === 'error' ? 'danger' : 'info'}`}>
+                          {seedBanner.message}
+                        </div>
+                      )}
+                      <form className="form-grid" onSubmit={handleSeedSubmit}>
+                        <label className="field" data-help="Primary developer credential sent as X-Developer-Key.">
+                          <span>Developer key</span>
+                          <input
+                            value={developerKey}
+                            onChange={(e) => setDeveloperKey(e.target.value)}
+                            placeholder="e.g. dev-xxxxxxxx"
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label className="field" data-help="Second-factor code sent as X-Developer-Otp for privileged actions.">
+                          <span>One-time passcode</span>
+                          <input
+                            value={developerOtp}
+                            onChange={(e) => setDeveloperOtp(e.target.value)}
+                            placeholder="e.g. 123456"
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label
+                          className="field field--span"
+                          data-help="Upload a JSON file describing products, locations, bins and starting stock levels."
+                        >
+                          <span>Seed file</span>
+                          <input
+                            ref={seedInputRef}
+                            type="file"
+                            accept="application/json"
+                            onChange={handleSeedFileChange}
+                          />
+                          {seedFileName && (
+                            <small className="muted">
+                              Loaded {seedFileName}
+                              {seedPreview && (
+                                <>
+                                  {' '}
+                                  · {seedPreview.products} products, {seedPreview.locations} locations, {seedPreview.bins} bins, {seedPreview.stock}
+                                  {' '}stock rows
+                                </>
+                              )}
+                            </small>
+                          )}
+                        </label>
+                        <div className="form-actions">
+                          <button
+                            className="button button--ghost"
+                            type="button"
+                            onClick={handleSeedDownload}
+                            disabled={developerSeedMutation.isLoading}
+                          >
+                            Download sample JSON
+                          </button>
+                          <button
+                            className="button button--ghost"
+                            type="button"
+                            onClick={handleSeedClear}
+                            disabled={developerSeedMutation.isLoading || !seedPayload}
+                          >
+                            Clear selection
+                          </button>
+                          <button
+                            className="button button--primary"
+                            type="submit"
+                            disabled={developerSeedMutation.isLoading}
+                          >
+                            {developerSeedMutation.isLoading ? 'Seeding…' : 'Seed database'}
+                          </button>
+                        </div>
+                      </form>
+                      {seedResult?.summary && (
+                        <div className="seed-summary">
+                          <h4>Last seed summary</h4>
+                          <ul>
+                            <li>
+                              Products: {seedResult.summary.products?.created ?? 0} created,{' '}
+                              {seedResult.summary.products?.updated ?? 0} updated
+                            </li>
+                            <li>
+                              Locations: {seedResult.summary.locations?.created ?? 0} created,{' '}
+                              {seedResult.summary.locations?.updated ?? 0} updated
+                            </li>
+                            <li>
+                              Bins: {seedResult.summary.bins?.created ?? 0} created,{' '}
+                              {seedResult.summary.bins?.updated ?? 0} updated
+                            </li>
+                            <li>
+                              Stock rows: {seedResult.summary.stock?.created ?? 0} created,{' '}
+                              {seedResult.summary.stock?.updated ?? 0} updated
+                            </li>
+                          </ul>
+                          {seedResult.seeded_at && (
+                            <p className="muted">Completed {new Date(seedResult.seeded_at).toLocaleString()}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>
