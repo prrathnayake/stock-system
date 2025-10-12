@@ -129,12 +129,9 @@ router.delete('/:id', requireAuth(['admin','user','developer']), asyncHandler(as
           reason: 'adjust',
           performed_by: req.user?.id ?? null
         }, { transaction: t });
-        level.on_hand = 0;
       }
-      if (level.reserved !== 0) {
-        level.reserved = 0;
-      }
-      await level.save({ transaction: t });
+
+      await level.destroy({ transaction: t });
     }
 
     product.active = false;
