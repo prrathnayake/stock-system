@@ -10,6 +10,7 @@ export default function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const variant = user?.ui_variant || 'pro'
+  const barcodeEnabled = organization?.features?.barcode_scanning_enabled !== false
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return true
     return !window.matchMedia('(max-width: 960px)').matches
@@ -114,11 +115,15 @@ export default function AppLayout() {
       { to: '/work-orders', label: variant === 'visual' ? 'Service queue' : 'Work Orders', roles: ['admin', 'user', 'developer'] },
       { to: '/settings', label: privilegedRoles.includes(user?.role) ? 'Administration' : 'Settings', roles: ['admin', 'user', 'developer'] }
     ];
+    let filtered = items
     if (organization?.invoicing_enabled === false) {
-      return items.filter((item) => item.to !== '/invoices');
+      filtered = filtered.filter((item) => item.to !== '/invoices')
     }
-    return items;
-  }, [user?.role, variant, organization?.invoicing_enabled])
+    if (!barcodeEnabled) {
+      filtered = filtered.filter((item) => item.to !== '/scan')
+    }
+    return filtered
+  }, [user?.role, variant, organization?.invoicing_enabled, barcodeEnabled])
 
   const quickLinks = useMemo(() => (
     [

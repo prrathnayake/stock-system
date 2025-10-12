@@ -583,6 +583,10 @@ input:focus, select:focus, textarea:focus {
   gap: 24px;
 }
 
+.settings-section[hidden] {
+  display: none;
+}
+
 .settings-section__header h2 {
   margin: 0;
 }
@@ -607,6 +611,17 @@ input:focus, select:focus, textarea:focus {
 
 .user-management__table {
   max-width: 100%;
+}
+
+.seed-summary {
+  border-top: 1px solid var(--color-border);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.seed-summary ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
 }
 
 @media (max-width: 960px) {
@@ -1993,6 +2008,17 @@ input:focus, select:focus, textarea:focus {
   display: block;
   background: #000;
   min-height: 240px;
+}
+
+.scanner__viewport--disabled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .scan-result {

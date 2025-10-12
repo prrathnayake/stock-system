@@ -35,7 +35,10 @@ function normalizeOrganization(value) {
     invoicing_enabled: value.invoicing_enabled !== false,
     banner_images: Array.isArray(value.banner_images)
       ? value.banner_images.filter((item) => typeof item === 'string' && item.trim().length > 0)
-      : []
+      : [],
+    features: {
+      barcode_scanning_enabled: value.features?.barcode_scanning_enabled !== false
+    }
   };
 }
 

@@ -37,7 +37,25 @@ import { config } from './config.js';
       must_change_password: true,
       ui_variant: 'pro'
     });
+
+    const developerDefaults = config.bootstrap.developer;
+    if (developerDefaults?.email && developerDefaults?.password) {
+      const existingDeveloper = await User.findOne({ where: { email: developerDefaults.email } });
+      if (!existingDeveloper) {
+        const developerHash = await bcrypt.hash(developerDefaults.password, 10);
+        await User.create({
+          full_name: developerDefaults.name || 'Developer',
+          email: developerDefaults.email,
+          password_hash: developerHash,
+          role: 'developer',
+          must_change_password: true,
+          ui_variant: 'pro'
+        });
+      }
+    }
   });
-  console.log(`Seed complete. Default admin user ${config.bootstrap.admin.email} created.`);
+  console.log(
+    `Seed complete. Default admin user ${config.bootstrap.admin.email} and developer user ${config.bootstrap.developer.email} created.`
+  );
   process.exit(0);
 })();

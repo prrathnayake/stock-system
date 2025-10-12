@@ -69,6 +69,11 @@ const bootstrapDefaults = {
     email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com',
     password: process.env.DEFAULT_ADMIN_PASSWORD || 'admin123',
     name: process.env.DEFAULT_ADMIN_NAME || 'Admin User'
+  },
+  developer: {
+    email: process.env.DEFAULT_DEVELOPER_EMAIL || 'developer@example.com',
+    password: process.env.DEFAULT_DEVELOPER_PASSWORD || 'dev12345',
+    name: process.env.DEFAULT_DEVELOPER_NAME || 'Developer Account'
   }
 };
 
@@ -162,7 +167,8 @@ export const config = {
   },
   bootstrap: {
     organization: bootstrapDefaults.organization,
-    admin: bootstrapDefaults.admin
+    admin: bootstrapDefaults.admin,
+    developer: bootstrapDefaults.developer
   },
   frontend: {
     serve: process.env.SERVE_FRONTEND !== 'false',

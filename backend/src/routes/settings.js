@@ -19,7 +19,8 @@ const UpdateSchema = z.object({
   daily_digest_time: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Provide a time in HH:MM format').optional(),
   auto_product_sku: z.boolean().optional(),
   auto_customer_id: z.boolean().optional(),
-  auto_warehouse_id: z.boolean().optional()
+  auto_warehouse_id: z.boolean().optional(),
+  barcode_scanning_enabled: z.boolean().optional()
 });
 
 const router = Router();
