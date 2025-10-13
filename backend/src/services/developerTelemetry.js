@@ -2,6 +2,7 @@ import os from 'os';
 import { monitorEventLoopDelay } from 'perf_hooks';
 import { getReadinessReport } from './readiness.js';
 import { getRecentErrorLogs } from './errorLogBuffer.js';
+import { getTerminalEvents } from './terminalAuditLog.js';
 
 const performanceHistory = [];
 const HISTORY_LIMIT = 60;
@@ -86,6 +87,7 @@ export async function getDeveloperTelemetry({ organizationId }) {
     performance,
     history: [...performanceHistory],
     logs: getRecentErrorLogs(),
+    terminal_logs: getTerminalEvents(),
     security: {
       generated_at: readinessReport?.generated_at || null,
       summary: readinessReport?.summary || null,

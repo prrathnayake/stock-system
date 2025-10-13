@@ -2208,14 +2208,28 @@ export default function Settings() {
                             autoComplete="off"
                           />
                         </label>
-                        <label className="field" data-help="Second-factor code sent as X-Developer-Otp for privileged actions.">
+                        <label className="field field--with-action" data-help="Second-factor code sent as X-Developer-Otp for privileged actions.">
                           <span>One-time passcode</span>
-                          <input
-                            value={developerOtp}
-                            onChange={(e) => setDeveloperOtp(e.target.value)}
-                            placeholder="e.g. 123456"
-                            autoComplete="off"
-                          />
+                          <div className="field__control-group">
+                            <input
+                              value={developerOtp}
+                              onChange={(e) => setDeveloperOtp(e.target.value)}
+                              placeholder="e.g. 123456"
+                              autoComplete="off"
+                            />
+                            <button
+                              className="button button--ghost field__inline-action"
+                              type="button"
+                              onClick={handleLaunchTerminal}
+                              disabled={
+                                launchTerminalMutation.isLoading ||
+                                !developerKeyTrimmed ||
+                                !developerOtpTrimmed
+                              }
+                            >
+                              {launchTerminalMutation.isLoading ? 'Starting…' : 'Init web terminal'}
+                            </button>
+                          </div>
                         </label>
                         <label
                           className="field field--span"
@@ -2294,7 +2308,11 @@ export default function Settings() {
                               className="button button--primary"
                               type="button"
                               onClick={handleLaunchTerminal}
-                              disabled={launchTerminalMutation.isLoading}
+                              disabled={
+                                launchTerminalMutation.isLoading ||
+                                !developerKeyTrimmed ||
+                                !developerOtpTrimmed
+                              }
                             >
                               {launchTerminalMutation.isLoading ? 'Starting…' : 'Launch web terminal'}
                             </button>
