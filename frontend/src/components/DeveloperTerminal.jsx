@@ -4,6 +4,26 @@ import { api } from '../lib/api';
 import { getAccessToken } from '../lib/auth';
 
 const SOCKET_PATH = '/socket.io';
+const SOCKET_NAMESPACE = '/developer-terminal';
+
+function resolveSocketBaseUrl() {
+  const fallback = typeof window !== 'undefined' ? window.location.origin : '';
+  const raw = import.meta.env.VITE_SOCKET_URL || api.defaults.baseURL || fallback;
+
+  if (!raw) return null;
+
+  try {
+    const candidate = new URL(raw, fallback || 'http://localhost');
+    return candidate.origin;
+  } catch (error) {
+    if (!fallback) return null;
+    try {
+      return new URL(String(raw), fallback).origin;
+    } catch (innerError) {
+      return fallback || null;
+    }
+  }
+}
 
 export default function DeveloperTerminal({ session, onClose }) {
   const [connected, setConnected] = useState(false);
@@ -21,10 +41,19 @@ export default function DeveloperTerminal({ session, onClose }) {
     { label: 'Node version', command: 'node -v' }
   ]), []);
 
+  const endpoint = useMemo(() => {
+    const baseUrl = resolveSocketBaseUrl();
+    if (!baseUrl) return null;
+    return `${baseUrl.replace(/\/$/, '')}${SOCKET_NAMESPACE}`;
+  }, []);
+
   useEffect(() => {
     if (!session) return undefined;
-    const baseUrl = import.meta.env.VITE_SOCKET_URL || api.defaults.baseURL || (typeof window !== 'undefined' ? window.location.origin : '');
-    const socket = io(baseUrl, {
+    if (!endpoint) {
+      setError('Unable to resolve maintenance shell endpoint.');
+      return undefined;
+    }
+    const socket = io(endpoint, {
       path: SOCKET_PATH,
       transports: ['websocket'],
       auth: {
@@ -63,7 +92,7 @@ export default function DeveloperTerminal({ session, onClose }) {
     return () => {
       socket.disconnect();
     };
-  }, [session]);
+  }, [endpoint, session]);
 
   useEffect(() => {
     if (!outputRef.current) return;

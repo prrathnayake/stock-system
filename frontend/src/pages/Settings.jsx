@@ -8,6 +8,7 @@ import { resolveAssetUrl } from '../lib/urls'
 import { APP_NAME, ORGANIZATION_TYPES, PASSWORD_REQUIREMENTS, STRONG_PASSWORD_PATTERN } from '../lib/appInfo.js'
 import TablePagination from '../components/TablePagination.jsx'
 import DeveloperTerminal from '../components/DeveloperTerminal.jsx'
+import DeveloperTelemetry from '../components/DeveloperTelemetry.jsx'
 
 const uiVariants = [
   {
@@ -313,6 +314,8 @@ export default function Settings() {
   const [preferencesBanner, setPreferencesBanner] = useState(null)
   const [developerKey, setDeveloperKey] = useState('')
   const [developerOtp, setDeveloperOtp] = useState('')
+  const developerKeyTrimmed = developerKey.trim()
+  const developerOtpTrimmed = developerOtp.trim()
   const [userForm, setUserForm] = useState({
     full_name: '',
     email: '',
@@ -587,8 +590,8 @@ export default function Settings() {
   })
 
   const developerHeaders = () => ({
-    'x-developer-key': developerKey.trim(),
-    'x-developer-otp': developerOtp.trim()
+    'x-developer-key': developerKeyTrimmed,
+    'x-developer-otp': developerOtpTrimmed
   })
 
   const developerSeedMutation = useMutation({
@@ -661,6 +664,26 @@ export default function Settings() {
     },
     onError: (error) => {
       setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to export database.' })
+    }
+  })
+
+  const {
+    data: developerTelemetry,
+    isFetching: isFetchingDeveloperTelemetry,
+    refetch: refetchDeveloperTelemetry
+  } = useQuery({
+    queryKey: ['developer-telemetry', developerKeyTrimmed, developerOtpTrimmed],
+    queryFn: async () => {
+      const { data } = await api.get('/developer/telemetry', {
+        headers: developerHeaders()
+      })
+      return data
+    },
+    enabled: isDeveloper && Boolean(developerKeyTrimmed) && Boolean(developerOtpTrimmed),
+    refetchOnWindowFocus: false,
+    retry: false,
+    onError: (error) => {
+      setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to load telemetry snapshot.' })
     }
   })
 
@@ -2244,6 +2267,24 @@ export default function Settings() {
                           </button>
                         </div>
                       </form>
+                      {developerKeyTrimmed && developerOtpTrimmed ? (
+                        developerTelemetry ? (
+                          <DeveloperTelemetry
+                            telemetry={developerTelemetry}
+                            onRefresh={() => refetchDeveloperTelemetry()}
+                            isRefreshing={isFetchingDeveloperTelemetry}
+                          />
+                        ) : (
+                          <p className="muted developer-telemetry__status">
+                            {isFetchingDeveloperTelemetry ? 'Loading telemetry snapshot…' : 'Refresh to capture the latest telemetry snapshot.'}
+                          </p>
+                        )
+                      ) : (
+                        <p className="muted developer-telemetry__status">
+                          Enter the developer key and one-time passcode to unlock telemetry snapshots.
+                        </p>
+                      )}
+
                       <div className="developer-tools__actions">
                         <div className="developer-tools__action">
                           <h3>Maintenance console</h3>

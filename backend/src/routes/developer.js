@@ -13,6 +13,7 @@ import { HttpError } from '../utils/httpError.js';
 import { invalidateStockOverviewCache } from '../services/cache.js';
 import { SeedSchema, seedOrganizationData } from '../services/seedImporter.js';
 import { createTerminalSession, consumeTerminalSession, terminateSession } from '../services/terminalSessions.js';
+import { getDeveloperTelemetry } from '../services/developerTelemetry.js';
 import { verifyAccessToken } from '../services/tokenService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -207,6 +208,16 @@ export default function createDeveloperRoutes(io) {
       }
       const session = createTerminalSession({ userId: req.user.id });
       res.status(201).json(session);
+    })
+  );
+
+  router.get(
+    '/telemetry',
+    requireAuth(['developer']),
+    verifyMultiFactor,
+    asyncHandler(async (req, res) => {
+      const telemetry = await getDeveloperTelemetry({ organizationId: req.user.organization_id });
+      res.json(telemetry);
     })
   );
 
