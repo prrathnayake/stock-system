@@ -8,6 +8,7 @@ import { initialiseDatabase } from './startup/bootstrap.js';
 import { initLowStockQueue } from './queues/lowStock.js';
 import { scheduleBackups } from './services/backup.js';
 import { scheduleDailyDigest } from './services/dailyDigest.js';
+import './startup/logging.js';
 
 const app = createApp();
 const server = config.tls.enabled
