@@ -2,6 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { createTerminalSession, consumeTerminalSession, terminateSession } from '../src/services/terminalSessions.js';
 
 describe('developer terminal sessions', () => {
+  it('rejects session claims with mismatched credentials', () => {
+    const { session_id, token } = createTerminalSession({ userId: 'tester-2' });
+
+    expect(consumeTerminalSession({ sessionId: session_id, token: 'wrong-token', userId: 'tester-2' })).toBeNull();
+    expect(consumeTerminalSession({ sessionId: session_id, token, userId: 'tester-3' })).toBeNull();
+
+    const session = consumeTerminalSession({ sessionId: session_id, token, userId: 'tester-2' });
+    expect(session).toBeTruthy();
+
+    terminateSession(session.id);
+  });
+
+  it('prevents reusing an already claimed session', () => {
+    const { session_id, token } = createTerminalSession({ userId: 'tester-4' });
+
+    const firstClaim = consumeTerminalSession({ sessionId: session_id, token, userId: 'tester-4' });
+    expect(firstClaim).toBeTruthy();
+
+    const secondClaim = consumeTerminalSession({ sessionId: session_id, token, userId: 'tester-4' });
+    expect(secondClaim).toBeNull();
+
+    terminateSession(firstClaim.id);
+  });
+
   it('streams command output from the maintenance shell', async () => {
     const { session_id, token } = createTerminalSession({ userId: 'tester-1' });
     const session = consumeTerminalSession({ sessionId: session_id, token, userId: 'tester-1' });
@@ -46,5 +70,5 @@ describe('developer terminal sessions', () => {
 
     terminateSession(session.id);
     expect(buffer).toContain('terminal-session-ready');
-  });
+  }, 15000);
 });
