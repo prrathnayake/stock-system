@@ -115,6 +115,7 @@ export default function createDeveloperRoutes(io) {
         }
         socket.data.sessionId = session.id;
         socket.data.process = session.process;
+        socket.data.shell = session.shell;
         next();
       } catch (error) {
         next(new Error('Unauthorized'));
@@ -134,6 +135,18 @@ export default function createDeveloperRoutes(io) {
         const payload = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
         socket.emit(event, payload);
       };
+
+      const shellInfo = socket.data.shell;
+      if (shellInfo) {
+        const args = Array.isArray(shellInfo.args) && shellInfo.args.length > 0
+          ? ` ${shellInfo.args.join(' ')}`
+          : '';
+        writeChunk(
+          'terminal:data',
+          `[session ready] Shell: ${shellInfo.shell}${args}\nWorking directory: ${shellInfo.cwd}\n` +
+            'Use standard tooling (e.g. `docker compose exec <service> sh`) to access other services.\n\n'
+        );
+      }
 
       const stdoutListener = (chunk) => writeChunk('terminal:data', chunk);
       const stderrListener = (chunk) => writeChunk('terminal:data', chunk);
