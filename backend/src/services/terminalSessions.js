@@ -18,7 +18,17 @@ function parseArgString(value = '') {
 }
 
 function resolveShellConfiguration() {
-  const defaultShell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
+  const defaultShell = (() => {
+    if (process.platform === 'win32') return 'cmd.exe';
+    const candidates = [
+      '/bin/bash',
+      '/usr/bin/bash',
+      '/bin/sh',
+      '/usr/bin/sh'
+    ];
+    const existing = candidates.find((candidate) => existsSync(candidate));
+    return existing || 'sh';
+  })();
   const shell = (process.env.DEVELOPER_TERMINAL_SHELL || defaultShell).trim();
   const explicitArgs = parseArgString(process.env.DEVELOPER_TERMINAL_ARGS);
   const args = explicitArgs.length > 0
