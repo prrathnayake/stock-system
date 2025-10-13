@@ -509,6 +509,17 @@ export const UserActivity = sequelize.define('user_activity', {
   metadata: { type: DataTypes.JSON }
 });
 
+export const TelemetrySnapshot = sequelize.define('telemetry_snapshot', {
+  id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+  organizationId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
+  captured_at: { type: DataTypes.DATE, allowNull: false },
+  payload: { type: DataTypes.JSON, allowNull: false }
+}, {
+  indexes: [
+    { fields: ['organization_id', 'captured_at'], name: 'telemetry_snapshots_org_captured_idx' }
+  ]
+});
+
 applyOrganizationScope(User);
 applyOrganizationScope(Product);
 applyOrganizationScope(Location);
@@ -533,6 +544,7 @@ applyOrganizationScope(Customer);
 applyOrganizationScope(Sale);
 applyOrganizationScope(SaleItem);
 applyOrganizationScope(UserActivity);
+applyOrganizationScope(TelemetrySnapshot);
 
 // Relations
 Organization.hasMany(User, { foreignKey: { allowNull: false } });
@@ -599,6 +611,9 @@ Organization.hasMany(SaleItem, { foreignKey: { allowNull: false } });
 SaleItem.belongsTo(Organization, { foreignKey: { allowNull: false } });
 Organization.hasMany(UserActivity, { foreignKey: { name: 'organizationId', allowNull: false } });
 UserActivity.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
+
+Organization.hasMany(TelemetrySnapshot, { foreignKey: { name: 'organizationId', allowNull: false } });
+TelemetrySnapshot.belongsTo(Organization, { foreignKey: { name: 'organizationId', allowNull: false } });
 
 Location.hasMany(Bin, { onDelete: 'CASCADE' });
 Bin.belongsTo(Location);

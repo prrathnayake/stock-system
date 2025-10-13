@@ -1,10 +1,10 @@
 import os from 'os';
 import { monitorEventLoopDelay } from 'perf_hooks';
+import { TelemetrySnapshot } from '../db.js';
 import { getReadinessReport } from './readiness.js';
 import { getRecentErrorLogs } from './errorLogBuffer.js';
 import { getTerminalEvents } from './terminalAuditLog.js';
 
-const performanceHistory = [];
 const HISTORY_LIMIT = 60;
 
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
@@ -54,22 +54,79 @@ function capturePerformanceSnapshot() {
     eventLoopMonitor.reset();
   }
 
-  performanceHistory.push({
-    captured_at: snapshot.captured_at,
-    load_one: snapshot.load_average?.one ?? null,
-    load_five: snapshot.load_average?.five ?? null,
-    load_fifteen: snapshot.load_average?.fifteen ?? null,
-    rss_mb: snapshot.memory?.rss_mb ?? null,
-    heap_used_mb: snapshot.memory?.heap_used_mb ?? null,
-    event_loop_delay_mean_ms: snapshot.event_loop_delay_ms?.mean ?? null,
-    event_loop_delay_max_ms: snapshot.event_loop_delay_ms?.max ?? null
-  });
+  return snapshot;
+}
 
-  if (performanceHistory.length > HISTORY_LIMIT) {
-    performanceHistory.splice(0, performanceHistory.length - HISTORY_LIMIT);
+function toIsoString(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function normalisePayload(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      console.error('[telemetry] Failed to parse stored snapshot payload', error);
+      return {};
+    }
+  }
+  return raw;
+}
+
+function buildHistoryEntry(record) {
+  if (!record) return null;
+  const payload = normalisePayload(record.payload);
+  const capturedAt = toIsoString(record.captured_at || payload.captured_at);
+
+  return {
+    captured_at: capturedAt,
+    load_one: payload?.load_average?.one ?? null,
+    load_five: payload?.load_average?.five ?? null,
+    load_fifteen: payload?.load_average?.fifteen ?? null,
+    rss_mb: payload?.memory?.rss_mb ?? null,
+    heap_used_mb: payload?.memory?.heap_used_mb ?? null,
+    event_loop_delay_mean_ms: payload?.event_loop_delay_ms?.mean ?? null,
+    event_loop_delay_max_ms: payload?.event_loop_delay_ms?.max ?? null
+  };
+}
+
+async function persistSnapshot(organizationId, snapshot) {
+  if (!organizationId || !snapshot) {
+    return false;
   }
 
-  return snapshot;
+  try {
+    await TelemetrySnapshot.create({
+      organizationId,
+      captured_at: snapshot.captured_at,
+      payload: snapshot
+    });
+    return true;
+  } catch (error) {
+    console.error('[telemetry] Failed to persist snapshot', error);
+    return false;
+  }
+}
+
+async function getSnapshotHistory(organizationId, limit = HISTORY_LIMIT) {
+  if (!organizationId) return [];
+
+  try {
+    const snapshots = await TelemetrySnapshot.findAll({
+      where: { organizationId },
+      order: [['captured_at', 'DESC']],
+      limit
+    });
+
+    return snapshots.reverse().map((snapshot) => buildHistoryEntry(snapshot)).filter(Boolean);
+  } catch (error) {
+    console.error('[telemetry] Failed to load stored snapshots', error);
+    return [];
+  }
 }
 
 export async function getDeveloperTelemetry({ organizationId }) {
@@ -78,6 +135,19 @@ export async function getDeveloperTelemetry({ organizationId }) {
   ]);
 
   const performance = capturePerformanceSnapshot();
+  await persistSnapshot(organizationId, performance);
+
+  let history = await getSnapshotHistory(organizationId);
+  const latestSummary = buildHistoryEntry({ captured_at: performance.captured_at, payload: performance });
+  if (latestSummary) {
+    const lastEntry = history[history.length - 1];
+    if (!lastEntry || lastEntry.captured_at !== latestSummary.captured_at) {
+      const preserved = Math.max(0, HISTORY_LIMIT - 1);
+      const retained = preserved > 0 ? history.slice(-preserved) : [];
+      history = [...retained, latestSummary];
+    }
+  }
+
   const securityChecks = readinessReport?.checks || [];
   const passingChecks = securityChecks.filter((check) => check.ok).length;
   const failingChecks = securityChecks.filter((check) => !check.ok);
@@ -85,7 +155,7 @@ export async function getDeveloperTelemetry({ organizationId }) {
   return {
     generated_at: new Date().toISOString(),
     performance,
-    history: [...performanceHistory],
+    history,
     logs: getRecentErrorLogs(),
     terminal_logs: getTerminalEvents(),
     security: {

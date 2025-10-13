@@ -2659,13 +2659,96 @@ input:focus, select:focus, textarea:focus {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  white-space: pre-wrap;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .terminal__input {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.terminal__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.55);
+  border-left: 2px solid rgba(148, 163, 184, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+}
+
+[data-theme='dark'] .terminal__line {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.4);
+}
+
+.terminal__line pre {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+}
+
+.terminal__line-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  flex-shrink: 0;
+}
+
+.terminal__line--input {
+  background: var(--color-success-soft);
+  border-left-color: var(--color-success);
+}
+
+.terminal__line--output {
+  background: rgba(148, 163, 184, 0.12);
+  border-left-color: rgba(148, 163, 184, 0.45);
+}
+
+[data-theme='dark'] .terminal__line--output {
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.terminal__line--status {
+  background: var(--color-warning-soft);
+  border-left-color: var(--color-warning);
+}
+
+.terminal__line--input .terminal__line-badge {
+  background: rgba(34, 197, 94, 0.25);
+  color: var(--color-success);
+}
+
+.terminal__line--output .terminal__line-badge {
+  background: rgba(148, 163, 184, 0.3);
+  color: #cbd5f5;
+}
+
+.terminal__line--status .terminal__line-badge {
+  background: rgba(249, 115, 22, 0.22);
+  color: var(--color-warning);
+}
+
+.terminal__prompt-symbol {
+  color: var(--color-success);
+  font-weight: 600;
+  margin-right: 4px;
 }
 
 .terminal__prompt {
