@@ -2655,7 +2655,8 @@ input:focus, select:focus, textarea:focus {
   padding: 12px;
   border-radius: var(--radius-md);
   background: rgba(15, 23, 42, 0.5);
-  max-height: 260px;
+  min-height: 320px;
+  max-height: 420px;
   overflow: hidden;
   font-family: 'Fira Mono', 'SFMono-Regular', Menlo, monospace;
   font-size: 13px;

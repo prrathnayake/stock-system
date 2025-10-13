@@ -24,6 +24,7 @@ export function signAccessToken(user) {
       id: user.id,
       role: user.role,
       name: user.full_name,
+      email: user.email || null,
       must_change_password: user.must_change_password,
       organization_id: user.organizationId,
       ui_variant: user.ui_variant

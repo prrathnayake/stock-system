@@ -201,6 +201,7 @@ export default function Settings() {
   const [terminalSession, setTerminalSession] = useState(null)
   const [seedFileName, setSeedFileName] = useState('')
   const seedInputRef = useRef(null)
+  const developerTabRefs = useRef([])
 
   const filteredUsers = useMemo(() => {
     if (!userSearch) return users
@@ -323,6 +324,33 @@ export default function Settings() {
   const developerKeyTrimmed = developerKey.trim()
   const developerOtpTrimmed = developerOtp.trim()
   const [developerSubsection, setDeveloperSubsection] = useState('data')
+  const handleDeveloperTabSelect = useCallback((tabId) => {
+    setDeveloperSubsection(tabId)
+  }, [setDeveloperSubsection])
+  const handleDeveloperTabKeyDown = useCallback((event, index) => {
+    const navigationKeys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+    if (!navigationKeys.includes(event.key)) return
+
+    event.preventDefault()
+
+    let nextIndex = index
+    if (event.key === 'ArrowRight') {
+      nextIndex = (index + 1) % developerToolTabs.length
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + developerToolTabs.length) % developerToolTabs.length
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = developerToolTabs.length - 1
+    }
+
+    const nextTab = developerToolTabs[nextIndex]
+    setDeveloperSubsection(nextTab.id)
+    const nextButton = developerTabRefs.current[nextIndex]
+    if (nextButton) {
+      nextButton.focus()
+    }
+  }, [developerTabRefs, setDeveloperSubsection])
   const [rebuildOtp, setRebuildOtp] = useState('')
   const rebuildOtpTrimmed = rebuildOtp.trim()
   const [rebuildOtpExpiry, setRebuildOtpExpiry] = useState(null)
@@ -2330,15 +2358,21 @@ export default function Settings() {
                       </div>
 
                       <nav className="subnav" role="tablist" aria-label="Developer tool categories">
-                        {developerToolTabs.map((tab) => (
+                        {developerToolTabs.map((tab, index) => (
                           <button
                             key={tab.id}
+                            ref={(element) => {
+                              developerTabRefs.current[index] = element
+                            }}
+                            id={`developer-tab-${tab.id}`}
                             type="button"
                             role="tab"
                             className={`subnav__item${developerSubsection === tab.id ? ' subnav__item--active' : ''}`}
                             aria-selected={developerSubsection === tab.id}
                             aria-controls={`developer-${tab.id}`}
-                            onClick={() => setDeveloperSubsection(tab.id)}
+                            tabIndex={developerSubsection === tab.id ? 0 : -1}
+                            onClick={() => handleDeveloperTabSelect(tab.id)}
+                            onKeyDown={(event) => handleDeveloperTabKeyDown(event, index)}
                           >
                             {tab.label}
                           </button>
@@ -2351,6 +2385,7 @@ export default function Settings() {
                         role="tabpanel"
                         hidden={developerSubsection !== 'data'}
                         aria-hidden={developerSubsection !== 'data'}
+                        aria-labelledby="developer-tab-data"
                       >
                         <form className="form-grid" onSubmit={handleSeedSubmit}>
                           <label
@@ -2461,6 +2496,7 @@ export default function Settings() {
                         role="tabpanel"
                         hidden={developerSubsection !== 'maintenance'}
                         aria-hidden={developerSubsection !== 'maintenance'}
+                        aria-labelledby="developer-tab-maintenance"
                       >
                         <div className="developer-tools__actions">
                           <div className="developer-tools__action">
@@ -2526,10 +2562,14 @@ export default function Settings() {
                         role="tabpanel"
                         hidden={developerSubsection !== 'danger'}
                         aria-hidden={developerSubsection !== 'danger'}
+                        aria-labelledby="developer-tab-danger"
                       >
                         <div className="developer-tools__danger">
                           <h3>Database rebuild</h3>
                           <p className="muted">Drop all data and recreate the workspace using the default seed. This action cannot be undone.</p>
+                          <p className="muted">
+                            Verification codes will be emailed to <strong>{user?.email || 'your developer login email'}</strong>.
+                          </p>
                           <div className="form-grid">
                             <label className="field" data-help="A unique code emailed when you request a rebuild.">
                               <span>Email verification code</span>
