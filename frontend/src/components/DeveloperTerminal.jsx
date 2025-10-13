@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api';
 import { getAccessToken } from '../lib/auth';
@@ -13,6 +13,13 @@ export default function DeveloperTerminal({ session, onClose }) {
   const socketRef = useRef(null);
   const outputRef = useRef(null);
   const inputRef = useRef(null);
+
+  const shortcuts = useMemo(() => ([
+    { label: 'List files', command: 'ls -al' },
+    { label: 'Current path', command: 'pwd' },
+    { label: 'Check disk', command: 'df -h' },
+    { label: 'Node version', command: 'node -v' }
+  ]), []);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -68,17 +75,26 @@ export default function DeveloperTerminal({ session, onClose }) {
     inputRef.current?.focus();
   }, [connected]);
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+  const sendCommand = useCallback((value) => {
+    const trimmed = value?.trim();
+    if (!trimmed) return;
     if (!socketRef.current || !connected) return;
-    const value = command;
-    if (!value.trim()) return;
-    socketRef.current.emit('terminal:input', `${value}\n`);
-    setLines((prev) => [...prev, `$ ${value}\n`]);
-    setCommand('');
+    socketRef.current.emit('terminal:input', `${trimmed}\n`);
+    setLines((prev) => [...prev, `$ ${trimmed}\n`]);
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
+  }, [connected]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    sendCommand(command);
+    setCommand('');
+  };
+
+  const handleShortcut = (value) => {
+    sendCommand(value);
+    setCommand('');
   };
 
   return (
@@ -97,6 +113,20 @@ export default function DeveloperTerminal({ session, onClose }) {
       </div>
       {error && <div className="banner banner--danger">{error}</div>}
       <div className="terminal__output">
+        <div className="terminal__shortcuts" role="group" aria-label="Terminal shortcuts">
+          {shortcuts.map((item) => (
+            <button
+              key={item.command}
+              type="button"
+              className="button button--ghost button--small terminal__shortcut"
+              onClick={() => handleShortcut(item.command)}
+              title={`Run \`${item.command}\``}
+              disabled={!connected}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <pre className="terminal__log" ref={outputRef} aria-live="polite">
           {lines.length === 0 ? 'Initialising session…\n' : lines.join('')}
         </pre>
