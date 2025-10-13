@@ -2302,6 +2302,10 @@ input:focus, select:focus, textarea:focus {
   gap: 24px;
 }
 
+.developer-tools__panel[hidden] {
+  display: none;
+}
+
 .developer-tools__actions {
   display: grid;
   gap: 20px;
