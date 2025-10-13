@@ -15,6 +15,7 @@ import { SeedSchema, seedOrganizationData } from '../services/seedImporter.js';
 import { createTerminalSession, consumeTerminalSession, terminateSession } from '../services/terminalSessions.js';
 import { getDeveloperTelemetry } from '../services/developerTelemetry.js';
 import { verifyAccessToken } from '../services/tokenService.js';
+import { recordTerminalEvent } from '../services/terminalAuditLog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sampleSeedPath = path.resolve(__dirname, '../../../docs/sample-seed.json');
@@ -104,21 +105,60 @@ export default function createDeveloperRoutes(io) {
       try {
         const { sessionId, token, accessToken } = socket.handshake.auth || {};
         if (!sessionId || !token || !accessToken) {
+          recordTerminalEvent({
+            type: 'session_rejected',
+            session_id: sessionId,
+            ip: socket.handshake?.address,
+            user_agent: socket.handshake?.headers?.['user-agent'],
+            details: 'Missing terminal authentication payload.'
+          });
           return next(new Error('Unauthorized'));
         }
         const payload = verifyAccessToken(accessToken);
         if (payload.role !== 'developer') {
+          recordTerminalEvent({
+            type: 'session_rejected',
+            session_id: sessionId,
+            user_id: payload?.id,
+            ip: socket.handshake?.address,
+            user_agent: socket.handshake?.headers?.['user-agent'],
+            details: 'User lacks developer role.'
+          });
           return next(new Error('Forbidden'));
         }
         const session = consumeTerminalSession({ sessionId, token, userId: payload.id });
         if (!session) {
+          recordTerminalEvent({
+            type: 'session_rejected',
+            session_id: sessionId,
+            user_id: payload.id,
+            ip: socket.handshake?.address,
+            user_agent: socket.handshake?.headers?.['user-agent'],
+            details: 'Session unavailable or expired.'
+          });
           return next(new Error('Session unavailable'));
         }
         socket.data.sessionId = session.id;
         socket.data.process = session.process;
         socket.data.shell = session.shell;
+        socket.data.userId = payload.id;
+        recordTerminalEvent({
+          type: 'session_claimed',
+          session_id: session.id,
+          user_id: payload.id,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: 'Terminal session successfully claimed.'
+        });
         next();
       } catch (error) {
+        recordTerminalEvent({
+          type: 'session_rejected',
+          session_id: socket.handshake?.auth?.sessionId,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: 'Access token verification failed.'
+        });
         next(new Error('Unauthorized'));
       }
     });
@@ -128,6 +168,13 @@ export default function createDeveloperRoutes(io) {
       if (!child) {
         socket.emit('terminal:exit', -1);
         socket.disconnect(true);
+        recordTerminalEvent({
+          type: 'session_error',
+          session_id: socket.data.sessionId,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: 'Terminal child process missing during connection.'
+        });
         return;
       }
 
@@ -147,6 +194,14 @@ export default function createDeveloperRoutes(io) {
           `[session ready] Shell: ${shellInfo.shell}${args}\nWorking directory: ${shellInfo.cwd}\n` +
             'Use standard tooling (e.g. `docker compose exec <service> sh`) to access other services.\n\n'
         );
+        recordTerminalEvent({
+          type: 'session_connected',
+          session_id: socket.data.sessionId,
+          user_id: socket.data?.userId,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: `Shell ${shellInfo.shell}${args}`
+        });
       }
 
       const stdoutListener = (chunk) => writeChunk('terminal:data', chunk);
@@ -154,6 +209,13 @@ export default function createDeveloperRoutes(io) {
       const exitListener = (code) => {
         socket.emit('terminal:exit', typeof code === 'number' ? code : null);
         terminateSession(socket.data.sessionId);
+        recordTerminalEvent({
+          type: 'session_closed',
+          session_id: socket.data.sessionId,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: typeof code === 'number' ? `Process exited with code ${code}` : 'Process terminated.'
+        });
       };
 
       child.stdout.on('data', stdoutListener);
@@ -162,6 +224,13 @@ export default function createDeveloperRoutes(io) {
       child.on('error', (error) => {
         socket.emit('terminal:data', `\n[terminal error] ${error.message}\n`);
         terminateSession(socket.data.sessionId);
+        recordTerminalEvent({
+          type: 'session_error',
+          session_id: socket.data.sessionId,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: error.message
+        });
       });
 
       socket.on('terminal:input', (input) => {
@@ -170,11 +239,25 @@ export default function createDeveloperRoutes(io) {
           child.stdin.write(input);
         } catch (error) {
           socket.emit('terminal:data', `\n[write error] ${error.message}\n`);
+          recordTerminalEvent({
+            type: 'session_error',
+            session_id: socket.data.sessionId,
+            ip: socket.handshake?.address,
+            user_agent: socket.handshake?.headers?.['user-agent'],
+            details: `stdin write failure: ${error.message}`
+          });
         }
       });
 
       socket.on('disconnect', () => {
         terminateSession(socket.data.sessionId);
+        recordTerminalEvent({
+          type: 'session_disconnected',
+          session_id: socket.data.sessionId,
+          ip: socket.handshake?.address,
+          user_agent: socket.handshake?.headers?.['user-agent'],
+          details: 'Client disconnected.'
+        });
       });
     });
   } else {
@@ -207,6 +290,14 @@ export default function createDeveloperRoutes(io) {
         throw new HttpError(503, 'Web terminal support is unavailable');
       }
       const session = createTerminalSession({ userId: req.user.id });
+      recordTerminalEvent({
+        type: 'session_created',
+        session_id: session.session_id,
+        user_id: req.user.id,
+        ip: req.ip,
+        user_agent: req.get('user-agent'),
+        details: 'Terminal session issued via developer tools.'
+      });
       res.status(201).json(session);
     })
   );

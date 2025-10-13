@@ -80,13 +80,16 @@ export default function DeveloperTerminal({ session, onClose }) {
       setConnected(false);
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
       setConnected(false);
+      const message = typeof reason === 'string' && reason ? reason : 'Connection closed.';
+      setLines((prev) => [...prev, `\n[disconnected] ${message}\n`]);
     });
 
     socket.on('connect_error', (err) => {
       setError(err?.message || 'Unable to connect to maintenance shell.');
       setConnected(false);
+      setLines((prev) => [...prev, `\n[connect error] ${err?.message || 'Unable to connect to maintenance shell.'}\n`]);
     });
 
     return () => {
