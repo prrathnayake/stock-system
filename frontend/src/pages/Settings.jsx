@@ -103,6 +103,12 @@ const SAMPLE_SEED_TEMPLATE = `{
   ]
 }`
 
+const developerToolTabs = [
+  { id: 'data', label: 'Data tools' },
+  { id: 'maintenance', label: 'Maintenance' },
+  { id: 'danger', label: 'Danger zone' }
+]
+
 export default function Settings() {
   const { user, setUser, organization } = useAuth()
   const location = useLocation()
@@ -316,6 +322,10 @@ export default function Settings() {
   const [developerOtp, setDeveloperOtp] = useState('')
   const developerKeyTrimmed = developerKey.trim()
   const developerOtpTrimmed = developerOtp.trim()
+  const [developerSubsection, setDeveloperSubsection] = useState('data')
+  const [rebuildOtp, setRebuildOtp] = useState('')
+  const rebuildOtpTrimmed = rebuildOtp.trim()
+  const [rebuildOtpExpiry, setRebuildOtpExpiry] = useState(null)
   const [userForm, setUserForm] = useState({
     full_name: '',
     email: '',
@@ -589,8 +599,12 @@ export default function Settings() {
     }
   })
 
+  const developerPrimaryHeaders = () => ({
+    'x-developer-key': developerKeyTrimmed
+  })
+
   const developerHeaders = () => ({
-    'x-developer-key': developerKeyTrimmed,
+    ...developerPrimaryHeaders(),
     'x-developer-otp': developerOtpTrimmed
   })
 
@@ -664,6 +678,71 @@ export default function Settings() {
     },
     onError: (error) => {
       setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to export database.' })
+    }
+  })
+
+  const maintenanceCleanupMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/developer/maintenance/cleanup', {}, {
+        headers: developerHeaders()
+      })
+      return data
+    },
+    onSuccess: (data) => {
+      setDeveloperBanner({ type: 'success', message: data?.message || 'Maintenance tasks completed successfully.' })
+    },
+    onError: (error) => {
+      setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to run maintenance tasks.' })
+    }
+  })
+
+  const sendRebuildOtpMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post(
+        '/developer/otp',
+        { purpose: 'database-rebuild' },
+        { headers: developerPrimaryHeaders() }
+      )
+      return data
+    },
+    onSuccess: (data) => {
+      setDeveloperBanner({
+        type: 'info',
+        message: 'Verification code sent to your email. Enter it below to confirm the rebuild.'
+      })
+      setRebuildOtp('')
+      setRebuildOtpExpiry(data?.expires_at || null)
+    },
+    onError: (error) => {
+      setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to send verification code.' })
+    }
+  })
+
+  const rebuildDatabaseMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post(
+        '/developer/database/rebuild',
+        {},
+        {
+          headers: {
+            ...developerPrimaryHeaders(),
+            'x-developer-otp': rebuildOtpTrimmed
+          }
+        }
+      )
+      return data
+    },
+    onSuccess: (data) => {
+      setDeveloperBanner({
+        type: 'success',
+        message: data?.message || 'Database rebuild completed. Sign back in to continue.'
+      })
+      setRebuildOtp('')
+      setRebuildOtpExpiry(null)
+      queryClient.invalidateQueries({ predicate: () => true })
+    },
+    onError: (error) => {
+      setDeveloperBanner({ type: 'error', message: error.response?.data?.error || 'Unable to rebuild database.' })
     }
   })
 
@@ -1072,6 +1151,37 @@ export default function Settings() {
     setDeveloperBanner(null)
     if (!ensureDeveloperSecrets()) return
     exportDatabaseMutation.mutate()
+  }
+
+  const handleRunMaintenance = () => {
+    setDeveloperBanner(null)
+    if (!ensureDeveloperSecrets()) return
+    maintenanceCleanupMutation.mutate()
+  }
+
+  const handleSendRebuildOtp = () => {
+    setDeveloperBanner(null)
+    if (!developerKeyTrimmed) {
+      setDeveloperBanner({
+        type: 'error',
+        message: 'Provide the developer key before requesting a verification code.'
+      })
+      return
+    }
+    sendRebuildOtpMutation.mutate()
+  }
+
+  const handleRebuildDatabase = () => {
+    setDeveloperBanner(null)
+    if (!developerKeyTrimmed) {
+      setDeveloperBanner({ type: 'error', message: 'Provide the developer key before rebuilding the database.' })
+      return
+    }
+    if (!rebuildOtpTrimmed) {
+      setDeveloperBanner({ type: 'error', message: 'Enter the verification code sent to your email.' })
+      return
+    }
+    rebuildDatabaseMutation.mutate()
   }
 
   const handleCloseTerminal = () => {
@@ -2198,7 +2308,7 @@ export default function Settings() {
                           {developerBanner.message}
                         </div>
                       )}
-                      <form className="form-grid" onSubmit={handleSeedSubmit}>
+                      <div className="form-grid developer-tools__credentials">
                         <label className="field" data-help="Primary developer credential sent as X-Developer-Key.">
                           <span>Developer key</span>
                           <input
@@ -2208,167 +2318,257 @@ export default function Settings() {
                             autoComplete="off"
                           />
                         </label>
-                        <label className="field field--with-action" data-help="Second-factor code sent as X-Developer-Otp for privileged actions.">
+                        <label className="field" data-help="Second-factor code sent as X-Developer-Otp for privileged actions.">
                           <span>One-time passcode</span>
-                          <div className="field__control-group">
-                            <input
-                              value={developerOtp}
-                              onChange={(e) => setDeveloperOtp(e.target.value)}
-                              placeholder="e.g. 123456"
-                              autoComplete="off"
-                            />
-                            <button
-                              className="button button--ghost field__inline-action"
-                              type="button"
-                              onClick={handleLaunchTerminal}
-                              disabled={
-                                launchTerminalMutation.isLoading ||
-                                !developerKeyTrimmed ||
-                                !developerOtpTrimmed
-                              }
-                            >
-                              {launchTerminalMutation.isLoading ? 'Starting…' : 'Init web terminal'}
-                            </button>
-                          </div>
-                        </label>
-                        <label
-                          className="field field--span"
-                          data-help="Upload a JSON file describing products, locations, bins and starting stock levels."
-                        >
-                          <span>Seed file</span>
                           <input
-                            ref={seedInputRef}
-                            type="file"
-                            accept="application/json"
-                            onChange={handleSeedFileChange}
+                            value={developerOtp}
+                            onChange={(e) => setDeveloperOtp(e.target.value)}
+                            placeholder="e.g. 123456"
+                            autoComplete="one-time-code"
                           />
-                          {seedFileName && (
-                            <small className="muted">
-                              Loaded {seedFileName}
-                              {seedPreview && (
-                                <>
-                                  {' '}
-                                  · {seedPreview.products} products, {seedPreview.locations} locations, {seedPreview.bins} bins, {seedPreview.stock}
-                                  {' '}stock rows
-                                </>
-                              )}
-                            </small>
-                          )}
                         </label>
-                        <div className="form-actions">
-                          <button
-                            className="button button--ghost"
-                            type="button"
-                            onClick={handleSeedDownload}
-                            disabled={developerSeedMutation.isLoading}
-                          >
-                            Download sample JSON
-                          </button>
-                          <button
-                            className="button button--ghost"
-                            type="button"
-                            onClick={handleSeedClear}
-                            disabled={developerSeedMutation.isLoading || !seedPayload}
-                          >
-                            Clear selection
-                          </button>
-                          <button
-                            className="button button--primary"
-                            type="submit"
-                            disabled={developerSeedMutation.isLoading}
-                          >
-                            {developerSeedMutation.isLoading ? 'Seeding…' : 'Seed database'}
-                          </button>
-                        </div>
-                      </form>
-                      {developerKeyTrimmed && developerOtpTrimmed ? (
-                        developerTelemetry ? (
-                          <DeveloperTelemetry
-                            telemetry={developerTelemetry}
-                            onRefresh={() => refetchDeveloperTelemetry()}
-                            isRefreshing={isFetchingDeveloperTelemetry}
-                          />
-                        ) : (
-                          <p className="muted developer-telemetry__status">
-                            {isFetchingDeveloperTelemetry ? 'Loading telemetry snapshot…' : 'Refresh to capture the latest telemetry snapshot.'}
-                          </p>
-                        )
-                      ) : (
-                        <p className="muted developer-telemetry__status">
-                          Enter the developer key and one-time passcode to unlock telemetry snapshots.
-                        </p>
-                      )}
+                      </div>
 
-                      <div className="developer-tools__actions">
-                        <div className="developer-tools__action">
-                          <h3>Maintenance console</h3>
-                          <p className="muted">Launch an ephemeral shell session secured by multi-factor credentials.</p>
-                          <div className="developer-tools__buttons">
+                      <nav className="subnav" role="tablist" aria-label="Developer tool categories">
+                        {developerToolTabs.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            className={`subnav__item${developerSubsection === tab.id ? ' subnav__item--active' : ''}`}
+                            aria-selected={developerSubsection === tab.id}
+                            aria-controls={`developer-${tab.id}`}
+                            onClick={() => setDeveloperSubsection(tab.id)}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </nav>
+
+                      <div
+                        id="developer-data"
+                        className="developer-tools__panel"
+                        role="tabpanel"
+                        hidden={developerSubsection !== 'data'}
+                        aria-hidden={developerSubsection !== 'data'}
+                      >
+                        <form className="form-grid" onSubmit={handleSeedSubmit}>
+                          <label
+                            className="field field--span"
+                            data-help="Upload a JSON file describing products, locations, bins and starting stock levels."
+                          >
+                            <span>Seed file</span>
+                            <input
+                              ref={seedInputRef}
+                              type="file"
+                              accept="application/json"
+                              onChange={handleSeedFileChange}
+                            />
+                            {seedFileName && (
+                              <small className="muted">
+                                Loaded {seedFileName}
+                                {seedPreview && (
+                                  <>
+                                    {' '}
+                                    · {seedPreview.products} products, {seedPreview.locations} locations, {seedPreview.bins} bins, {seedPreview.stock}
+                                    {' '}stock rows
+                                  </>
+                                )}
+                              </small>
+                            )}
+                          </label>
+                          <div className="form-actions">
+                            <button
+                              className="button button--ghost"
+                              type="button"
+                              onClick={handleSeedDownload}
+                              disabled={developerSeedMutation.isLoading}
+                            >
+                              Download sample JSON
+                            </button>
+                            <button
+                              className="button button--ghost"
+                              type="button"
+                              onClick={handleSeedClear}
+                              disabled={developerSeedMutation.isLoading || !seedPayload}
+                            >
+                              Clear selection
+                            </button>
                             <button
                               className="button button--primary"
-                              type="button"
-                              onClick={handleLaunchTerminal}
-                              disabled={
-                                launchTerminalMutation.isLoading ||
-                                !developerKeyTrimmed ||
-                                !developerOtpTrimmed
-                              }
+                              type="submit"
+                              disabled={developerSeedMutation.isLoading}
                             >
-                              {launchTerminalMutation.isLoading ? 'Starting…' : 'Launch web terminal'}
+                              {developerSeedMutation.isLoading ? 'Seeding…' : 'Seed database'}
                             </button>
                           </div>
-                          {terminalSession && (
-                            <>
-                              <p className="muted developer-tools__session-meta">
-                                Session expires in approximately {Math.max(1, Math.round((terminalSession.expires_in || 0) / 60))} minutes.
-                              </p>
-                              <DeveloperTerminal session={terminalSession} onClose={handleCloseTerminal} />
-                            </>
-                          )}
-                        </div>
-                        <div className="developer-tools__action">
-                          <h3>Data export</h3>
-                          <p className="muted">Download the latest workspace data as structured JSON for offline analysis.</p>
-                          <button
-                            className="button button--ghost"
-                            type="button"
-                            onClick={handleExportDatabase}
-                            disabled={exportDatabaseMutation.isLoading}
-                          >
-                            {exportDatabaseMutation.isLoading ? 'Preparing…' : 'Download export JSON'}
-                          </button>
+                        </form>
+
+                        {developerKeyTrimmed && developerOtpTrimmed ? (
+                          developerTelemetry ? (
+                            <DeveloperTelemetry
+                              telemetry={developerTelemetry}
+                              onRefresh={() => refetchDeveloperTelemetry()}
+                              isRefreshing={isFetchingDeveloperTelemetry}
+                            />
+                          ) : (
+                            <p className="muted developer-telemetry__status">
+                              {isFetchingDeveloperTelemetry ? 'Loading telemetry snapshot…' : 'Refresh to capture the latest telemetry snapshot.'}
+                            </p>
+                          )
+                        ) : (
+                          <p className="muted developer-telemetry__status">
+                            Enter the developer key and one-time passcode to unlock telemetry snapshots.
+                          </p>
+                        )}
+
+                        {seedResult?.summary && (
+                          <div className="seed-summary">
+                            <h4>Last seed summary</h4>
+                            <ul>
+                              <li>
+                                Products: {seedResult.summary.products?.created ?? 0} created,{' '}
+                                {seedResult.summary.products?.updated ?? 0} updated
+                              </li>
+                              <li>
+                                Locations: {seedResult.summary.locations?.created ?? 0} created,{' '}
+                                {seedResult.summary.locations?.updated ?? 0} updated
+                              </li>
+                              <li>
+                                Bins: {seedResult.summary.bins?.created ?? 0} created,{' '}
+                                {seedResult.summary.bins?.updated ?? 0} updated
+                              </li>
+                              <li>
+                                Stock rows: {seedResult.summary.stock?.created ?? 0} created,{' '}
+                                {seedResult.summary.stock?.updated ?? 0} updated
+                              </li>
+                            </ul>
+                            {seedResult.seeded_at && (
+                              <p className="muted">Completed {new Date(seedResult.seeded_at).toLocaleString()}</p>
+                            )}
+                          </div>
+                        )}
+
+                        <details className="seed-sample">
+                          <summary>View sample JSON structure</summary>
+                          <pre><code>{SAMPLE_SEED_TEMPLATE}</code></pre>
+                        </details>
+                      </div>
+
+                      <div
+                        id="developer-maintenance"
+                        className="developer-tools__panel"
+                        role="tabpanel"
+                        hidden={developerSubsection !== 'maintenance'}
+                        aria-hidden={developerSubsection !== 'maintenance'}
+                      >
+                        <div className="developer-tools__actions">
+                          <div className="developer-tools__action">
+                            <h3>Maintenance console</h3>
+                            <p className="muted">Launch an ephemeral shell session secured by multi-factor credentials.</p>
+                            <div className="developer-tools__buttons">
+                              <button
+                                className="button button--primary"
+                                type="button"
+                                onClick={handleLaunchTerminal}
+                                disabled={
+                                  launchTerminalMutation.isLoading ||
+                                  !developerKeyTrimmed ||
+                                  !developerOtpTrimmed
+                                }
+                              >
+                                {launchTerminalMutation.isLoading ? 'Starting…' : 'Launch web terminal'}
+                              </button>
+                            </div>
+                            {terminalSession && (
+                              <>
+                                <p className="muted developer-tools__session-meta">
+                                  Session expires in approximately {Math.max(1, Math.round((terminalSession.expires_in || 0) / 60))} minutes.
+                                </p>
+                                <DeveloperTerminal session={terminalSession} onClose={handleCloseTerminal} />
+                              </>
+                            )}
+                          </div>
+
+                          <div className="developer-tools__action">
+                            <h3>Integrity cleanup</h3>
+                            <p className="muted">Re-run database maintenance tasks to repair indexes and normalise data.</p>
+                            <div className="developer-tools__buttons">
+                              <button
+                                className="button button--ghost"
+                                type="button"
+                                onClick={handleRunMaintenance}
+                                disabled={maintenanceCleanupMutation.isLoading}
+                              >
+                                {maintenanceCleanupMutation.isLoading ? 'Running…' : 'Run maintenance cleanup'}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="developer-tools__action">
+                            <h3>Data export</h3>
+                            <p className="muted">Download the latest workspace data as structured JSON for offline analysis.</p>
+                            <button
+                              className="button button--ghost"
+                              type="button"
+                              onClick={handleExportDatabase}
+                              disabled={exportDatabaseMutation.isLoading}
+                            >
+                              {exportDatabaseMutation.isLoading ? 'Preparing…' : 'Download export JSON'}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      {seedResult?.summary && (
-                        <div className="seed-summary">
-                          <h4>Last seed summary</h4>
-                          <ul>
-                            <li>
-                              Products: {seedResult.summary.products?.created ?? 0} created,{' '}
-                              {seedResult.summary.products?.updated ?? 0} updated
-                            </li>
-                            <li>
-                              Locations: {seedResult.summary.locations?.created ?? 0} created,{' '}
-                              {seedResult.summary.locations?.updated ?? 0} updated
-                            </li>
-                            <li>
-                              Bins: {seedResult.summary.bins?.created ?? 0} created,{' '}
-                              {seedResult.summary.bins?.updated ?? 0} updated
-                            </li>
-                            <li>
-                              Stock rows: {seedResult.summary.stock?.created ?? 0} created,{' '}
-                              {seedResult.summary.stock?.updated ?? 0} updated
-                            </li>
-                          </ul>
-                          {seedResult.seeded_at && (
-                            <p className="muted">Completed {new Date(seedResult.seeded_at).toLocaleString()}</p>
-                          )}
+
+                      <div
+                        id="developer-danger"
+                        className="developer-tools__panel"
+                        role="tabpanel"
+                        hidden={developerSubsection !== 'danger'}
+                        aria-hidden={developerSubsection !== 'danger'}
+                      >
+                        <div className="developer-tools__danger">
+                          <h3>Database rebuild</h3>
+                          <p className="muted">Drop all data and recreate the workspace using the default seed. This action cannot be undone.</p>
+                          <div className="form-grid">
+                            <label className="field" data-help="A unique code emailed when you request a rebuild.">
+                              <span>Email verification code</span>
+                              <input
+                                value={rebuildOtp}
+                                onChange={(e) => setRebuildOtp(e.target.value)}
+                                placeholder="Enter the emailed code"
+                                autoComplete="one-time-code"
+                              />
+                              {rebuildOtpExpiry && (
+                                <small className="muted">
+                                  Code expires {new Date(rebuildOtpExpiry).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                </small>
+                              )}
+                            </label>
+                          </div>
+                          <div className="developer-tools__buttons">
+                            <button
+                              className="button button--ghost"
+                              type="button"
+                              onClick={handleSendRebuildOtp}
+                              disabled={sendRebuildOtpMutation.isLoading || !developerKeyTrimmed}
+                            >
+                              {sendRebuildOtpMutation.isLoading ? 'Sending…' : 'Email verification code'}
+                            </button>
+                            <button
+                              className="button button--danger"
+                              type="button"
+                              onClick={handleRebuildDatabase}
+                              disabled={rebuildDatabaseMutation.isLoading || !rebuildOtpTrimmed}
+                            >
+                              {rebuildDatabaseMutation.isLoading ? 'Rebuilding…' : 'Rebuild database'}
+                            </button>
+                          </div>
+                          <p className="muted">
+                            All active sessions will be signed out after the rebuild completes. Ensure you have copied any required data before proceeding.
+                          </p>
                         </div>
-                      )}
-                      <details className="seed-sample">
-                        <summary>View sample JSON structure</summary>
-                        <pre><code>{SAMPLE_SEED_TEMPLATE}</code></pre>
-                      </details>
+                      </div>
                     </div>
                   </div>
                 </section>

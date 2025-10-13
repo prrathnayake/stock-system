@@ -6,7 +6,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   cleanupDuplicateCustomerPhoneIndexes,
-  cleanupDuplicateOrganizationSlugIndexes
+  cleanupDuplicateOrganizationSlugIndexes,
+  initialiseDatabase
 } from '../startup/bootstrap.js';
 import { sequelize, Product, Location, Bin, StockLevel } from '../db.js';
 import { HttpError } from '../utils/httpError.js';
@@ -16,27 +17,96 @@ import { createTerminalSession, consumeTerminalSession, terminateSession } from 
 import { getDeveloperTelemetry } from '../services/developerTelemetry.js';
 import { verifyAccessToken } from '../services/tokenService.js';
 import { recordTerminalEvent } from '../services/terminalAuditLog.js';
+import { config } from '../config.js';
+import { sendEmail } from '../services/email.js';
+import { issueDeveloperOtp, verifyDeveloperOtp } from '../services/developerOtp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sampleSeedPath = path.resolve(__dirname, '../../../docs/sample-seed.json');
 
-function verifyMultiFactor(req, res, next) {
+function checkPrimarySecret(req, res) {
   const primarySecret = (process.env.DEVELOPER_API_KEY || '').trim();
-  const secondarySecret = (process.env.DEVELOPER_SECOND_FACTOR || '').trim();
-
-  if (!primarySecret || !secondarySecret) {
-    console.warn('[developer] Multi-factor secrets are not configured.');
-    return res.status(500).json({ error: 'Developer multi-factor secrets are not configured' });
+  if (!primarySecret) {
+    console.warn('[developer] Developer API key is not configured.');
+    res.status(500).json({ error: 'Developer multi-factor secrets are not configured' });
+    return false;
   }
-
   const providedPrimary = (req.headers['x-developer-key'] || '').toString().trim();
-  const providedSecondary = (req.headers['x-developer-otp'] || '').toString().trim();
-
-  if (providedPrimary !== primarySecret || providedSecondary !== secondarySecret) {
-    return res.status(401).json({ error: 'Developer multi-factor verification failed' });
+  if (providedPrimary !== primarySecret) {
+    res.status(401).json({ error: 'Developer primary credential verification failed' });
+    return false;
   }
+  return true;
+}
 
-  return next();
+function mapOtpFailure(reason) {
+  switch (reason) {
+    case 'expired':
+      return 'The verification code has expired. Request a new code and try again.';
+    case 'mismatch':
+      return 'The verification code is incorrect.';
+    case 'not-found':
+      return 'Request a new verification code before attempting this action.';
+    case 'missing-code':
+      return 'Provide the verification code that was sent to your email address.';
+    case 'missing-user':
+      return 'Developer identity unavailable for verification.';
+    default:
+      return 'Developer multi-factor verification failed.';
+  }
+}
+
+function verifyPrimaryFactor(req, res, next) {
+  if (!checkPrimarySecret(req, res)) {
+    return;
+  }
+  next();
+}
+
+function verifyMultiFactor({ purpose = 'general', requireFreshOtp = false } = {}) {
+  return (req, res, next) => {
+    if (!checkPrimarySecret(req, res)) {
+      return;
+    }
+
+    const providedSecondary = (req.headers['x-developer-otp'] || '').toString().trim();
+    if (!providedSecondary) {
+      res.status(401).json({ error: 'Provide the developer verification code.' });
+      return;
+    }
+
+    const secondarySecret = (process.env.DEVELOPER_SECOND_FACTOR || '').trim();
+    if (!requireFreshOtp && secondarySecret && providedSecondary === secondarySecret) {
+      next();
+      return;
+    }
+
+    if (!req.user?.id) {
+      res.status(500).json({ error: 'Developer identity unavailable for verification.' });
+      return;
+    }
+
+    const outcome = verifyDeveloperOtp({
+      userId: req.user.id,
+      purpose,
+      code: providedSecondary,
+      consume: requireFreshOtp
+    });
+
+    if (!outcome.ok) {
+      res.status(401).json({ error: mapOtpFailure(outcome.reason) });
+      return;
+    }
+
+    next();
+  };
+}
+
+function describeOtpPurpose(purpose) {
+  if (purpose === 'database-rebuild') {
+    return 'database rebuild request';
+  }
+  return 'developer operations';
 }
 
 async function buildExportPayload(organizationId) {
@@ -265,9 +335,46 @@ export default function createDeveloperRoutes(io) {
   }
 
   router.post(
+    '/otp',
+    requireAuth(['developer']),
+    verifyPrimaryFactor,
+    asyncHandler(async (req, res) => {
+      if (!req.user?.email) {
+        throw new HttpError(400, 'Developer account is missing an email address');
+      }
+
+      const requestedPurpose = typeof req.body?.purpose === 'string' ? req.body.purpose.trim().toLowerCase() : 'general';
+      const purpose = requestedPurpose || 'general';
+      const { code, expiresAt } = issueDeveloperOtp({ userId: req.user.id, purpose });
+
+      const organizationName = config.bootstrap.organization.name || 'Stock System';
+      const subject = `${organizationName} developer verification code`;
+      const friendlyPurpose = describeOtpPurpose(purpose);
+      const text = `Use the one-time code ${code} to continue with the ${friendlyPurpose}. This code expires in 5 minutes.`;
+      const html = `
+        <p>Use the verification code below to continue with the ${friendlyPurpose}.</p>
+        <p style="font-size:26px; font-weight:700; letter-spacing:6px;">${code}</p>
+        <p>This code expires in 5 minutes.</p>
+      `;
+
+      const delivery = await sendEmail({ to: req.user.email, subject, text, html });
+      if (!delivery.delivered) {
+        console.error('[developer] Failed to deliver verification code email:', delivery.error || delivery);
+        throw new HttpError(503, 'Unable to send verification code email. Check mail configuration.');
+      }
+
+      res.json({
+        ok: true,
+        purpose,
+        expires_at: new Date(expiresAt).toISOString()
+      });
+    })
+  );
+
+  router.post(
     '/maintenance/cleanup',
     requireAuth(['developer']),
-    verifyMultiFactor,
+    verifyMultiFactor(),
     asyncHandler(async (_req, res) => {
       await cleanupDuplicateOrganizationSlugIndexes();
       await cleanupDuplicateCustomerPhoneIndexes();
@@ -276,7 +383,23 @@ export default function createDeveloperRoutes(io) {
       res.json({
         ok: true,
         completed_at: new Date().toISOString(),
-        message: 'Database maintenance completed successfully'
+        message: 'Database maintenance completed successfully.'
+      });
+    })
+  );
+
+  router.post(
+    '/database/rebuild',
+    requireAuth(['developer']),
+    verifyMultiFactor({ purpose: 'database-rebuild', requireFreshOtp: true }),
+    asyncHandler(async (_req, res) => {
+      await sequelize.drop();
+      await initialiseDatabase();
+
+      res.json({
+        ok: true,
+        rebuilt_at: new Date().toISOString(),
+        message: 'Database rebuilt successfully. All users will need to sign in again.'
       });
     })
   );
@@ -284,7 +407,7 @@ export default function createDeveloperRoutes(io) {
   router.post(
     '/sessions/terminal',
     requireAuth(['developer']),
-    verifyMultiFactor,
+    verifyMultiFactor(),
     asyncHandler(async (req, res) => {
       if (!terminalNamespace) {
         throw new HttpError(503, 'Web terminal support is unavailable');
@@ -305,7 +428,7 @@ export default function createDeveloperRoutes(io) {
   router.get(
     '/telemetry',
     requireAuth(['developer']),
-    verifyMultiFactor,
+    verifyMultiFactor(),
     asyncHandler(async (req, res) => {
       const telemetry = await getDeveloperTelemetry({ organizationId: req.user.organization_id });
       res.json(telemetry);
@@ -316,7 +439,7 @@ export default function createDeveloperRoutes(io) {
   router.get(
     '/export',
     requireAuth(['developer']),
-    verifyMultiFactor,
+    verifyMultiFactor(),
     asyncHandler(async (req, res) => {
       const payload = await buildExportPayload(req.user.organization_id);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -329,7 +452,7 @@ export default function createDeveloperRoutes(io) {
   router.get(
     '/seed/sample',
     requireAuth(['developer']),
-    verifyMultiFactor,
+    verifyMultiFactor(),
     asyncHandler(async (_req, res) => {
       let sample;
       try {
@@ -346,7 +469,7 @@ export default function createDeveloperRoutes(io) {
   router.post(
     '/seed',
     requireAuth(['developer']),
-    verifyMultiFactor,
+    verifyMultiFactor(),
     asyncHandler(async (req, res) => {
       const parse = SeedSchema.safeParse(req.body);
       if (!parse.success) {

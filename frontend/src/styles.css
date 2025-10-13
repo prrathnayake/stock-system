@@ -2291,6 +2291,17 @@ input:focus, select:focus, textarea:focus {
   color: var(--color-text);
 }
 
+.developer-tools__credentials {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.developer-tools__panel {
+  display: grid;
+  gap: 24px;
+}
+
 .developer-tools__actions {
   display: grid;
   gap: 20px;
@@ -2315,6 +2326,23 @@ input:focus, select:focus, textarea:focus {
 .developer-tools__session-meta {
   margin: 8px 0;
   font-size: 13px;
+}
+
+.developer-tools__danger {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: var(--color-danger-soft);
+  display: grid;
+  gap: 16px;
+}
+
+.developer-tools__danger h3 {
+  margin: 0;
+}
+
+.developer-tools__danger .developer-tools__buttons {
+  justify-content: flex-start;
 }
 
 .developer-telemetry {
