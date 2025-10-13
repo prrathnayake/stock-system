@@ -25,21 +25,66 @@ function resolveSocketBaseUrl() {
   }
 }
 
+function isArrayBufferView(value) {
+  return typeof ArrayBuffer !== 'undefined'
+    && typeof ArrayBuffer.isView === 'function'
+    && ArrayBuffer.isView(value);
+}
+
 export default function DeveloperTerminal({ session, onClose }) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
-  const [lines, setLines] = useState([]);
+  const [entries, setEntries] = useState([]);
   const [command, setCommand] = useState('');
   const socketRef = useRef(null);
   const outputRef = useRef(null);
   const inputRef = useRef(null);
+  const decoderRef = useRef(null);
+  const lineCounterRef = useRef(0);
 
   const shortcuts = useMemo(() => ([
     { label: 'List files', command: 'ls -al' },
     { label: 'Current path', command: 'pwd' },
     { label: 'Check disk', command: 'df -h' },
-    { label: 'Node version', command: 'node -v' }
+    { label: 'Node version', command: 'node -v' },
+    { label: 'System uptime', command: 'uptime' },
+    { label: 'Memory usage', command: 'free -h' },
+    { label: 'List processes', command: 'ps aux | head -n 10' }
   ]), []);
+
+  const appendLine = useCallback((kind, value) => {
+    if (value === null || typeof value === 'undefined') return;
+
+    let text;
+    if (typeof value === 'string') {
+      text = value;
+    } else if (typeof TextDecoder !== 'undefined' && (value instanceof ArrayBuffer || isArrayBufferView(value))) {
+      if (!decoderRef.current) {
+        decoderRef.current = new TextDecoder();
+      }
+      let view;
+      if (value instanceof ArrayBuffer) {
+        view = new Uint8Array(value);
+      } else if (value?.buffer instanceof ArrayBuffer) {
+        view = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      }
+      text = view ? decoderRef.current.decode(view) : String(value);
+    } else {
+      text = String(value);
+    }
+
+    if (typeof text !== 'string') {
+      text = String(text);
+    }
+
+    const normalized = text.replace(/\r/g, '');
+    if (normalized.length === 0) {
+      return;
+    }
+
+    lineCounterRef.current += 1;
+    setEntries((prev) => [...prev, { id: lineCounterRef.current, kind, text: normalized }]);
+  }, []);
 
   const endpoint = useMemo(() => {
     const baseUrl = resolveSocketBaseUrl();
@@ -48,9 +93,15 @@ export default function DeveloperTerminal({ session, onClose }) {
   }, []);
 
   useEffect(() => {
+    lineCounterRef.current = 0;
+    setEntries([]);
+  }, [session?.session_id]);
+
+  useEffect(() => {
     if (!session) return undefined;
     if (!endpoint) {
       setError('Unable to resolve maintenance shell endpoint.');
+      appendLine('status', 'Unable to resolve maintenance shell endpoint.');
       return undefined;
     }
     const socket = io(endpoint, {
@@ -67,40 +118,41 @@ export default function DeveloperTerminal({ session, onClose }) {
     socket.on('connect', () => {
       setConnected(true);
       setError(null);
-      setLines((prev) => [...prev, '[connected to maintenance shell]\n']);
+      appendLine('status', 'Connected to maintenance shell.');
     });
 
     socket.on('terminal:data', (chunk) => {
-      setLines((prev) => [...prev, chunk]);
+      appendLine('output', chunk);
     });
 
     socket.on('terminal:exit', (code) => {
       const suffix = typeof code === 'number' ? ` (code ${code})` : '';
-      setLines((prev) => [...prev, `\n[session ended${suffix}]\n`]);
+      appendLine('status', `Session ended${suffix}.`);
       setConnected(false);
     });
 
     socket.on('disconnect', (reason) => {
       setConnected(false);
       const message = typeof reason === 'string' && reason ? reason : 'Connection closed.';
-      setLines((prev) => [...prev, `\n[disconnected] ${message}\n`]);
+      appendLine('status', `Disconnected: ${message}`);
     });
 
     socket.on('connect_error', (err) => {
       setError(err?.message || 'Unable to connect to maintenance shell.');
       setConnected(false);
-      setLines((prev) => [...prev, `\n[connect error] ${err?.message || 'Unable to connect to maintenance shell.'}\n`]);
+      appendLine('status', `Connect error: ${err?.message || 'Unable to connect to maintenance shell.'}`);
     });
 
     return () => {
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, [endpoint, session]);
+  }, [appendLine, endpoint, session]);
 
   useEffect(() => {
     if (!outputRef.current) return;
     outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [lines]);
+  }, [entries]);
 
   useEffect(() => {
     if (!connected) return;
@@ -112,11 +164,11 @@ export default function DeveloperTerminal({ session, onClose }) {
     if (!trimmed) return;
     if (!socketRef.current || !connected) return;
     socketRef.current.emit('terminal:input', `${trimmed}\n`);
-    setLines((prev) => [...prev, `$ ${trimmed}\n`]);
+    appendLine('input', trimmed);
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
-  }, [connected]);
+  }, [appendLine, connected]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -159,9 +211,35 @@ export default function DeveloperTerminal({ session, onClose }) {
             </button>
           ))}
         </div>
-        <pre className="terminal__log" ref={outputRef} aria-live="polite">
-          {lines.length === 0 ? 'Initialising session…\n' : lines.join('')}
-        </pre>
+        <div className="terminal__log" ref={outputRef} role="log" aria-live="polite">
+          {entries.length === 0 ? (
+            <div className="terminal__line terminal__line--status">
+              <span className="terminal__line-badge">Status</span>
+              <pre>Initialising session…</pre>
+            </div>
+          ) : (
+            entries.map((entry) => {
+              const label = entry.kind === 'input'
+                ? 'Request'
+                : entry.kind === 'output'
+                  ? 'Response'
+                  : 'Status';
+              return (
+                <div key={entry.id} className={`terminal__line terminal__line--${entry.kind}`}>
+                  <span className="terminal__line-badge">{label}</span>
+                  <pre>
+                    {entry.kind === 'input' ? (
+                      <>
+                        <span className="terminal__prompt-symbol" aria-hidden="true">$</span>
+                        <span> {entry.text}</span>
+                      </>
+                    ) : entry.text}
+                  </pre>
+                </div>
+              );
+            })
+          )}
+        </div>
         <form className="terminal__input" onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="terminal-command">Run command</label>
           <span className="terminal__prompt" aria-hidden="true">
